@@ -1,8 +1,8 @@
 # do not save historical data import into repository
 sql/003-import-data.sql
 
-# output of erd
-sql/schema.pdf
+# docs
+*.pdf
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode
