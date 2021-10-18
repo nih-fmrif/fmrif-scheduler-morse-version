@@ -666,14 +666,16 @@ COMMENT ON COLUMN public.tlkpinst.hidden IS 'if hidden, the institute is no long
 
 CREATE TABLE public.tlkpresearcher (
     researchercode character varying(20) NOT NULL,
-    lname character varying(20) NOT NULL,
-    fname character varying(20) NOT NULL,
+    lname character varying(20),
+    fname character varying(20),
     dept_code character varying(10),
-    researchershort character varying(15) NOT NULL,
+    researchershort character varying(15),
     chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone NOT NULL,
     chg_by character varying(30),
     lose_to character varying(15),
-    active boolean DEFAULT true NOT NULL
+    active boolean DEFAULT true NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
+    email text DEFAULT ''::text NOT NULL
 );
 
 
@@ -681,7 +683,7 @@ CREATE TABLE public.tlkpresearcher (
 -- Name: TABLE tlkpresearcher; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.tlkpresearcher IS 'List of researchers';
+COMMENT ON TABLE public.tlkpresearcher IS 'List of users';
 
 
 --
@@ -716,7 +718,7 @@ COMMENT ON COLUMN public.tlkpresearcher.dept_code IS 'Deprecated';
 -- Name: COLUMN tlkpresearcher.researchershort; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.tlkpresearcher.researchershort IS 'human readble label for researcher';
+COMMENT ON COLUMN public.tlkpresearcher.researchershort IS 'Deprecated';
 
 
 --
@@ -745,6 +747,20 @@ COMMENT ON COLUMN public.tlkpresearcher.lose_to IS 'Deprecated';
 --
 
 COMMENT ON COLUMN public.tlkpresearcher.active IS 'if not active, no longer be an option anywhere until marked active again';
+
+
+--
+-- Name: COLUMN tlkpresearcher.name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.name IS 'Full name as reported by AD';
+
+
+--
+-- Name: COLUMN tlkpresearcher.email; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.email IS 'email address as reported by AD';
 
 
 --

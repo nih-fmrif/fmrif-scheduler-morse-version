@@ -38,7 +38,6 @@ comment on column tlkpinst.inst is 'human readable name of institute';
 comment on column tlkpinst.hidden is 'if hidden, the institute is no longer available for selection';
 
 comment on column tlkpresearcher.researchercode is 'primary key';
-comment on column tlkpresearcher.researchershort is 'human readble label for researcher';
 comment on column tlkpresearcher.chg_at is 'timestamp of last modification';
 comment on column tlkpresearcher.active is 'if not active, no longer be an option anywhere until marked active again';
 

@@ -89,9 +89,10 @@ hidden {bgcolor: "#ffffff"}
 
 [tlkpresearcher] {bgcolor: "#ececfc"}
 *researchercode
-researchershort
 chg_at
 active
+name {bgcolor: "#ffffff"}
+email  {bgcolor: "#ffffff"}
 
 [tlkpscanner] {bgcolor: "#ececfc"}
 *scannercode

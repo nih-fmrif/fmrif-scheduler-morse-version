@@ -44,8 +44,11 @@ update tlkpdept set prog = '' where prog is null;
 alter table tlkpdept alter column prog set default '';
 alter table tlkpdept alter column prog set not null;
 
--- deprecated column, remove constraint
+-- deprecated columns, remove constraint
 alter table tlkpresearcher alter column chg_by drop not null;
+alter table tlkpresearcher alter column lname drop not null;
+alter table tlkpresearcher alter column fname drop not null;
+alter table tlkpresearcher alter column researchershort drop not null;
 
 update tlkpscanner set descrip = '' where descrip is null;
 alter table tlkpscanner alter column descrip set default '';

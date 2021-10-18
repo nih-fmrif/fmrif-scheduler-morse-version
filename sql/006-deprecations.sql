@@ -4,6 +4,7 @@ comment on table tlogresearcher is 'Deprecated';
 comment on column tlkpresearcher.lname is 'Deprecated'; -- these two need to be replaced by a new column
 comment on column tlkpresearcher.fname is 'Deprecated';
 
+comment on column tlkpresearcher.researchershort is 'Deprecated';
 comment on column tlkpresearcher.chg_by is 'Deprecated';
 comment on column tlkpresearcher.lose_to is 'Deprecated';
 comment on column tlkpresearcher.dept_code is 'Deprecated'; -- no longer explicitly tracked
