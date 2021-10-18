@@ -100,3 +100,19 @@ scanner
 descrip
 mailinglist
 active
+
+[groupmembers]
+*+deptcode
+*+researchercode
+approve1
+approve2
+approved
+
+groupmembers *--? tlkpdept
+groupmembers *--? tlkpresearcher
+
+[primarygroupmember]
+*+deptcode
+*+researchercode
+
+primarygroupmember *--1 groupmembers

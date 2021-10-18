@@ -131,6 +131,92 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: groupmembers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.groupmembers (
+    deptcode character varying(10) NOT NULL,
+    researchercode character varying(20) NOT NULL,
+    approve1 timestamp with time zone,
+    approve2 timestamp with time zone,
+    approved boolean GENERATED ALWAYS AS (((approve1 IS NOT NULL) AND (approve2 IS NOT NULL))) STORED NOT NULL
+);
+
+
+--
+-- Name: TABLE groupmembers; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.groupmembers IS 'group ↔ user';
+
+
+--
+-- Name: COLUMN groupmembers.deptcode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.groupmembers.deptcode IS 'first half of primary key';
+
+
+--
+-- Name: COLUMN groupmembers.researchercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.groupmembers.researchercode IS 'second half of primary key';
+
+
+--
+-- Name: COLUMN groupmembers.approve1; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.groupmembers.approve1 IS 'approval to join (type 1)';
+
+
+--
+-- Name: COLUMN groupmembers.approve2; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.groupmembers.approve2 IS 'approval to join (type 2)';
+
+
+--
+-- Name: COLUMN groupmembers.approved; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.groupmembers.approved IS 'true if approved member of group';
+
+
+--
+-- Name: primarygroupmember; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.primarygroupmember (
+    deptcode character varying(10) NOT NULL,
+    researchercode character varying(20) NOT NULL
+);
+
+
+--
+-- Name: TABLE primarygroupmember; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.primarygroupmember IS 'primary investigator of group';
+
+
+--
+-- Name: COLUMN primarygroupmember.deptcode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.primarygroupmember.deptcode IS 'first half of primary key';
+
+
+--
+-- Name: COLUMN primarygroupmember.researchercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.primarygroupmember.researchercode IS 'second half of primary key';
+
+
+--
 -- Name: tblsched; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1051,6 +1137,22 @@ ALTER TABLE ONLY public.tlogsched ALTER COLUMN logid SET DEFAULT nextval('public
 
 
 --
+-- Name: groupmembers groupmembers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.groupmembers
+    ADD CONSTRAINT groupmembers_pkey PRIMARY KEY (deptcode, researchercode);
+
+
+--
+-- Name: primarygroupmember primarygroupmember_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.primarygroupmember
+    ADD CONSTRAINT primarygroupmember_pkey PRIMARY KEY (deptcode, researchercode);
+
+
+--
 -- Name: tblsched tblsched_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1193,6 +1295,46 @@ COMMENT ON TRIGGER delete_inst ON public.tlkpinst IS 'make deletes on tlkpinst s
 --
 
 CREATE TRIGGER log_sched_changes AFTER INSERT OR DELETE OR UPDATE ON public.tblsched FOR EACH ROW EXECUTE FUNCTION public.log_sched_changes_impl();
+
+
+--
+-- Name: groupmembers groupmembers_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.groupmembers
+    ADD CONSTRAINT groupmembers_deptcode_fkey FOREIGN KEY (deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: groupmembers groupmembers_researchercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.groupmembers
+    ADD CONSTRAINT groupmembers_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: primarygroupmember primarygroupmember_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.primarygroupmember
+    ADD CONSTRAINT primarygroupmember_deptcode_fkey FOREIGN KEY (deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: primarygroupmember primarygroupmember_groupmembers_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.primarygroupmember
+    ADD CONSTRAINT primarygroupmember_groupmembers_fkey FOREIGN KEY (deptcode, researchercode) REFERENCES public.groupmembers(deptcode, researchercode) ON DELETE RESTRICT;
+
+
+--
+-- Name: primarygroupmember primarygroupmember_researchercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.primarygroupmember
+    ADD CONSTRAINT primarygroupmember_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
