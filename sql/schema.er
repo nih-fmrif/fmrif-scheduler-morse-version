@@ -1,5 +1,5 @@
 title {
-	label: "Scheduler ER diagram",
+	label: "Scheduler ER diagram (legacy shaded)",
 	font: "Helvetica",
 }
 entity {
@@ -69,21 +69,23 @@ tbltemplates 1--* tlkpscanner
 *deptcode
 dept
 dept_short
-grp
 ismain
 iscurrent
 +inst
-prog
 link
 email
-color
+color {bgcolor: "#ffffff"}
+joinable {bgcolor: "#ffffff"}
+archivable {bgcolor: "#ffffff"}
+schedulable {bgcolor: "#ffffff"}
+department {bgcolor: "#ffffff"}
 
 tlkpdept ?--* tlkpinst
 
 [tlkpinst] {bgcolor: "#ececfc"}
 *instcode
 inst
-hidden
+hidden {bgcolor: "#ffffff"}
 
 [tlkpresearcher] {bgcolor: "#ececfc"}
 *researchercode

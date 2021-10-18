@@ -487,6 +487,10 @@ CREATE TABLE public.tlkpdept (
     lose_to character varying(10),
     email text DEFAULT ''::text NOT NULL,
     color character varying(7) NOT NULL,
+    joinable boolean DEFAULT true NOT NULL,
+    archivable boolean DEFAULT true NOT NULL,
+    scheduleable boolean DEFAULT true NOT NULL,
+    department boolean GENERATED ALWAYS AS ((ismain AND archivable AND scheduleable)) STORED NOT NULL,
     CONSTRAINT tlkpdept_valid_color CHECK (((color)::text ~ '^#[0-9a-f]{6}$'::text))
 );
 
@@ -495,7 +499,7 @@ CREATE TABLE public.tlkpdept (
 -- Name: TABLE tlkpdept; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.tlkpdept IS 'List of departments';
+COMMENT ON TABLE public.tlkpdept IS 'List of groups';
 
 
 --
@@ -523,14 +527,14 @@ COMMENT ON COLUMN public.tlkpdept.dept_short IS 'human readable name of departme
 -- Name: COLUMN tlkpdept.grp; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.tlkpdept.grp IS 'Group this falls in (ie, top-level department)';
+COMMENT ON COLUMN public.tlkpdept.grp IS 'Deprecated';
 
 
 --
 -- Name: COLUMN tlkpdept.ismain; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.tlkpdept.ismain IS 'Should this appear as "top-level" department (in legend, etc.)';
+COMMENT ON COLUMN public.tlkpdept.ismain IS 'true for groups with membership';
 
 
 --
@@ -551,7 +555,7 @@ COMMENT ON COLUMN public.tlkpdept.inst IS 'optional reference to tlkpinst';
 -- Name: COLUMN tlkpdept.prog; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.tlkpdept.prog IS 'Program and Branch';
+COMMENT ON COLUMN public.tlkpdept.prog IS 'Deprecated';
 
 
 --
@@ -587,6 +591,34 @@ COMMENT ON COLUMN public.tlkpdept.email IS 'contact address for department';
 --
 
 COMMENT ON COLUMN public.tlkpdept.color IS 'legend color on site';
+
+
+--
+-- Name: COLUMN tlkpdept.joinable; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.joinable IS 'true for groups that users may join';
+
+
+--
+-- Name: COLUMN tlkpdept.archivable; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.archivable IS 'true for user created groups that may be archived';
+
+
+--
+-- Name: COLUMN tlkpdept.scheduleable; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.scheduleable IS 'true for groups that may be referenced in tblsched';
+
+
+--
+-- Name: COLUMN tlkpdept.department; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.department IS 'true for department and false for a special group';
 
 
 --
