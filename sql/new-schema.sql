@@ -131,6 +131,37 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: devicegroup; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.devicegroup (
+    scannercode character varying(5) NOT NULL,
+    deptcode character varying(10) NOT NULL
+);
+
+
+--
+-- Name: TABLE devicegroup; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.devicegroup IS 'device ↔ group';
+
+
+--
+-- Name: COLUMN devicegroup.scannercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.devicegroup.scannercode IS 'first half of primary key';
+
+
+--
+-- Name: COLUMN devicegroup.deptcode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.devicegroup.deptcode IS 'second half of primary key';
+
+
+--
 -- Name: groupmembers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1233,6 +1264,14 @@ ALTER TABLE ONLY public.tlogsched ALTER COLUMN logid SET DEFAULT nextval('public
 
 
 --
+-- Name: devicegroup devicegroup_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devicegroup
+    ADD CONSTRAINT devicegroup_pkey PRIMARY KEY (scannercode, deptcode);
+
+
+--
 -- Name: groupmembers groupmembers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1399,6 +1438,22 @@ COMMENT ON TRIGGER delete_inst ON public.tlkpinst IS 'make deletes on tlkpinst s
 --
 
 CREATE TRIGGER log_sched_changes AFTER INSERT OR DELETE OR UPDATE ON public.tblsched FOR EACH ROW EXECUTE FUNCTION public.log_sched_changes_impl();
+
+
+--
+-- Name: devicegroup groupdevice_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devicegroup
+    ADD CONSTRAINT groupdevice_deptcode_fkey FOREIGN KEY (deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: devicegroup groupdevice_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devicegroup
+    ADD CONSTRAINT groupdevice_scannercode_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

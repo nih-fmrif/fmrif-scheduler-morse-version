@@ -131,3 +131,10 @@ training
 
 userdevice 1--? tlkpresearcher
 userdevice 1--? tlkpscanner
+
+[devicegroup]
+*+scannercode
+*+deptcode
+
+devicegroup 1--? tlkpscanner
+devicegroup 1--? tlkpdept
