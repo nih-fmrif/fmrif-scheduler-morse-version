@@ -52,7 +52,7 @@ hour
 
 tbltemplate 1--* tlkpscanner
 tbltemplate ?--* tlkpdept
-tbltemplate 1--* tlkpresearcher
+tbltemplate ?--* tlkpresearcher
 tbltemplate ?--* tlkpinst
 tbltemplate 1--* tbltemplates
 
@@ -108,11 +108,11 @@ approve1
 approve2
 approved
 
-groupmembers *--? tlkpdept
-groupmembers *--? tlkpresearcher
+groupmembers 1--* tlkpdept
+groupmembers 1--* tlkpresearcher
 
 [primarygroupmember]
 *+deptcode
 *+researchercode
 
-primarygroupmember *--1 groupmembers
+primarygroupmember 1--? groupmembers
