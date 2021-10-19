@@ -858,7 +858,10 @@ CREATE TABLE public.tlkpscanner (
     scanner character varying(25) NOT NULL,
     descrip text DEFAULT ''::text NOT NULL COLLATE pg_catalog."en-US-x-icu",
     mailinglist text DEFAULT ''::text NOT NULL,
-    active boolean DEFAULT true NOT NULL
+    active boolean DEFAULT true NOT NULL,
+    techaddr text DEFAULT ''::text NOT NULL,
+    medaddr text DEFAULT ''::text NOT NULL,
+    trainaddr text DEFAULT ''::text NOT NULL
 );
 
 
@@ -902,6 +905,27 @@ COMMENT ON COLUMN public.tlkpscanner.mailinglist IS 'contact address for device'
 --
 
 COMMENT ON COLUMN public.tlkpscanner.active IS 'if not active, no long an option anywhere';
+
+
+--
+-- Name: COLUMN tlkpscanner.techaddr; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpscanner.techaddr IS 'contact address for technologist requests';
+
+
+--
+-- Name: COLUMN tlkpscanner.medaddr; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpscanner.medaddr IS 'contact address for medical coverage requests';
+
+
+--
+-- Name: COLUMN tlkpscanner.trainaddr; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpscanner.trainaddr IS 'contact address for training requests';
 
 
 --
