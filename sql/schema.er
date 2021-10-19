@@ -8,7 +8,6 @@ entity {
 }
 relationship {
 	font: "Helvetica",
-	size: "25",
 	color: "#444444",
 }
 
