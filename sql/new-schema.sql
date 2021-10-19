@@ -1116,6 +1116,78 @@ ALTER SEQUENCE public.tlogsched_logid_seq OWNED BY public.tlogsched.logid;
 
 
 --
+-- Name: userdevice; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.userdevice (
+    researchercode character varying(20) NOT NULL,
+    scannercode character varying(5) NOT NULL,
+    templates boolean NOT NULL,
+    slot boolean NOT NULL,
+    tech boolean NOT NULL,
+    medical boolean NOT NULL,
+    training boolean NOT NULL,
+    CONSTRAINT userdevice_at_least_one_permission CHECK ((templates OR slot OR tech OR medical OR training))
+);
+
+
+--
+-- Name: TABLE userdevice; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.userdevice IS 'user ↔ device dev group permissions';
+
+
+--
+-- Name: COLUMN userdevice.researchercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.userdevice.researchercode IS 'first half of primary key';
+
+
+--
+-- Name: COLUMN userdevice.scannercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.userdevice.scannercode IS 'second half of primary key';
+
+
+--
+-- Name: COLUMN userdevice.templates; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.userdevice.templates IS 'permission to edit and apply templates on this device';
+
+
+--
+-- Name: COLUMN userdevice.slot; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.userdevice.slot IS 'permission to edit any slot on this device';
+
+
+--
+-- Name: COLUMN userdevice.tech; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.userdevice.tech IS 'permission to respond to requests for technologist on this device';
+
+
+--
+-- Name: COLUMN userdevice.medical; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.userdevice.medical IS 'permission to respond to requests for medical coverage on this device';
+
+
+--
+-- Name: COLUMN userdevice.training; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.userdevice.training IS 'permission to respond to requests for training on this device';
+
+
+--
 -- Name: technicalscans tsid; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1238,6 +1310,14 @@ ALTER TABLE ONLY public.tlkpscanner
 
 ALTER TABLE ONLY public.tlogresearcher
     ADD CONSTRAINT tlogresearcher_pkey PRIMARY KEY (logid);
+
+
+--
+-- Name: userdevice userdevice_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.userdevice
+    ADD CONSTRAINT userdevice_pkey PRIMARY KEY (researchercode, scannercode);
 
 
 --
@@ -1455,6 +1535,22 @@ ALTER TABLE ONLY public.tlkpdept
 
 ALTER TABLE ONLY public.tlkpresearcher
     ADD CONSTRAINT tlkpresearcher_dept_code_fkey FOREIGN KEY (dept_code) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE DEFERRABLE;
+
+
+--
+-- Name: userdevice userdevice_researchercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.userdevice
+    ADD CONSTRAINT userdevice_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: userdevice userdevice_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.userdevice
+    ADD CONSTRAINT userdevice_scannercode_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

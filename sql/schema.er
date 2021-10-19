@@ -116,3 +116,15 @@ groupmembers 1--* tlkpresearcher
 *+researchercode
 
 primarygroupmember 1--? groupmembers
+
+[userdevice]
+*+researchercode
+*+scannercode
+templates
+slot
+tech
+medical
+training
+
+userdevice 1--? tlkpresearcher
+userdevice 1--? tlkpscanner
