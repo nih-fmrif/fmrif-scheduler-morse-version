@@ -34,9 +34,6 @@ tblsched 1--* tlkpscanner
 tblsched ?--* tlkpdept
 tblsched ?--* tlkpresearcher
 tblsched 1--* tbltemplate
-# use labels only when key names don't match
-tblsched ?--* tlkpdept { label: "orig_deptcode" }
-tblsched ?--* tlkpinst { label: "orig_instcode" }
 
 
 [tbltemplate] {bgcolor: "#ececfc"}
