@@ -134,3 +134,21 @@ userdevice 1--? tlkpscanner
 
 devicegroup 1--? tlkpscanner
 devicegroup 1--? tlkpdept
+
+[supportkind]
+*supportkind
+label
+
+[support]
+*+schedid
+*+supportkind
++filed_by
++fulfilled_by
+approved
+note
++chg_by
+chg_at
+
+support 1--* tblsched
+support 1--* supportkind
+support 1--* tlkpresearcher
