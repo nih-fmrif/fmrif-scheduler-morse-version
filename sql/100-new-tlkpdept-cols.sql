@@ -20,6 +20,7 @@ comment on column tlkpdept.department is 'true for department and false for a sp
 -- update flags for existing special groups
 
 update tlkpdept set (ismain, archivable) = (false, false) where deptcode in (
+	'',
 	'GE',
 	'SIEM',
 	'UNAVAIL',
@@ -31,6 +32,7 @@ update tlkpdept set (ismain, archivable) = (false, false) where deptcode in (
 update tlkpdept set (archivable, scheduleable) = (false, false) where deptcode = 'DEV';
 
 update tlkpdept set joinable = false where deptcode in (
+	'',
 	'GE',
 	'SIEM',
 	'UNAVAIL',
@@ -39,6 +41,7 @@ update tlkpdept set joinable = false where deptcode in (
 );
 
 update tlkpdept set iscurrent = false where deptcode in (
+	'',
 	'post',
 	'GE',
 	'SIEM',
