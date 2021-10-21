@@ -112,7 +112,7 @@ groupmembers 1--* tlkpresearcher
 
 [primarygroupmember]
 *+deptcode
-*+researchercode
++researchercode
 
 primarygroupmember 1--? groupmembers
 

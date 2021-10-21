@@ -1486,7 +1486,7 @@ ALTER TABLE ONLY public.groupmembers
 --
 
 ALTER TABLE ONLY public.primarygroupmember
-    ADD CONSTRAINT primarygroupmember_pkey PRIMARY KEY (deptcode, researchercode);
+    ADD CONSTRAINT primarygroupmember_pkey PRIMARY KEY (deptcode);
 
 
 --
