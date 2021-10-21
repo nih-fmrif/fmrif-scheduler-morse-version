@@ -1,6 +1,9 @@
 # do not save historical data import into repository
 sql/003-import-data.sql
 
+# do not save new data to be imported into db
+sql/*.csv
+
 # docs
 *.pdf
 
