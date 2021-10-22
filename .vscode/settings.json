@@ -1,0 +1,6 @@
+{
+	"python.pythonPath": "/home/jimmy/.local/share/virtualenvs/scheduler-a59js5dG/bin/python",
+	"python.formatting.provider": "black",
+	"python.linting.enabled": true,
+	"python.linting.mypyEnabled": true
+}
