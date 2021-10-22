@@ -1,5 +1,9 @@
 begin;
 
+-- remove constraints for deprecated column
+alter table tlkpresearcher drop constraint tlkpresearcher_dept_code_fkey;
+alter table tlkpresearcher drop constraint tlkpresearcher_dept_code_key;
+
 -- add a way to mark researchers inactive
 alter table tlkpresearcher add column active boolean not null default true;
 
@@ -68,7 +72,7 @@ insert into tlkpresearcher(researchercode, lname, fname, researchershort, chg_at
 
 -- now that all the necessary researchers exist, we can add fk constraints
 
-alter table tblsched add constraint tblsched_researchercode_fkey foreign key (researchercode) references tlkpresearcher(researchercode) on update cascade deferrable;
-alter table tbltemplate add constraint tbltemplate_researchercode_fkey foreign key (researchercode) references tlkpresearcher(researchercode) on update cascade deferrable;
+alter table tblsched add constraint tblsched_researchercode_fkey foreign key (researchercode) references tlkpresearcher(researchercode) on update cascade on delete restrict;
+alter table tbltemplate add constraint tbltemplate_researchercode_fkey foreign key (researchercode) references tlkpresearcher(researchercode) on update cascade on delete restrict;
 
 commit;

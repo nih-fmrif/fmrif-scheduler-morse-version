@@ -1578,14 +1578,6 @@ ALTER TABLE ONLY public.tlkpinst
 
 
 --
--- Name: tlkpresearcher tlkpresearcher_dept_code_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tlkpresearcher
-    ADD CONSTRAINT tlkpresearcher_dept_code_key UNIQUE (dept_code, researchershort);
-
-
---
 -- Name: tlkpresearcher tlkpresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1790,7 +1782,7 @@ ALTER TABLE ONLY public.supportlog
 --
 
 ALTER TABLE ONLY public.tblsched
-    ADD CONSTRAINT tblsched_deptcode_fkey FOREIGN KEY (deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tblsched_deptcode_fkey FOREIGN KEY (deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1798,7 +1790,7 @@ ALTER TABLE ONLY public.tblsched
 --
 
 ALTER TABLE ONLY public.tblsched
-    ADD CONSTRAINT tblsched_instcode_fkey FOREIGN KEY (orig_instcode) REFERENCES public.tlkpinst(instcode);
+    ADD CONSTRAINT tblsched_instcode_fkey FOREIGN KEY (orig_instcode) REFERENCES public.tlkpinst(instcode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1806,7 +1798,7 @@ ALTER TABLE ONLY public.tblsched
 --
 
 ALTER TABLE ONLY public.tblsched
-    ADD CONSTRAINT tblsched_orig_deptcode_fkey FOREIGN KEY (orig_deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tblsched_orig_deptcode_fkey FOREIGN KEY (orig_deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1814,7 +1806,7 @@ ALTER TABLE ONLY public.tblsched
 --
 
 ALTER TABLE ONLY public.tblsched
-    ADD CONSTRAINT tblsched_orig_inst_fkey FOREIGN KEY (orig_instcode) REFERENCES public.tlkpinst(instcode);
+    ADD CONSTRAINT tblsched_orig_inst_fkey FOREIGN KEY (orig_instcode) REFERENCES public.tlkpinst(instcode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1822,7 +1814,7 @@ ALTER TABLE ONLY public.tblsched
 --
 
 ALTER TABLE ONLY public.tblsched
-    ADD CONSTRAINT tblsched_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tblsched_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1830,7 +1822,7 @@ ALTER TABLE ONLY public.tblsched
 --
 
 ALTER TABLE ONLY public.tblsched
-    ADD CONSTRAINT tblsched_scanner_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tblsched_scanner_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1846,7 +1838,7 @@ ALTER TABLE ONLY public.tblsched
 --
 
 ALTER TABLE ONLY public.tbltemplate
-    ADD CONSTRAINT tbltemplate_deptcode_fkey FOREIGN KEY (deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tbltemplate_deptcode_fkey FOREIGN KEY (deptcode) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1854,7 +1846,7 @@ ALTER TABLE ONLY public.tbltemplate
 --
 
 ALTER TABLE ONLY public.tbltemplate
-    ADD CONSTRAINT tbltemplate_instcode_fkey FOREIGN KEY (instcode) REFERENCES public.tlkpinst(instcode);
+    ADD CONSTRAINT tbltemplate_instcode_fkey FOREIGN KEY (instcode) REFERENCES public.tlkpinst(instcode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1862,7 +1854,7 @@ ALTER TABLE ONLY public.tbltemplate
 --
 
 ALTER TABLE ONLY public.tbltemplate
-    ADD CONSTRAINT tbltemplate_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tbltemplate_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1870,7 +1862,7 @@ ALTER TABLE ONLY public.tbltemplate
 --
 
 ALTER TABLE ONLY public.tbltemplate
-    ADD CONSTRAINT tbltemplate_scanner_and_templatecode_fkey FOREIGN KEY (scannercode, templatecode) REFERENCES public.tbltemplates(scannercode, templatecode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tbltemplate_scanner_and_templatecode_fkey FOREIGN KEY (scannercode, templatecode) REFERENCES public.tbltemplates(scannercode, templatecode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1878,7 +1870,7 @@ ALTER TABLE ONLY public.tbltemplate
 --
 
 ALTER TABLE ONLY public.tbltemplate
-    ADD CONSTRAINT tbltemplate_scannercode_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tbltemplate_scannercode_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1886,7 +1878,7 @@ ALTER TABLE ONLY public.tbltemplate
 --
 
 ALTER TABLE ONLY public.tbltemplates
-    ADD CONSTRAINT tbltemplates_scannercode_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tbltemplates_scannercode_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -1894,15 +1886,7 @@ ALTER TABLE ONLY public.tbltemplates
 --
 
 ALTER TABLE ONLY public.tlkpdept
-    ADD CONSTRAINT tlkpdept_inst_fkey FOREIGN KEY (inst) REFERENCES public.tlkpinst(instcode);
-
-
---
--- Name: tlkpresearcher tlkpresearcher_dept_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tlkpresearcher
-    ADD CONSTRAINT tlkpresearcher_dept_code_fkey FOREIGN KEY (dept_code) REFERENCES public.tlkpdept(deptcode) ON UPDATE CASCADE DEFERRABLE;
+    ADD CONSTRAINT tlkpdept_inst_fkey FOREIGN KEY (inst) REFERENCES public.tlkpinst(instcode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

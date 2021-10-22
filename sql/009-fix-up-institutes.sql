@@ -29,14 +29,14 @@ comment on trigger delete_inst on tlkpinst is 'make deletes on tlkpinst set hidd
 -- tlkpdept has mix of '' and null for inst, settle on null so this can be a key
 update tlkpdept set inst = null where inst = '';
 
-alter table tblsched add constraint tblsched_instcode_fkey foreign key (orig_instcode) references tlkpinst(instcode);
+alter table tblsched add constraint tblsched_instcode_fkey foreign key (orig_instcode) references tlkpinst(instcode) on update cascade on delete restrict;
 
-alter table tlkpdept add constraint tlkpdept_inst_fkey foreign key (inst) references tlkpinst(instcode);
+alter table tlkpdept add constraint tlkpdept_inst_fkey foreign key (inst) references tlkpinst(instcode) on update cascade on delete restrict;
 
-alter table tblsched add constraint tblsched_orig_inst_fkey foreign key (orig_instcode) references tlkpinst(instcode);
+alter table tblsched add constraint tblsched_orig_inst_fkey foreign key (orig_instcode) references tlkpinst(instcode) on update cascade on delete restrict;
 
 -- this can now be added back as a valid constraint.
 alter table tbltemplate drop constraint tbltemplate_instcode_fkey;
-alter table tbltemplate add constraint tbltemplate_instcode_fkey foreign key (instcode) references tlkpinst(instcode);
+alter table tbltemplate add constraint tbltemplate_instcode_fkey foreign key (instcode) references tlkpinst(instcode) on update cascade on delete restrict;
 
 commit;
