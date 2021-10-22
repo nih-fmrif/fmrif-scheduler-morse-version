@@ -32,7 +32,6 @@ done
 
 pg_dump -s -O --no-acl -f new-schema.sql scheduler
 
-# will want to do this eventually but no need to add 10s to every build now
-# vacuumdb -f -d scheduler
+vacuumdb -f -d scheduler
 
 ./generate-schemapdf.sh
