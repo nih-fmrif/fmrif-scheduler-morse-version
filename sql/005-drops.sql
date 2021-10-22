@@ -27,6 +27,11 @@ drop rule tlkpresearcher_del on tlkpresearcher;
 drop rule tlkpresearcher_ins on tlkpresearcher;
 drop rule tlkpresearcher_upd on tlkpresearcher;
 
+-- these will be handled by the flask app
+drop rule template_fill on tbltemplates;
+drop function template_default_fill;
+drop function template_to_sched;
+
 -- these indicies are redundant or no longer needed and can be removed forever
 alter table technicalscans drop constraint technicalscans_scantime_key;
 drop index scann_template;

@@ -123,45 +123,6 @@ $_$;
 COMMENT ON FUNCTION public.soft_del_inst() IS 'implementation of delete_inst trigger';
 
 
---
--- Name: template_default_fill(character varying, character varying); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.template_default_fill(character varying, character varying) RETURNS boolean
-    LANGUAGE plpgsql
-    AS $_$begin for thedow in 0..6 loop for thehour in 0..23 loop insert into tbltemplate (templatecode, scannercode, dow, hour, deptcode) values ($2, $1, thedow, thehour, ''); end loop; end loop; return true; end;$_$;
-
-
---
--- Name: template_to_sched(character varying, character varying, date, date); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.template_to_sched(character varying, character varying, date, date) RETURNS boolean
-    LANGUAGE plpgsql
-    AS $_$
-declare
-  the_scannercode alias for $1;
-  the_templatecode alias for $2;
-  start_date alias for $3;
-  end_date alias for $4;
-  the_date date;
-  the_dow int;
-begin
-  the_date := start_date;
-  delete from tblsched where scannercode=the_scannercode and scheddate between start_date and end_date;
-  while the_date <= end_date
-  loop
-    the_dow := extract(dow from the_date);
-    insert into tblsched(scannercode,deptcode,researchercode,scheddate,schedhour,scheddow,billdeptcode,templateid,orig_deptcode,orig_instcode)
-      select scannercode,deptcode,researchercode,the_date,hour,the_dow,deptcode,templateid,deptcode,instcode from tbltemplate
-        where dow=the_dow and scannercode = the_scannercode and templatecode=the_templatecode;
-    the_date = the_date + 1;
-  end loop;
-  return true;
-end;
-$_$;
-
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1635,14 +1596,6 @@ CREATE UNIQUE INDEX tlkpdept_dept_short_key ON public.tlkpdept USING btree (dept
 --
 
 CREATE UNIQUE INDEX tlkpscanner_scanner_key ON public.tlkpscanner USING btree (scanner);
-
-
---
--- Name: tbltemplates template_fill; Type: RULE; Schema: public; Owner: -
---
-
-CREATE RULE template_fill AS
-    ON INSERT TO public.tbltemplates DO  SELECT public.template_default_fill(new.scannercode, new.templatecode) AS template_default_fill;
 
 
 --
