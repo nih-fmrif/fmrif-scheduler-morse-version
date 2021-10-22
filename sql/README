@@ -2,6 +2,16 @@ This directory contains the schema for the scheduler.
 
 It is primarily intended for reproduction of a development database not schema migrations of a live database. It will only work for building the new database out of the old database.
 
-The command included will destroy all data and recreate it.
+The unsafe-reprovision-db.sh command included will destroy the database and recreate it.
 
 The historical data is required for creating the development database and is not included in the repo. To add it you will need to do a data-only dump of the original database and save it as 003-import-data.sql (this file is ignored by git).
+
+Optionally, future data may be provided by including
+
+- dev-dept.csv
+- devperm.csv
+- user-dept.csv
+
+If these are not included, empty csv containing just the header rows will be created.
+
+The generate-schemapdf.sh command turns schema.er into a pdf of a simplified ER diagram using the erd tool. If it is not installed the script will not run.
