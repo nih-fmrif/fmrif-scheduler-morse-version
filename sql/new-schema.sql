@@ -128,6 +128,305 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: supportkind; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supportkind (
+    supportkind integer NOT NULL,
+    label text NOT NULL
+);
+
+
+--
+-- Name: TABLE supportkind; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.supportkind IS 'Kind of support request';
+
+
+--
+-- Name: COLUMN supportkind.supportkind; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.supportkind.supportkind IS 'primary key';
+
+
+--
+-- Name: COLUMN supportkind.label; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.supportkind.label IS 'human readable label';
+
+
+--
+-- Name: supportlog; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supportlog (
+    logid bigint NOT NULL,
+    schedid integer,
+    supportkind integer,
+    filed_by character varying(20),
+    fulfilled_by character varying(20),
+    approved boolean,
+    note text NOT NULL,
+    filed_by_old character varying(20),
+    fulfilled_by_old character varying(20),
+    approved_old boolean,
+    note_old text DEFAULT ''::text NOT NULL,
+    chg_by character varying(20) NOT NULL,
+    chg_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: TABLE supportlog; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.supportlog IS 'Logged changes from support';
+
+
+--
+-- Name: tlogsched; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tlogsched (
+    logid integer NOT NULL,
+    schedid integer,
+    scannercode character varying(5),
+    scheddate date,
+    schedhour integer,
+    deptcode character varying(10),
+    researchercode character varying(20),
+    time_used boolean,
+    scannercode_old character varying(5),
+    scheddate_old date,
+    schedhour_old integer,
+    deptcode_old character varying(10),
+    researchercode_old character varying(20),
+    time_used_old boolean,
+    chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone,
+    chg_by character varying(30)
+);
+
+
+--
+-- Name: TABLE tlogsched; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.tlogsched IS 'Logged changes from tblsched';
+
+
+--
+-- Name: COLUMN tlogsched.logid; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.logid IS 'primary key';
+
+
+--
+-- Name: COLUMN tlogsched.schedid; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.schedid IS 'schedid for logged value, new entries always reference a row in tblsched';
+
+
+--
+-- Name: COLUMN tlogsched.scannercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.scannercode IS 'value of tblsched.scannercode';
+
+
+--
+-- Name: COLUMN tlogsched.scheddate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.scheddate IS 'value of tblsched.scheddate';
+
+
+--
+-- Name: COLUMN tlogsched.schedhour; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.schedhour IS 'value of tblsched.schedhour';
+
+
+--
+-- Name: COLUMN tlogsched.deptcode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.deptcode IS 'value of tblsched.deptcode';
+
+
+--
+-- Name: COLUMN tlogsched.researchercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.researchercode IS 'value of tblsched.researchercode';
+
+
+--
+-- Name: COLUMN tlogsched.time_used; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.time_used IS 'value of tblsched.time_used';
+
+
+--
+-- Name: COLUMN tlogsched.scannercode_old; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.scannercode_old IS 'previous value of tblsched.scannercode';
+
+
+--
+-- Name: COLUMN tlogsched.scheddate_old; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.scheddate_old IS 'previous value of tblsched.scheddate';
+
+
+--
+-- Name: COLUMN tlogsched.schedhour_old; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.schedhour_old IS 'previous value of tblsched.schedhour';
+
+
+--
+-- Name: COLUMN tlogsched.deptcode_old; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.deptcode_old IS 'previous value of tblsched.deptcode';
+
+
+--
+-- Name: COLUMN tlogsched.researchercode_old; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.researchercode_old IS 'previous value of tblsched.researchercode';
+
+
+--
+-- Name: COLUMN tlogsched.time_used_old; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.time_used_old IS 'previous value of tblsched.time_used';
+
+
+--
+-- Name: COLUMN tlogsched.chg_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.chg_at IS 'value of tblsched.chg_at';
+
+
+--
+-- Name: COLUMN tlogsched.chg_by; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlogsched.chg_by IS 'value of tblsched.chg_by';
+
+
+--
+-- Name: app_log_json; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.app_log_json AS
+ WITH regular_entries AS (
+         SELECT tlogsched.schedid,
+            tlogsched.chg_at AS modified,
+            'main'::text AS kind,
+            (COALESCE(tlogsched.chg_by, ''::character varying))::text AS chg_by,
+            json_strip_nulls(json_build_object('researcher',
+                CASE
+                    WHEN ((tlogsched.researchercode_old)::text IS DISTINCT FROM (tlogsched.researchercode)::text) THEN json_build_array(tlogsched.researchercode_old, tlogsched.researchercode)
+                    ELSE NULL::json
+                END, 'group',
+                CASE
+                    WHEN ((tlogsched.deptcode_old)::text IS DISTINCT FROM (tlogsched.deptcode)::text) THEN json_build_array(tlogsched.deptcode_old, tlogsched.deptcode)
+                    ELSE NULL::json
+                END, 'used',
+                CASE
+                    WHEN (tlogsched.time_used_old IS DISTINCT FROM tlogsched.time_used) THEN json_build_array(tlogsched.time_used_old, tlogsched.time_used)
+                    ELSE NULL::json
+                END)) AS "values"
+           FROM public.tlogsched
+          WHERE ((tlogsched.schedid IS NOT NULL) AND (tlogsched.chg_at IS NOT NULL))
+        ), support_entries AS (
+         SELECT supportlog.schedid,
+            supportlog.chg_at AS modified,
+            supportkind.label AS kind,
+            (supportlog.chg_by)::text AS chg_by,
+            json_strip_nulls(json_build_object('filed_by',
+                CASE
+                    WHEN ((supportlog.filed_by_old)::text IS DISTINCT FROM (supportlog.filed_by)::text) THEN json_build_array(supportlog.filed_by_old, supportlog.filed_by)
+                    ELSE NULL::json
+                END, 'fulfilled_by',
+                CASE
+                    WHEN ((supportlog.fulfilled_by_old)::text IS DISTINCT FROM (supportlog.fulfilled_by)::text) THEN json_build_array(supportlog.fulfilled_by_old, supportlog.fulfilled_by)
+                    ELSE NULL::json
+                END, 'approved',
+                CASE
+                    WHEN (supportlog.approved_old IS DISTINCT FROM supportlog.approved) THEN json_build_array(supportlog.approved_old, supportlog.approved)
+                    ELSE NULL::json
+                END, 'note',
+                CASE
+                    WHEN (supportlog.note_old IS DISTINCT FROM supportlog.note) THEN json_build_array(supportlog.note_old, supportlog.note)
+                    ELSE NULL::json
+                END)) AS "values"
+           FROM (public.supportlog
+             JOIN public.supportkind USING (supportkind))
+        ), combined_entries AS (
+         SELECT regular_entries.schedid,
+            regular_entries.modified,
+            regular_entries.kind,
+            regular_entries.chg_by,
+            regular_entries."values"
+           FROM regular_entries
+        UNION ALL
+         SELECT support_entries.schedid,
+            support_entries.modified,
+            support_entries.kind,
+            support_entries.chg_by,
+            support_entries."values"
+           FROM support_entries
+        ), filtered_and_sorted_entries AS (
+         SELECT combined_entries.schedid,
+            json_build_object('modified', combined_entries.modified, 'kind', combined_entries.kind, 'values', combined_entries."values") AS entries
+           FROM combined_entries
+          WHERE (length((combined_entries."values")::text) > 2)
+          ORDER BY combined_entries.modified
+        )
+ SELECT filtered_and_sorted_entries.schedid,
+    json_agg(filtered_and_sorted_entries.entries) AS entries
+   FROM filtered_and_sorted_entries
+  GROUP BY filtered_and_sorted_entries.schedid;
+
+
+--
+-- Name: VIEW app_log_json; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.app_log_json IS 'get json of all log entries - always call with "where schedid = "!';
+
+
+--
+-- Name: COLUMN app_log_json.schedid; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.app_log_json.schedid IS 'the schedid of the log entries - MUST specify this in where clause!';
+
+
+--
+-- Name: COLUMN app_log_json.entries; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.app_log_json.entries IS 'json of all log entries for selected schedid';
+
+
+--
 -- Name: devicegroup; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -245,6 +544,335 @@ COMMENT ON COLUMN public.primarygroupmember.researchercode IS 'second half of pr
 
 
 --
+-- Name: tlkpdept; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tlkpdept (
+    deptcode character varying(10) NOT NULL,
+    dept character varying(75) NOT NULL COLLATE pg_catalog."en-US-x-icu",
+    dept_short character varying(20) NOT NULL,
+    grp character varying(10) DEFAULT ''::character varying NOT NULL,
+    ismain boolean DEFAULT true NOT NULL,
+    iscurrent boolean DEFAULT true NOT NULL,
+    inst character varying(5),
+    prog character varying(10) DEFAULT ''::character varying NOT NULL,
+    link text DEFAULT ''::text NOT NULL,
+    pi character varying(50),
+    lose_to character varying(10),
+    email text DEFAULT ''::text NOT NULL,
+    color character varying(7) NOT NULL,
+    joinable boolean DEFAULT true NOT NULL,
+    archivable boolean DEFAULT true NOT NULL,
+    scheduleable boolean DEFAULT true NOT NULL,
+    department boolean GENERATED ALWAYS AS ((ismain AND archivable AND scheduleable)) STORED NOT NULL,
+    CONSTRAINT tlkpdept_valid_color CHECK (((color)::text ~ '^#[0-9a-f]{6}$'::text))
+);
+
+
+--
+-- Name: TABLE tlkpdept; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.tlkpdept IS 'List of groups';
+
+
+--
+-- Name: COLUMN tlkpdept.deptcode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.deptcode IS 'primary key';
+
+
+--
+-- Name: COLUMN tlkpdept.dept; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.dept IS 'human readable name of department (long)';
+
+
+--
+-- Name: COLUMN tlkpdept.dept_short; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.dept_short IS 'human readable name of department (short)';
+
+
+--
+-- Name: COLUMN tlkpdept.grp; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.grp IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpdept.ismain; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.ismain IS 'true for groups with membership';
+
+
+--
+-- Name: COLUMN tlkpdept.iscurrent; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.iscurrent IS 'Is this department active';
+
+
+--
+-- Name: COLUMN tlkpdept.inst; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.inst IS 'optional reference to tlkpinst';
+
+
+--
+-- Name: COLUMN tlkpdept.prog; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.prog IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpdept.link; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.link IS 'Link to the Unit/Section''s home page';
+
+
+--
+-- Name: COLUMN tlkpdept.pi; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.pi IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpdept.lose_to; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.lose_to IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpdept.email; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.email IS 'contact address for department';
+
+
+--
+-- Name: COLUMN tlkpdept.color; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.color IS 'legend color on site';
+
+
+--
+-- Name: COLUMN tlkpdept.joinable; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.joinable IS 'true for groups that users may join';
+
+
+--
+-- Name: COLUMN tlkpdept.archivable; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.archivable IS 'true for user created groups that may be archived';
+
+
+--
+-- Name: COLUMN tlkpdept.scheduleable; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.scheduleable IS 'true for groups that may be referenced in tblsched';
+
+
+--
+-- Name: COLUMN tlkpdept.department; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpdept.department IS 'true for department and false for a special group';
+
+
+--
+-- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tlkpresearcher (
+    researchercode character varying(20) NOT NULL,
+    lname character varying(20),
+    fname character varying(20),
+    dept_code character varying(10),
+    researchershort character varying(15),
+    chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone NOT NULL,
+    chg_by character varying(30),
+    lose_to character varying(15),
+    active boolean DEFAULT true NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
+    email text DEFAULT ''::text NOT NULL
+);
+
+
+--
+-- Name: TABLE tlkpresearcher; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.tlkpresearcher IS 'List of users';
+
+
+--
+-- Name: COLUMN tlkpresearcher.researchercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.researchercode IS 'primary key';
+
+
+--
+-- Name: COLUMN tlkpresearcher.lname; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.lname IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpresearcher.fname; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.fname IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpresearcher.dept_code; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.dept_code IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpresearcher.researchershort; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.researchershort IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpresearcher.chg_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.chg_at IS 'timestamp of last modification';
+
+
+--
+-- Name: COLUMN tlkpresearcher.chg_by; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.chg_by IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpresearcher.lose_to; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.lose_to IS 'Deprecated';
+
+
+--
+-- Name: COLUMN tlkpresearcher.active; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.active IS 'if not active, no longer be an option anywhere until marked active again';
+
+
+--
+-- Name: COLUMN tlkpresearcher.name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.name IS 'Full name as reported by AD';
+
+
+--
+-- Name: COLUMN tlkpresearcher.email; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.tlkpresearcher.email IS 'email address as reported by AD';
+
+
+--
+-- Name: membership; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.membership AS
+ SELECT m.deptcode AS "group",
+    m.researchercode AS "user",
+        CASE
+            WHEN (p.deptcode IS NOT NULL) THEN true
+            ELSE false
+        END AS pi,
+    m.approved,
+    d.iscurrent AS group_active,
+    r.active AS user_active
+   FROM (((public.groupmembers m
+     JOIN public.tlkpdept d USING (deptcode))
+     JOIN public.tlkpresearcher r USING (researchercode))
+     LEFT JOIN public.primarygroupmember p USING (deptcode, researchercode))
+  ORDER BY m.deptcode,
+        CASE
+            WHEN (p.deptcode IS NOT NULL) THEN true
+            ELSE false
+        END DESC, m.researchercode;
+
+
+--
+-- Name: VIEW membership; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.membership IS 'all membership data joined together';
+
+
+--
+-- Name: COLUMN membership."group"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.membership."group" IS 'pk for the group';
+
+
+--
+-- Name: COLUMN membership."user"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.membership."user" IS 'pk for the user';
+
+
+--
+-- Name: COLUMN membership.pi; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.membership.pi IS 'is this user the pi of the group';
+
+
+--
+-- Name: COLUMN membership.approved; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.membership.approved IS 'is this user an approved member of the group';
+
+
+--
+-- Name: COLUMN membership.group_active; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.membership.group_active IS 'is this group active';
+
+
+--
+-- Name: COLUMN membership.user_active; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.membership.user_active IS 'is this user active';
+
+
+--
 -- Name: support; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -324,37 +952,6 @@ COMMENT ON COLUMN public.support.chg_at IS 'timestamp of last modification';
 
 
 --
--- Name: supportkind; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.supportkind (
-    supportkind integer NOT NULL,
-    label text NOT NULL
-);
-
-
---
--- Name: TABLE supportkind; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.supportkind IS 'Kind of support request';
-
-
---
--- Name: COLUMN supportkind.supportkind; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.supportkind.supportkind IS 'primary key';
-
-
---
--- Name: COLUMN supportkind.label; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.supportkind.label IS 'human readable label';
-
-
---
 -- Name: supportkind_supportkind_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -366,34 +963,6 @@ ALTER TABLE public.supportkind ALTER COLUMN supportkind ADD GENERATED BY DEFAULT
     NO MAXVALUE
     CACHE 1
 );
-
-
---
--- Name: supportlog; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.supportlog (
-    logid bigint NOT NULL,
-    schedid integer,
-    supportkind integer,
-    filed_by character varying(20),
-    fulfilled_by character varying(20),
-    approved boolean,
-    note text NOT NULL,
-    filed_by_old character varying(20),
-    fulfilled_by_old character varying(20),
-    approved_old boolean,
-    note_old text DEFAULT ''::text NOT NULL,
-    chg_by character varying(20) NOT NULL,
-    chg_at timestamp with time zone NOT NULL
-);
-
-
---
--- Name: TABLE supportlog; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.supportlog IS 'Logged changes from support';
 
 
 --
@@ -750,158 +1319,6 @@ ALTER SEQUENCE public.technicalscans_tsid_seq OWNED BY public.technicalscans.tsi
 
 
 --
--- Name: tlkpdept; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.tlkpdept (
-    deptcode character varying(10) NOT NULL,
-    dept character varying(75) NOT NULL COLLATE pg_catalog."en-US-x-icu",
-    dept_short character varying(20) NOT NULL,
-    grp character varying(10) DEFAULT ''::character varying NOT NULL,
-    ismain boolean DEFAULT true NOT NULL,
-    iscurrent boolean DEFAULT true NOT NULL,
-    inst character varying(5),
-    prog character varying(10) DEFAULT ''::character varying NOT NULL,
-    link text DEFAULT ''::text NOT NULL,
-    pi character varying(50),
-    lose_to character varying(10),
-    email text DEFAULT ''::text NOT NULL,
-    color character varying(7) NOT NULL,
-    joinable boolean DEFAULT true NOT NULL,
-    archivable boolean DEFAULT true NOT NULL,
-    scheduleable boolean DEFAULT true NOT NULL,
-    department boolean GENERATED ALWAYS AS ((ismain AND archivable AND scheduleable)) STORED NOT NULL,
-    CONSTRAINT tlkpdept_valid_color CHECK (((color)::text ~ '^#[0-9a-f]{6}$'::text))
-);
-
-
---
--- Name: TABLE tlkpdept; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.tlkpdept IS 'List of groups';
-
-
---
--- Name: COLUMN tlkpdept.deptcode; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.deptcode IS 'primary key';
-
-
---
--- Name: COLUMN tlkpdept.dept; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.dept IS 'human readable name of department (long)';
-
-
---
--- Name: COLUMN tlkpdept.dept_short; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.dept_short IS 'human readable name of department (short)';
-
-
---
--- Name: COLUMN tlkpdept.grp; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.grp IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpdept.ismain; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.ismain IS 'true for groups with membership';
-
-
---
--- Name: COLUMN tlkpdept.iscurrent; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.iscurrent IS 'Is this department active';
-
-
---
--- Name: COLUMN tlkpdept.inst; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.inst IS 'optional reference to tlkpinst';
-
-
---
--- Name: COLUMN tlkpdept.prog; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.prog IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpdept.link; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.link IS 'Link to the Unit/Section''s home page';
-
-
---
--- Name: COLUMN tlkpdept.pi; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.pi IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpdept.lose_to; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.lose_to IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpdept.email; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.email IS 'contact address for department';
-
-
---
--- Name: COLUMN tlkpdept.color; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.color IS 'legend color on site';
-
-
---
--- Name: COLUMN tlkpdept.joinable; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.joinable IS 'true for groups that users may join';
-
-
---
--- Name: COLUMN tlkpdept.archivable; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.archivable IS 'true for user created groups that may be archived';
-
-
---
--- Name: COLUMN tlkpdept.scheduleable; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.scheduleable IS 'true for groups that may be referenced in tblsched';
-
-
---
--- Name: COLUMN tlkpdept.department; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpdept.department IS 'true for department and false for a special group';
-
-
---
 -- Name: tlkpinst; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -938,109 +1355,6 @@ COMMENT ON COLUMN public.tlkpinst.inst IS 'human readable name of institute';
 --
 
 COMMENT ON COLUMN public.tlkpinst.hidden IS 'if hidden, the institute is no longer available for selection';
-
-
---
--- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.tlkpresearcher (
-    researchercode character varying(20) NOT NULL,
-    lname character varying(20),
-    fname character varying(20),
-    dept_code character varying(10),
-    researchershort character varying(15),
-    chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone NOT NULL,
-    chg_by character varying(30),
-    lose_to character varying(15),
-    active boolean DEFAULT true NOT NULL,
-    name text DEFAULT ''::text NOT NULL,
-    email text DEFAULT ''::text NOT NULL
-);
-
-
---
--- Name: TABLE tlkpresearcher; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.tlkpresearcher IS 'List of users';
-
-
---
--- Name: COLUMN tlkpresearcher.researchercode; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.researchercode IS 'primary key';
-
-
---
--- Name: COLUMN tlkpresearcher.lname; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.lname IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpresearcher.fname; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.fname IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpresearcher.dept_code; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.dept_code IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpresearcher.researchershort; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.researchershort IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpresearcher.chg_at; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.chg_at IS 'timestamp of last modification';
-
-
---
--- Name: COLUMN tlkpresearcher.chg_by; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.chg_by IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpresearcher.lose_to; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.lose_to IS 'Deprecated';
-
-
---
--- Name: COLUMN tlkpresearcher.active; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.active IS 'if not active, no longer be an option anywhere until marked active again';
-
-
---
--- Name: COLUMN tlkpresearcher.name; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.name IS 'Full name as reported by AD';
-
-
---
--- Name: COLUMN tlkpresearcher.email; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlkpresearcher.email IS 'email address as reported by AD';
 
 
 --
@@ -1168,149 +1482,6 @@ CREATE SEQUENCE public.tlogresearcher_logid_seq
 --
 
 ALTER SEQUENCE public.tlogresearcher_logid_seq OWNED BY public.tlogresearcher.logid;
-
-
---
--- Name: tlogsched; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.tlogsched (
-    logid integer NOT NULL,
-    schedid integer,
-    scannercode character varying(5),
-    scheddate date,
-    schedhour integer,
-    deptcode character varying(10),
-    researchercode character varying(20),
-    time_used boolean,
-    scannercode_old character varying(5),
-    scheddate_old date,
-    schedhour_old integer,
-    deptcode_old character varying(10),
-    researchercode_old character varying(20),
-    time_used_old boolean,
-    chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone,
-    chg_by character varying(30)
-);
-
-
---
--- Name: TABLE tlogsched; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.tlogsched IS 'Logged changes from tblsched';
-
-
---
--- Name: COLUMN tlogsched.logid; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.logid IS 'primary key';
-
-
---
--- Name: COLUMN tlogsched.schedid; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.schedid IS 'schedid for logged value, new entries always reference a row in tblsched';
-
-
---
--- Name: COLUMN tlogsched.scannercode; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.scannercode IS 'value of tblsched.scannercode';
-
-
---
--- Name: COLUMN tlogsched.scheddate; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.scheddate IS 'value of tblsched.scheddate';
-
-
---
--- Name: COLUMN tlogsched.schedhour; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.schedhour IS 'value of tblsched.schedhour';
-
-
---
--- Name: COLUMN tlogsched.deptcode; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.deptcode IS 'value of tblsched.deptcode';
-
-
---
--- Name: COLUMN tlogsched.researchercode; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.researchercode IS 'value of tblsched.researchercode';
-
-
---
--- Name: COLUMN tlogsched.time_used; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.time_used IS 'value of tblsched.time_used';
-
-
---
--- Name: COLUMN tlogsched.scannercode_old; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.scannercode_old IS 'previous value of tblsched.scannercode';
-
-
---
--- Name: COLUMN tlogsched.scheddate_old; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.scheddate_old IS 'previous value of tblsched.scheddate';
-
-
---
--- Name: COLUMN tlogsched.schedhour_old; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.schedhour_old IS 'previous value of tblsched.schedhour';
-
-
---
--- Name: COLUMN tlogsched.deptcode_old; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.deptcode_old IS 'previous value of tblsched.deptcode';
-
-
---
--- Name: COLUMN tlogsched.researchercode_old; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.researchercode_old IS 'previous value of tblsched.researchercode';
-
-
---
--- Name: COLUMN tlogsched.time_used_old; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.time_used_old IS 'previous value of tblsched.time_used';
-
-
---
--- Name: COLUMN tlogsched.chg_at; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.chg_at IS 'value of tblsched.chg_at';
-
-
---
--- Name: COLUMN tlogsched.chg_by; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tlogsched.chg_by IS 'value of tblsched.chg_by';
 
 
 --
