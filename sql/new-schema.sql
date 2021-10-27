@@ -108,7 +108,7 @@ CREATE FUNCTION public.soft_del_inst() RETURNS trigger
     LANGUAGE plpgsql
     AS $_$
 declare
-	upd text := 'update tlkpinst set hidden = true where instcode = $1';
+	upd text := 'update tlkpinst set active = false where instcode = $1';
 begin
 	execute upd using old.instcode;
 	return null;
@@ -1325,7 +1325,7 @@ ALTER SEQUENCE public.technicalscans_tsid_seq OWNED BY public.technicalscans.tsi
 CREATE TABLE public.tlkpinst (
     instcode character varying(5) NOT NULL,
     inst character varying(20) DEFAULT ''::character varying NOT NULL,
-    hidden boolean DEFAULT false NOT NULL
+    active boolean DEFAULT true NOT NULL
 );
 
 
@@ -1351,10 +1351,10 @@ COMMENT ON COLUMN public.tlkpinst.inst IS 'human readable name of institute';
 
 
 --
--- Name: COLUMN tlkpinst.hidden; Type: COMMENT; Schema: public; Owner: -
+-- Name: COLUMN tlkpinst.active; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.tlkpinst.hidden IS 'if hidden, the institute is no longer available for selection';
+COMMENT ON COLUMN public.tlkpinst.active IS 'if not active, the institute is no longer available for selection';
 
 
 --

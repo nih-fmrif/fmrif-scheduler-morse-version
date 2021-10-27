@@ -81,7 +81,7 @@ tlkpdept ?--* tlkpinst
 [tlkpinst] {bgcolor: "#ececfc"}
 *instcode
 inst
-hidden {bgcolor: "#ffffff"}
+active {bgcolor: "#ffffff"}
 
 [tlkpresearcher] {bgcolor: "#ececfc"}
 *researchercode

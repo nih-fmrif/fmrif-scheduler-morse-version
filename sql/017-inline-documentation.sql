@@ -35,7 +35,7 @@ comment on column tlkpdept.email is 'contact address for department';
 comment on table tlkpinst is 'List of institutes';
 comment on column tlkpinst.instcode is 'primary key';
 comment on column tlkpinst.inst is 'human readable name of institute';
-comment on column tlkpinst.hidden is 'if hidden, the institute is no longer available for selection';
+comment on column tlkpinst.active is 'if not active, the institute is no longer available for selection';
 
 comment on column tlkpresearcher.researchercode is 'primary key';
 comment on column tlkpresearcher.chg_at is 'timestamp of last modification';

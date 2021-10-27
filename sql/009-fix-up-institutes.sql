@@ -8,13 +8,13 @@ alter table tlkpinst alter column inst set default '';
 
 -- in order to maintain referential integrity and allow institutes to be removed
 -- we need a mechanism to disable institutes without deleting them
-alter table tlkpinst add column hidden boolean not null default false;
+alter table tlkpinst add column active boolean not null default true;
 
 -- since these are managed manually set up a nice soft delete system
 -- in case of accidents
 create function soft_del_inst() returns trigger as $$
 declare
-	upd text := 'update tlkpinst set hidden = true where instcode = $1';
+	upd text := 'update tlkpinst set active = false where instcode = $1';
 begin
 	execute upd using old.instcode;
 	return null;
