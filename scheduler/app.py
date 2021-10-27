@@ -14,6 +14,11 @@ app.config.update(
     SQLALCHEMY_DATABASE_URI=env("MMSCHED_DB_URL"),
 )
 
+if app.debug:
+    app.config.update(
+        SQLALCHEMY_ECHO=True,
+    )
+
 db = SQLAlchemy(app)
 
 
