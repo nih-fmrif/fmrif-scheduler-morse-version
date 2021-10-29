@@ -1,13 +1,8 @@
-title {
-	label: "Scheduler ER diagram (legacy shaded)",
-	font: "Helvetica",
-}
 entity {
-	font: "Helvetica",
+	font: "Deja Vu Sans",
 	border: "3",
 }
 relationship {
-	font: "Helvetica",
 	color: "#444444",
 }
 
