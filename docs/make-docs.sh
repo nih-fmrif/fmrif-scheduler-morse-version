@@ -3,7 +3,7 @@
 set -e
 
 for doc in schema; do
-	pandoc --metadata-file=metadata.yml --toc -t context -s -o ${doc}.pdf -s ${doc}.md
+	pandoc --metadata-file=metadata.yml -f markdown-smart --toc -t context -s -o ${doc}.pdf -s ${doc}.md
 done
 
 # misc notes for working with generated pdf:
