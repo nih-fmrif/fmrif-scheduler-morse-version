@@ -63,7 +63,7 @@ The remaining columns are email addresses (multiple addresses being separated by
 
 This table lists groups. The **deptcode** column is the primary key referenced by many tables. The **dept_short** column is the human readable label, which must be unique. The **dept** column is the human readable description, which also must be unique. The **iscurrent** column is true for active groups. 
 
-The **inst** column is a foreign key to the *tlkpinst* that this group belongs to, if any.
+The **inst** column is a foreign key to the [*tlkpinst*](#tlkpinst) that this group belongs to, if any.
 
 The **color** column contains the color used in the schedule in the same format used by the html `type=color` input element.
 
@@ -77,9 +77,8 @@ This table lists templates per device. The primary key is a composite of a **tem
 
 ### tbltemplate
 
-This table lists the entries for a given template referenced by the (**templatecode**, **scannercode**) columns. The **templateid** is the primary key. The (**dow**, **hour**) columns represent the (day of week, hour) coordinates to set in the schedule (see *tblsched* for more information) and the optional foreign keys **deptcode**, **researchercode**, and **instcode** represent the values to set in the schedule when its template is applied to the schedule.
+This table lists the entries for a given template referenced by the (**templatecode**, **scannercode**) columns. The **templateid** is the primary key. The (**dow**, **hour**) columns represent the (day of week, hour) coordinates to set in the schedule (see [*tblsched*](#tblsched) for more information) and the optional foreign keys **deptcode**, **researchercode**, and **instcode** represent the values to set in the schedule when its template is applied to the schedule.
 
 ### tblsched
 
 This is the main table of interest as it contains the schedule.
-
