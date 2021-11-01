@@ -6,3 +6,4 @@ mainfont: DejaVuSans
 sansfont: DejaVuSans
 monofont: DejaVuSansMono
 mathfont: DejaVuMathTeXGyre
+linkcolor: blue
