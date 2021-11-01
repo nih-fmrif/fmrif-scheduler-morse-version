@@ -82,3 +82,125 @@ This table lists the entries for a given template referenced by the (**templatec
 ### tblsched
 
 This is the main table of interest as it contains the schedule.
+
+The **schedid** column is the primary key of the table.
+
+The **templateid** column is a reference to the [*tbltemplate* entry](#tbltemplate) that created this column. It may be null for historical entries but it will never be null for any modern entries as modern entries are always created from a template.
+
+The **chg_at** column represents a last modification date for the entry and may be null for historical entries. The **chg_by** column records who made the last modification and may be null for historical entries. The **chg_by** column is a string and for historical entries does not refer to a user of the website.
+
+The **scannercode** column is a reference to the device that this entry applies to. The **scheddate** is the civil date this entry applies to and the **schedhour** column is the 24 hour civil time of the entry. These three columns are coordinates that uniquely identify a schedule entry.
+
+The **scheddow** column represents the day of week of the entry (0 = Sunday) and it forms a separate week-local coordinate system along with **schedhour**. This is important in [*tbltemplate*](#tbltemplate) but can be ignored in this table. For modern entries, for each device and week, every value of **schedhour** and **scheddow** will be present in this table even if they are never modified after the template is applied.
+
+The **time_used** column reports whether the device was used as scheduled. It is a nullable bool where null should be understood as "not yet known". It is updated periodically from a separate database and is not meant to be modified directly.
+
+The **orig_deptcode** and **orig_instcode** columns refer to the group and institute as recorded in the template that was used to create this entry.
+
+The **deptcode** and **researchercode** columns are the group and user that are currently scheduled for this entry.
+
+Support requests are encoded by the [support and supportkind](#support-and-supportkind) tables.
+
+Changes to this table are recorded in the [*tlogsched*](#tlogsched) audit table.
+
+### tlogsched
+
+Entries in this table are automatically created by the **log_sched_changes** trigger whenever and however the schedule is modified.
+
+The **logid** column is the primary key of the table.
+
+The **schedid** column refers to an entry in *tblsched*. This will be null if the entry was deleted. Modern entries will never be deleted. The **scannercode**, **scheddate**, and **schedhour** correspond to the columns in *tblsched*. These are redundant for modern entries and are only of use if **schedid** is null.
+
+The **chg_at** and **chg_by** columns are identical to those in *tblsched* but correspond to the change that caused this row to be created.
+
+The remaining rows come in pairs of X and X_old for X in **deptcode**, **researchercode**, **time_used**. For these X refers to the value after the schedule entry was changed and X_old refers to the value before the entry was changed. 
+
+There are also **scannercode_old**, **scheddate_old**, and **schedhour_old** and while these are dutifully logged, none of these would ever change unless someone was modifying the schedule directly in the database and not going through the site, which is inadvisable.
+
+## Modern
+
+### support and supportkind
+
+The *supportkind* table is an enum that should never be changed except by an application developer. It consists of a primary key **supportkind** and a label **label**.
+
+The *support* table represents support requests for schedule entries. It's primary key is a composite of the foreign keys (**schedid**, **supportkind**). This means that there can be up to 3 support entries for each entry in the schedule.
+
+The **chg_at** column records the last modification date. The **chg_by** column references the *tlkpresearcher* entry for the user that last modified the support request.
+
+The **filed_by** column references the user that filed this support request and **fulfilled_by** references the user that answered the request.
+
+The **approved** column is a nullable boolean that records whether the support request was approved where null should be understood as "not yet decided".
+
+The **note** column is currently only to record the difference in technologist requests but is left vague to allow future changes as well.
+
+Changes to *support* are recorded in [*supportlog*](#supportlog).
+
+### supportlog
+
+Entries in this table are automatically recorded by the **log_support_changes** trigger whenever and however *support* is modified.
+
+The **logid** column is the primary key.
+
+The (**schedid**, **supportkind**) pair duplicate the primary key of the *support* entry in question.
+
+The **chg_by** and **chg_at** columns are the values of the same columns in *support* at the time this row was created.
+
+The remaining columns follow the X, X_old pattern of [*tlogsched*](#tlogsched).
+
+### app_log_json
+
+This is a view that combines all the *tlogsched* and *supportlog* entries for a single **schedid** into a json document in the **entries** column that filters out much of the noise. It is meant to be used as
+```sql
+select entries from app_log_json where schedid = :id
+```
+and it is not a good idea to run it for many more than a single entry as it is quite expensive relative to other queries in this schema.
+
+The json document consists of a list of objects. Each object has **modified** (**chg_at**), **chg_by**, **kind**, and **values** keys. The **kind** is "main" for *tlogsched* entries and *supportkind.label* otherwise and **values** is an object of X, X_old pairs keyed by X and consisting of the list [X, X_old] that are only include when X≠X_old.
+
+This should never need to be used directly as the website will report this in a nicely formatted manner.
+
+### devicegroup
+
+This table consists of (**scannercode**, **deptcode**) pairs meaning that group **deptcode** has access to device **scannercode** when both are active. If one or both are inactive, then it is ignored. It is safe to insert and delete rows from the table, but using the website is preferable.
+
+### groupmembers and primarygroupmember
+
+The *groupmembers* table records the state of user membership in a group. The primary key is the composite foreign key (**deptcode**, **researchercode**).
+
+The **approve1** and **approve2** columns are null or a timestamp for when the appropriate approval was recorded. If one or both are null the user is not in the group yet but has requested to be in the group. Most groups only require one approval so the columns are either both null or the same timestamp. The row will be deleted if approval is denied.
+
+The **approved** generated column is true iff both **approve1** and **approve2** are not null.
+
+The *primarygroupmember* consists only of the pair **deptcode** and **researchercode** where the corresponding pair must exist in *groupmembers*. An entry in this table means that the respective user is the primary investigator of the respective group.
+
+### membership
+
+The *membership* view simplifies membership queries. It is used by the website so it may not be changed but it can be used.
+
+The **"group"** column is the **deptcode** and the **"user"** column is the **researchercode** (note the quoting is necessary as these are reserved words in postgres. The remaining columns are all boolean:
+
+* **approved** if the user is approved to be in the group
+* **pi** if the user is the primary investigator of the group
+* **group_active** if the group is active
+* **user_active** if the user is active
+
+To see all active members of groups, you can query
+```sql
+select "group", "user" from membership
+where approved
+and group_active
+and user_active;
+```
+
+To see all users pending membership in group X, you can query
+```sql
+select "user" from membership where "group" = 'X' and not approved;
+```
+
+### userdevice
+
+This table records the special per-device permissions for members of the DEV special group.
+
+The primary key is (**researchercode**, **scannercode**) and the entry is meaningless if the user is not an active member of the DEV group.
+
+The remaining columns are booleans corresponding to each of the special permissions with the additional constraint that at least one must be true.
