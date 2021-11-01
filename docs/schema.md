@@ -77,7 +77,7 @@ This table lists templates per device. The primary key is a composite of a **tem
 
 ### tbltemplate
 
-This table lists the entries for a given template referenced by the (**templatecode**, **scannercode**) columns. The **templateid** is the primary key. The (**dow**, **hour**) columns represent the (day of week, hour) coordinates to set in the schedule (see *tblsched* for more information) and the optional foreign keys **deptcode**, **researchercode**, and **instcode** represent the values to set in the schedule when its template is applied to the schedule. [Note: the primary key should be (**templatecode**, **scannercode**, **dow**, **hour**) but it is too late to change this.]
+This table lists the entries for a given template referenced by the (**templatecode**, **scannercode**) columns. The **templateid** is the primary key. The (**dow**, **hour**) columns represent the (day of week, hour) coordinates to set in the schedule (see *tblsched* for more information) and the optional foreign keys **deptcode**, **researchercode**, and **instcode** represent the values to set in the schedule when its template is applied to the schedule.
 
 ### tblsched
 
