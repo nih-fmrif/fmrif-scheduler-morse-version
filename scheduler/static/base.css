@@ -12,3 +12,42 @@ html {
 body {
 	margin: 0;
 }
+/* normalizations adapted from 
+ - https://github.com/csstools/normalize.css
+ - https://github.com/csstools/sanitize.css
+*/
+:where(b, strong) {
+	font-weight: bolder;
+}
+:where(button, input, select, textarea) {
+	margin: 0;
+	font: inherit;
+	max-width: 100%;
+}
+:where(textarea) {
+	resize: vertical;
+}
+:where(button, select) {
+	text-transform: none;
+}
+:where(button, input:is([type="button" i], [type="reset" i], [type="submit" i])) {
+	-webkit-appearance: button;
+}
+:where(:root) {
+	cursor: default;
+	overflow-wrap: break-word;
+	-moz-tab-size: 4;
+	tab-size: 4;
+	-webkit-tap-highlight-color: transparent;
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+:where(iframe, img, input, video, select, textarea) {
+	height: auto;
+	max-width: 100%;
+}
+:where(fieldset) {
+	min-width: 0;
+	max-width: 100%;
+}
+/* end normalizations */
