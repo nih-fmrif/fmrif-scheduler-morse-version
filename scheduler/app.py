@@ -1,8 +1,10 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_session import Session
-
 import os
+from functools import wraps
+
+from flask import Flask
+from flask.templating import render_template
+from flask_session import Session
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 
@@ -38,6 +40,38 @@ app.config["SESSION_SQL_ALCHEMY"] = db
 Session(app)
 
 
+def render_to(template):
+    """decorator that applies template to return of wrapped func"""
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            ctx = f(*args, **kwargs)
+            if ctx is None:
+                ctx = {}
+            elif not isinstance(ctx, dict):
+                return ctx
+            return render_template(template + ".html", **ctx)
+
+        return decorated_function
+
+    return decorator
+
+
+@app.errorhandler(403)
+def access_denied(e):
+    # TODO set show_login based on whether they're logged in
+    data = {"code": 403, "msg": "Access denied", "show_login": False}
+    return render_template("error.html", **data), 403
+
+
+@app.errorhandler(404)
+def not_found(e):
+    data = {"code": 404, "msg": "Not found", "show_login": False}
+    return render_template("error.html", **data), 404
+
+
 @app.route("/")
+@render_to("page")
 def hello_world():
-    return "hello world"
+    return {"content": "hello world"}
