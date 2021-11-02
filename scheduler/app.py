@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_session import Session
 
 import os
 
@@ -12,6 +13,7 @@ def env(s: str) -> str:
 
 app.config.update(
     SQLALCHEMY_DATABASE_URI=env("MMSCHED_DB_URL"),
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
 )
 
 if app.debug:
