@@ -206,3 +206,7 @@ This table records the special per-device permissions for members of the DEV spe
 The primary key is (**researchercode**, **scannercode**) and the entry is meaningless if the user is not an active member of the DEV group.
 
 The remaining columns are booleans corresponding to each of the special permissions with the additional constraint that at least one must be `true`.
+
+### site_sessions
+
+This table is used to store temporary data private to the site. There is no reason to interact with it at all.

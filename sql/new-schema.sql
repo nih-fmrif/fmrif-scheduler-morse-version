@@ -873,6 +873,45 @@ COMMENT ON COLUMN public.membership.user_active IS 'is this user active';
 
 
 --
+-- Name: site_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.site_sessions (
+    id integer NOT NULL,
+    session_id character varying(255),
+    data bytea,
+    expiry timestamp without time zone
+);
+
+
+--
+-- Name: TABLE site_sessions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.site_sessions IS 'an internal session store for the website, ignore';
+
+
+--
+-- Name: site_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.site_sessions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: site_sessions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.site_sessions_id_seq OWNED BY public.site_sessions.id;
+
+
+--
 -- Name: support; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1577,6 +1616,13 @@ COMMENT ON COLUMN public.userdevice.training IS 'permission to respond to reques
 
 
 --
+-- Name: site_sessions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.site_sessions ALTER COLUMN id SET DEFAULT nextval('public.site_sessions_id_seq'::regclass);
+
+
+--
 -- Name: technicalscans tsid; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1619,6 +1665,22 @@ ALTER TABLE ONLY public.groupmembers
 
 ALTER TABLE ONLY public.primarygroupmember
     ADD CONSTRAINT primarygroupmember_pkey PRIMARY KEY (deptcode);
+
+
+--
+-- Name: site_sessions site_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.site_sessions
+    ADD CONSTRAINT site_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: site_sessions site_sessions_session_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.site_sessions
+    ADD CONSTRAINT site_sessions_session_id_key UNIQUE (session_id);
 
 
 --
