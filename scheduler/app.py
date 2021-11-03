@@ -1,5 +1,6 @@
 import os
 from functools import wraps
+from typing import Dict, Tuple, Union
 
 from flask import Flask
 from flask.templating import render_template
@@ -58,17 +59,25 @@ def render_to(template):
     return decorator
 
 
+def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[str, int]:
+    data = {
+        "code": code,
+        "msg": msg,
+        "show_login": show_login,
+    }
+    return render_template("error.html", **data), code
+
+
 @app.errorhandler(403)
 def access_denied(e):
     # TODO set show_login based on whether they're logged in
-    data = {"code": 403, "msg": "Access denied", "show_login": False}
-    return render_template("error.html", **data), 403
+    show_login = False
+    return render_error_page(403, "Access denied", show_login=show_login)
 
 
 @app.errorhandler(404)
 def not_found(e):
-    data = {"code": 404, "msg": "Not found", "show_login": False}
-    return render_template("error.html", **data), 404
+    return render_error_page(404, "Not found")
 
 
 @app.route("/")
