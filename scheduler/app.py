@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from functools import wraps
@@ -37,6 +38,20 @@ else:
     app.config.update(
         SESSION_COOKIE_SECURE=True,  # no https on dev server
     )
+
+
+def load_user_settings(app):
+    # we let any error here crash the app as these all must be set
+    out = {}
+    with app.open_resource("config.json", "r") as f:
+        cfg = json.loads(f.read())
+        if not isinstance(cfg, dict):
+            raise Exception("config.json needs to be {}")
+        # TODO load items from cfg, sanity check them, and add them to out
+    return out
+
+
+app.config.update(**load_user_settings(app))
 
 db.init_app(app)
 app.config["SESSION_SQL_ALCHEMY"] = db

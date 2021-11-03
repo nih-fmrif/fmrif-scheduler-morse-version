@@ -4,6 +4,9 @@ sql/003-import-data.sql
 # do not save new data to be imported into db
 sql/*.csv
 
+# do not save local config
+scheduler/config.json
+
 # docs
 *.pdf
 *.svg
