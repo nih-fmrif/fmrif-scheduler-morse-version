@@ -264,8 +264,6 @@ class ScheduleEntry(db.Model):
         primaryjoin="ScheduleEntry.id==SupportRequest.schedid",
     )
 
-    # TODO add support requests
-
 
 class Membership(db.Model):
     """Membership is a view over user membership sufficient for all membership queries.
