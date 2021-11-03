@@ -41,6 +41,32 @@ class User(Model):
     addr: str = db.Column("email", db.Text(), nullable=False, default="")
 
 
+def upsert_user(user: str, mail: str, name: str) -> User:
+    # upsert the user to ensure the record exists
+    db.session.execute(
+        "insert into tlkpresearcher(researchercode) values (:user) on conflict do nothing",
+        {
+            "user": user,
+        },
+    )
+    # load the user
+    u = User.query.get(user)
+
+    # if the mail and/or display name have changed, update them
+    # as long as the new values are not empty.
+    add = False
+    if mail != "" and u.addr != mail:
+        u.addr = mail
+        add = True
+    if name != "" and u.label != name:
+        u.label = name
+        add = True
+    if add:
+        db.session.add(u)
+
+    return u
+
+
 class Group(Model):
     __tablename__ = "tlkpdept"
 
