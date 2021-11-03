@@ -5,7 +5,7 @@ from typing import Dict, Tuple, Union
 from flask import Flask
 from flask.templating import render_template
 from flask_session import Session
-from flask_sqlalchemy import SQLAlchemy
+from model import db, User
 
 app = Flask(__name__)
 
@@ -36,7 +36,7 @@ else:
         SESSION_COOKIE_SECURE=True,  # no https on dev server
     )
 
-db = SQLAlchemy(app)
+db.init_app(app)
 app.config["SESSION_SQL_ALCHEMY"] = db
 Session(app)
 

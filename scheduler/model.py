@@ -1,8 +1,13 @@
 from typing import Any, Optional
 
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.ext.declarative import DeclarativeMeta
 from sqlalchemy.sql import func
 
-from app import db
+db = SQLAlchemy()
+
+# this is only needed to avoid confusing mypy
+Model: DeclarativeMeta = db.Model
 
 # This file contains the reflection of the schema into sqlalchemy
 # The reflection is not 1:1.
@@ -11,7 +16,7 @@ from app import db
 # - some views are included instead of the underlying tables
 
 
-class Inst(db.Model):
+class Inst(Model):
     __tablename__ = "tlkpinst"
 
     id: str = db.Column("instcode", db.String(5), primary_key=True)
@@ -19,7 +24,7 @@ class Inst(db.Model):
     active: bool = db.Column("active", db.Boolean(), nullable=False, default=True)
 
 
-class User(db.Model):
+class User(Model):
     __tablename__ = "tlkpresearcher"
 
     id: str = db.Column("researchercode", db.String(20), primary_key=True)
@@ -36,7 +41,7 @@ class User(db.Model):
     addr: str = db.Column("email", db.Text(), nullable=False, default="")
 
 
-class Group(db.Model):
+class Group(Model):
     __tablename__ = "tlkpdept"
 
     id: str = db.Column("deptcode", db.String(10), primary_key=True)
@@ -74,7 +79,7 @@ class Group(db.Model):
     )
 
 
-class Device(db.Model):
+class Device(Model):
     __tablename__ = "tlkpscanner"
 
     id: str = db.Column("scannercode", db.String(5), primary_key=True)
@@ -90,7 +95,7 @@ class Device(db.Model):
     train_addr: str = db.Column("trainaddr", db.Text(), nullable=False, default="")
 
 
-class Template(db.Model):
+class Template(Model):
     __tablename__ = "tbltemplates"
 
     id: str = db.Column("templatecode", db.String(1))
@@ -106,7 +111,7 @@ class Template(db.Model):
     __table_args__ = (db.PrimaryKeyConstraint("templatecode", "scannercode"),)
 
 
-class TemplateEntry(db.Model):
+class TemplateEntry(Model):
     __tablename__ = "tbltemplate"
 
     id: str = db.Column("templateid", db.Integer(), primary_key=True)
@@ -132,7 +137,7 @@ class TemplateEntry(db.Model):
     )
 
 
-class SupportKind(db.Model):
+class SupportKind(Model):
     """SupportKind represents an enum and should never be changed
     and never needs to be referenced directly"""
 
@@ -142,7 +147,7 @@ class SupportKind(db.Model):
     label: str = db.Column("label", db.Text(), nullable=False)
 
 
-class SupportRequest(db.Model):
+class SupportRequest(Model):
     __tablename__ = "support"
 
     schedid: int = db.Column("schedid", db.Integer(), db.ForeignKey("tblsched.schedid"))
@@ -186,7 +191,7 @@ class SupportRequest(db.Model):
     __table_args__ = (db.PrimaryKeyConstraint("schedid", "supportkind"),)
 
 
-class ScheduleEntry(db.Model):
+class ScheduleEntry(Model):
     __tablename__ = "tblsched"
 
     id: int = db.Column("schedid", db.Integer(), primary_key=True)
@@ -265,7 +270,7 @@ class ScheduleEntry(db.Model):
     )
 
 
-class Membership(db.Model):
+class Membership(Model):
     """Membership is a view over user membership sufficient for all membership queries.
 
     Some of the underlying relations are also exposed to sqlalchemy but only for CRUD operations."""
@@ -283,7 +288,7 @@ class Membership(db.Model):
     __table_args__ = (db.PrimaryKeyConstraint("group", "user"),)
 
 
-class GroupMember(db.Model):
+class GroupMember(Model):
     """GroupMember is only meant for insert/update/delete. Use Membership for queries."""
 
     __tablename__ = "groupmembers"
@@ -301,7 +306,7 @@ class GroupMember(db.Model):
     __table_args__ = (db.PrimaryKeyConstraint("deptcode", "researchercode"),)
 
 
-class PrimaryGroupMember(db.Model):
+class PrimaryGroupMember(Model):
     """PrimaryGroupMember is only for insert and delete. Use Membership for queries."""
 
     __tablename__ = "primarygroupmember"
@@ -316,7 +321,7 @@ class PrimaryGroupMember(db.Model):
     __table_args__ = (db.PrimaryKeyConstraint("deptcode", "researchercode"),)
 
 
-class DeviceGroup(db.Model):
+class DeviceGroup(Model):
     __tablename__ = "devicegroup"
 
     device: str = db.Column(
@@ -329,7 +334,7 @@ class DeviceGroup(db.Model):
     __table_args__ = (db.PrimaryKeyConstraint("scannercode", "deptcode"),)
 
 
-class UserDevice(db.Model):
+class UserDevice(Model):
     __tablename__ = "userdevice"
 
     user: str = db.Column(
@@ -348,7 +353,7 @@ class UserDevice(db.Model):
     __table_args__ = (db.PrimaryKeyConstraint("researchercode", "scannercode"),)
 
 
-class SchedLogEntry(db.Model):
+class SchedLogEntry(Model):
     """SchedLogEntry is a view that should always be used with a specified id"""
 
     __tablename__ = "app_log_json"
