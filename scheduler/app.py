@@ -1,6 +1,6 @@
 import os
 from functools import wraps
-from typing import Dict, Tuple, Union
+from typing import Tuple
 
 from flask import Flask
 from flask.templating import render_template
