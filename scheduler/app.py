@@ -125,6 +125,7 @@ def setup_user():
         session["user_name"] = login_as
         g.user = upsert_user(login_as, mail, name)
         db.session.commit()  # ensure these changes even if the rest of the request fails
+        app.logger.info("new login for user: %s", login_as)
     else:
         # we are an existing login, just fetch the user object
         g.user = User.query.get(user_name)
