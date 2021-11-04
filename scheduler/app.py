@@ -48,8 +48,8 @@ def load_user_settings(app):
         cfg = json.loads(f.read())
         if not isinstance(cfg, dict):
             raise Exception("config.json needs to be {}")
-        if len(cfg) != 3:
-            raise Exception("config.json unexpected number of keys, must be 3")
+        if len(cfg) != 4:
+            raise Exception("config.json unexpected number of keys, must be 4")
 
         # load info about proxies so we can get correct remote addr
         # see: https://werkzeug.palletsprojects.com/en/2.0.x/middleware/proxy_fix/
@@ -94,6 +94,23 @@ def load_user_settings(app):
         if len(netspec) == 0:
             raise Exception("config.json: nih_network cannot be empty")
         out["nih_networks"] = [ipaddress.ip_network(sn) for sn in netspec]
+
+        ls_addr = cfg["listserv"]
+        if not isinstance(ls_addr, str):
+            raise Exception("config.json: listserv must be string")
+        if "@" not in ls_addr:
+            raise Exception("config.json: listserv must be valid email address")
+        out["nih_listserv"] = ls_addr
+
+        ml = cfg["mailing_lists"]
+        if not isinstance(ml, dict):
+            raise Exception("config.js: mailing_lists must be {}")
+        for v in ml.values():
+            if not isinstance(v, str):
+                raise Exception(
+                    'config.js: mailing_list entries must be "name": "description" pairs'
+                )
+        out["nih_mailing_lists"] = ml
 
     return out
 
