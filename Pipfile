@@ -8,6 +8,7 @@ flask = "*"
 psycopg2 = "*"
 flask-sqlalchemy = "*"
 flask-session = "*"
+flask-mail = "*"
 
 [dev-packages]
 mypy = "*"

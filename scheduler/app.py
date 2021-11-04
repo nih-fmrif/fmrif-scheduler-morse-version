@@ -7,6 +7,7 @@ from typing import Tuple
 
 from flask import Flask, abort, g, request, session
 from flask.templating import render_template
+from flask_mail import Mail
 from flask_session import Session
 
 from model import db, get_user, upsert_user
@@ -18,8 +19,19 @@ def env(s: str) -> str:
     return os.environ[s]
 
 
+def bool_env(s: str) -> bool:
+    return env(s).lower() != "false"
+
+
 app.config.update(
     SECRET_KEY=env("SECRET_KEY"),
+    # config for Flask-Mail
+    MAIL_SERVER=env("MMSCHED_MAIL_SERVER"),
+    MAIL_USE_TLS=bool_env("MMSCHED_MAIL_USE_TLS"),
+    MAIL_USE_SSL=bool_env("MMSCHED_MAIL_USE_SSL"),
+    MAIL_USERNAME=env("MMSCHED_MAIL_USERNAME"),
+    MAIL_PASSWORD=env("MMSCHED_MAIL_PASSWORD"),
+    MAIL_DEFAULT_SENDER=env("MMSCHED_MAIL_DEFAULT_SENDER"),
     # config for Flask-SQLAlchemy
     SQLALCHEMY_DATABASE_URI=env("MMSCHED_DB_URL"),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
@@ -34,6 +46,7 @@ app.config.update(
 if app.debug:
     app.config.update(
         SQLALCHEMY_ECHO=True,
+        MAIL_SUPPRESS_SEND=True,
     )
 else:
     app.config.update(
@@ -120,6 +133,8 @@ app.config.update(**load_user_settings(app))
 db.init_app(app)
 app.config["SESSION_SQL_ALCHEMY"] = db
 Session(app)
+mail = Mail(app)
+app.config["SESSION_MAILER"] = mail
 
 
 def render_to(template):
