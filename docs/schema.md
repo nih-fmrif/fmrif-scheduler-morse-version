@@ -207,6 +207,6 @@ The primary key is (**researchercode**, **scannercode**) and the entry is meanin
 
 The remaining columns are booleans corresponding to each of the special permissions with the additional constraint that at least one must be `true`.
 
-### site_sessions
+### site_sessions and reset_tokens
 
-This table is used to store temporary data private to the site. There is no reason to interact with it at all.
+These tables are used to store temporary data private to the site. There is no reason to interact with them at all.

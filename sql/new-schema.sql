@@ -873,6 +873,24 @@ COMMENT ON COLUMN public.membership.user_active IS 'is this user active';
 
 
 --
+-- Name: reset_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reset_tokens (
+    token text NOT NULL,
+    for_user character varying(20) NOT NULL,
+    issued timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: TABLE reset_tokens; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.reset_tokens IS 'an internal store for the website, ignore';
+
+
+--
 -- Name: site_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1668,6 +1686,14 @@ ALTER TABLE ONLY public.primarygroupmember
 
 
 --
+-- Name: reset_tokens reset_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reset_tokens
+    ADD CONSTRAINT reset_tokens_pkey PRIMARY KEY (token);
+
+
+--
 -- Name: site_sessions site_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1913,6 +1939,14 @@ ALTER TABLE ONLY public.primarygroupmember
 
 ALTER TABLE ONLY public.primarygroupmember
     ADD CONSTRAINT primarygroupmember_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: reset_tokens reset_tokens_for_user_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reset_tokens
+    ADD CONSTRAINT reset_tokens_for_user_fkey FOREIGN KEY (for_user) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE CASCADE;
 
 
 --

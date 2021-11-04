@@ -1,3 +1,5 @@
+import datetime
+import secrets
 from typing import Any, Optional
 
 from flask_sqlalchemy import SQLAlchemy
@@ -390,3 +392,48 @@ class SchedLogEntry(Model):
 
     id: int = db.Column("schedid", db.Integer(), primary_key=True)
     entries: Any = db.Column("entries", db.JSON(), nullable=True)
+
+
+class ResetTokens(Model):
+    __tablename__ = "reset_tokens"
+
+    token: str = db.Column("token", db.String(), primary_key=True)
+    for_user: str = db.Column(
+        "for_user",
+        db.String(20),
+        db.ForeignKey("tlkpresearcher.researchercode"),
+        nullable=False,
+    )
+    issued: Any = db.Column(
+        "issued", db.DateTime(), db.FetchedValue(for_update=False), nullable=False
+    )
+
+    user: User = db.relationship("User", lazy="joined")
+
+
+def create_reset_token_for(user: str) -> str:
+    token = secrets.token_urlsafe(64)
+    t = ResetTokens(token=token, for_user=user)
+    # this can technically fail if we happen to generate the same token twice
+    # but the odds against that are so great that it would actually be cool
+    # if it happened
+    db.session.add(t)
+    # this is only expected to be called from cli so save it now
+    # let any fk errors bubble up
+    db.session.commit()
+    return token
+
+
+def get_user_from_token(token: str) -> Optional[User]:
+    # delete all old tokens before we check
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    ResetTokens.query.filter(ResetTokens.issued < yesterday).delete()
+    # see if the token exists
+    rt = ResetTokens.query.get(token)
+    if rt is None:
+        return None
+    # if it does grab the user and delete the token
+    user = rt.user
+    db.session.delete(rt)
+    db.session.commit()
+    return user
