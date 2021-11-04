@@ -67,6 +67,10 @@ def upsert_user(user: str, mail: str, name: str) -> User:
     return u
 
 
+def get_user(user: str) -> Optional[User]:
+    return User.query.get(user)
+
+
 class Group(Model):
     __tablename__ = "tlkpdept"
 

@@ -8,7 +8,7 @@ from flask import Flask, abort, g, request, session
 from flask.templating import render_template
 from flask_session import Session
 
-from model import User, db, upsert_user
+from model import db, get_user, upsert_user
 
 app = Flask(__name__)
 
@@ -128,7 +128,7 @@ def setup_user():
         app.logger.info("new login for user: %s", login_as)
     else:
         # we are an existing login, just fetch the user object
-        g.user = User.query.get(user_name)
+        g.user = get_user(user_name)
         # it's possible that this can fail if the user record
         # gets deleted while the session is ongoing but then
         # this would return None so it would be the same as being
