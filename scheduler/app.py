@@ -24,7 +24,7 @@ def bool_env(s: str) -> bool:
 
 
 app.config.update(
-    SECRET_KEY=env("SECRET_KEY"),
+    SECRET_KEY=env("MMSCHED_SECRET_KEY"),
     # config for Flask-Mail
     MAIL_SERVER=env("MMSCHED_MAIL_SERVER"),
     MAIL_USE_TLS=bool_env("MMSCHED_MAIL_USE_TLS"),
