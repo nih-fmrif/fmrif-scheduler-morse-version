@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import os
 import re
@@ -47,7 +48,53 @@ def load_user_settings(app):
         cfg = json.loads(f.read())
         if not isinstance(cfg, dict):
             raise Exception("config.json needs to be {}")
-        # TODO load items from cfg, sanity check them, and add them to out
+        if len(cfg) != 3:
+            raise Exception("config.json unexpected number of keys, must be 3")
+
+        # load info about proxies so we can get correct remote addr
+        # see: https://werkzeug.palletsprojects.com/en/2.0.x/middleware/proxy_fix/
+        proxy_info = cfg["num_proxies"]
+        if not isinstance(proxy_info, dict):
+            raise Exception("config.json: num_proxies must be {}")
+        if len(proxy_info) != 5:
+            raise Exception("config.json: num_proxies must contain 5 entries")
+        # ensure all the correct keys exist
+        for key in (
+            "X-Forwarded-For",
+            "X-Forwarded-Proto",
+            "X-Forwarded-Host",
+            "X-Forwarded-Port",
+            "X-Forwarded-Prefix",
+        ):
+            proxy_info[key]
+        proxy_info_parsed = {}
+        total_proxies = 0
+        for k, v in proxy_info.items():
+            n = int(v)
+            if n < 0:
+                raise Exception("config.json: num_proxies entries must be nonnegative")
+            total_proxies += n
+            proxy_info_parsed[k] = n
+        if total_proxies > 0:
+            from werkzeug.middleware.proxy_fix import ProxyFix
+
+            app.wsgi_app = ProxyFix(
+                app.wsgi_app,
+                x_for=proxy_info_parsed["X-Forwarded-For"],
+                x_proto=proxy_info_parsed["X-Forwarded-Proto"],
+                x_host=proxy_info_parsed["X-Forwarded-Host"],
+                x_port=proxy_info_parsed["X-Forwarded-Port"],
+                x_prefix=proxy_info_parsed["X-Forwarded-Prefix"],
+            )
+
+        # get NIH subnets for checking that remote addr is in the network
+        netspec = cfg["nih_networks"]
+        if not isinstance(netspec, list):
+            raise Exception("config.json: nih_networks needs to be []")
+        if len(netspec) == 0:
+            raise Exception("config.json: nih_network cannot be empty")
+        out["nih_networks"] = [ipaddress.ip_network(sn) for sn in netspec]
+
     return out
 
 
@@ -142,7 +189,18 @@ def login_required(f):
     @wraps(f)
     def protect(*args, **kwargs):
         if g.user is None:
-            abort(403)
+            abort(403, "Access denied: AD login required")
+        return f(*args, **kwargs)
+
+    return protect
+
+
+def in_network_required(f):
+    @wraps(f)
+    def protect(*args, **kwargs):
+        ip = ipaddress.ip_address(request.access_route[-1])
+        if not any(ip in addr for addr in app.config["nih_networks"]):
+            abort(403, "Access denied: this page is limited to the NIH network")
         return f(*args, **kwargs)
 
     return protect
@@ -161,7 +219,7 @@ def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[st
 def access_denied(e):
     # show login if no user object loaded
     show_login = g.user is None
-    return render_error_page(403, "Access denied", show_login=show_login)
+    return render_error_page(403, e.description, show_login=show_login)
 
 
 @app.errorhandler(404)
