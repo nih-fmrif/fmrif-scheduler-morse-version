@@ -10,6 +10,14 @@ Only some of these environment variables must be set. Most can be left to their 
 
 The manner in which they are set is unimportant as long as they can be read by the python process.
 
+## `MMSCHED_SERVER_NAME`
+
+This sets the domain of the server. It is only used when interacting with the site from the command line but must be set.
+
+## `MMSCHED_APPLICATION_ROOT`
+
+This sets an optional url prefix for the site. For example if the site is hosted at `https://domain.example.com/scheduler` instead of just `https://domain.example.com/` then this must be set to `scheduler`.
+
 ## `MMSCHED_DB_URL`
 
 The url for connecting to the postgres database. This must be specified.

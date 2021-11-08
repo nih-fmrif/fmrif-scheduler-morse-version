@@ -28,6 +28,7 @@ def bool_env(s: str) -> bool:
 
 
 app.config.update(
+    SERVER_NAME=env("MMSCHED_SERVER_NAME"),
     # config for Flask-Mail
     MAIL_SERVER=env_or("MMSCHED_MAIL_SERVER", "localhost"),
     MAIL_PORT=int(env_or("MMSCHED_MAIL_PORT", "25")),
@@ -46,6 +47,16 @@ app.config.update(
     SESSION_SQLALCHEMY_TABLE="site_sessions",
 )
 
+
+def do_url_fix():
+    root = env_or("MMSCHED_APPLICATION_ROOT", "")
+    if root != "":
+        app.config["APPLICATION_ROOT"] = root
+
+
+do_url_fix()
+
+
 if app.debug:
     app.config.update(
         SQLALCHEMY_ECHO=True,
@@ -54,6 +65,7 @@ if app.debug:
 else:
     app.config.update(
         SESSION_COOKIE_SECURE=True,  # no https on dev server
+        PREFERRED_URL_SCHEME="https",
     )
 
 
