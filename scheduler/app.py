@@ -12,6 +12,7 @@ from flask.templating import render_template
 from flask_mail import Mail
 from flask_session import Session
 
+import views
 from model import create_reset_token_for, db, get_user, get_user_from_token, upsert_user
 
 app = Flask(__name__)
@@ -316,8 +317,11 @@ def force_login(token):
 
 @app.route("/")
 @login_required
-@render_to("page")
-def hello_world():
-    if g.user is not None:
-        return {"content": "hello " + g.user.label}
-    return {"content": "hello world"}
+@render_to("index")
+def home():
+    return {
+        **views.index(),
+        "breadcrumb": [
+            ("home", url_for("home")),
+        ],
+    }

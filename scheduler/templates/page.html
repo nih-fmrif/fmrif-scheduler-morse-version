@@ -1,8 +1,14 @@
 {% extends "base.html" %}
-{% block title %}{% endblock %}
 {% block basehead %}
 	{% block head %}{% endblock %}
 {% endblock %}
 {% block basebody %}
-	{% block body %}{{content}}{% endblock %}
+	<nav aria-label=breadcrumb>
+		<ul>
+			{% for (name, url) in breadcrumb %}
+				<li><a href="{{url}}"{% if request.path == url %} aria-current=page{% endif %}>{{name}}</a></li>
+			{% endfor %}
+		</ul>
+	</nav>
+	{% block body %}{% endblock %}
 {% endblock %}
