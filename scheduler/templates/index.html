@@ -1,11 +1,9 @@
 {% extends "page.html" %}
 {% block title %}home{% endblock %}
 {% block body %}
-	<main>
-		<ul>
-			{% for name, url in routes %}
-				<li><a href={{ url }}>{{ name }}</a></li>
-			{% endfor %}
-		</ul>
-	</main>
+	<ul>
+		{% for name, url in routes %}
+			<li><a href={{ url }}>{{ name }}</a></li>
+		{% endfor %}
+	</ul>
 {% endblock %}
