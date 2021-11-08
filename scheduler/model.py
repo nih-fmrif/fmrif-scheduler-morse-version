@@ -413,6 +413,8 @@ class ResetTokens(Model):
 
 def create_reset_token_for(user: str) -> str:
     token = secrets.token_urlsafe(64)
+    # delete any previous tokens for user
+    ResetTokens.query.filter(ResetTokens.for_user == user).delete()
     t = ResetTokens(token=token, for_user=user)
     # this can technically fail if we happen to generate the same token twice
     # but the odds against that are so great that it would actually be cool
