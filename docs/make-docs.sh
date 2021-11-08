@@ -2,7 +2,7 @@
 
 set -e
 
-for doc in schema config; do
+for doc in schema config cli; do
 	pandoc --metadata-file=metadata.yml -f markdown-smart --toc -t context -s -o ${doc}.pdf -s ${doc}.md
 done
 
