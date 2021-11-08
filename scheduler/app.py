@@ -5,12 +5,14 @@ import re
 from functools import wraps
 from typing import Tuple
 
-from flask import Flask, abort, g, request, session
+import click
+from flask import Flask, abort, g, redirect, request, session
+from flask.helpers import url_for
 from flask.templating import render_template
 from flask_mail import Mail
 from flask_session import Session
 
-from model import db, get_user, upsert_user
+from model import create_reset_token_for, db, get_user, get_user_from_token, upsert_user
 
 app = Flask(__name__)
 
@@ -288,6 +290,28 @@ def access_denied(e):
 @app.errorhandler(404)
 def not_found(e):
     return render_error_page(404, "Not found")
+
+
+@app.cli.command("force-login")
+@click.argument("user")
+def force_login_cli(user):
+    """Create a login link for USER"""
+    u = get_user(user)
+    if u is None:
+        click.echo(f"no such user {user}")
+        return
+    token = create_reset_token_for(user)
+    click.echo(url_for("force_login", token=token))
+
+
+@app.route("/force-login/<token>", methods=["GET"])
+def force_login(token):
+    user = get_user_from_token(token)
+    if user is None:
+        abort(400)
+    session["user_name"] = user.id
+    g.user = user
+    return redirect("/")
 
 
 @app.route("/")
