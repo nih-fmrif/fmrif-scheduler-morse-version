@@ -19,19 +19,22 @@ def env(s: str) -> str:
     return os.environ[s]
 
 
+def env_or(s: str, default: str) -> str:
+    return os.environ.get(s, default)
+
+
 def bool_env(s: str) -> bool:
-    return env(s).lower() != "false"
+    return env_or(s, "").lower() not in ("", "false")
 
 
 app.config.update(
-    SECRET_KEY=env("MMSCHED_SECRET_KEY"),
     # config for Flask-Mail
-    MAIL_SERVER=env("MMSCHED_MAIL_SERVER"),
+    MAIL_SERVER=env_or("MMSCHED_MAIL_SERVER", "localhost"),
+    MAIL_PORT=int(env_or("MMSCHED_MAIL_PORT", "25")),
     MAIL_USE_TLS=bool_env("MMSCHED_MAIL_USE_TLS"),
     MAIL_USE_SSL=bool_env("MMSCHED_MAIL_USE_SSL"),
     MAIL_USERNAME=env("MMSCHED_MAIL_USERNAME"),
     MAIL_PASSWORD=env("MMSCHED_MAIL_PASSWORD"),
-    MAIL_DEFAULT_SENDER=env("MMSCHED_MAIL_DEFAULT_SENDER"),
     # config for Flask-SQLAlchemy
     SQLALCHEMY_DATABASE_URI=env("MMSCHED_DB_URL"),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
@@ -54,6 +57,42 @@ else:
     )
 
 
+def do_proxy_fix():
+    # load info about proxies so we can get correct remote addr
+    # see: https://werkzeug.palletsprojects.com/en/2.0.x/middleware/proxy_fix/
+
+    total, count = 0, {
+        "For": 0,
+        "Proto": 0,
+        "Host": 0,
+        "Port": 0,
+        "Prefix": 0,
+    }
+
+    for ev in count.keys():
+        nm = f"MMSCHED_X_FORWARDED_{ev.upper()}"
+        n = int(os.environ.get(nm, 0))
+        if n < 0:
+            raise Exception(f"{nm} must be nonnegative integer")
+        total += n
+        count[ev] = n
+
+    if total > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=count["For"],
+            x_proto=count["Proto"],
+            x_host=count["Host"],
+            x_port=count["Port"],
+            x_prefix=count["Prefix"],
+        )
+
+
+do_proxy_fix()
+
+
 def load_user_settings(app):
     # we let any error here crash the app as these all must be set
     out = {}
@@ -61,44 +100,15 @@ def load_user_settings(app):
         cfg = json.loads(f.read())
         if not isinstance(cfg, dict):
             raise Exception("config.json needs to be {}")
-        if len(cfg) != 4:
-            raise Exception("config.json unexpected number of keys, must be 4")
+        if len(cfg) != 5:
+            raise Exception("config.json unexpected number of keys, must be 5")
 
-        # load info about proxies so we can get correct remote addr
-        # see: https://werkzeug.palletsprojects.com/en/2.0.x/middleware/proxy_fix/
-        proxy_info = cfg["num_proxies"]
-        if not isinstance(proxy_info, dict):
-            raise Exception("config.json: num_proxies must be {}")
-        if len(proxy_info) != 5:
-            raise Exception("config.json: num_proxies must contain 5 entries")
-        # ensure all the correct keys exist
-        for key in (
-            "X-Forwarded-For",
-            "X-Forwarded-Proto",
-            "X-Forwarded-Host",
-            "X-Forwarded-Port",
-            "X-Forwarded-Prefix",
-        ):
-            proxy_info[key]
-        proxy_info_parsed = {}
-        total_proxies = 0
-        for k, v in proxy_info.items():
-            n = int(v)
-            if n < 0:
-                raise Exception("config.json: num_proxies entries must be nonnegative")
-            total_proxies += n
-            proxy_info_parsed[k] = n
-        if total_proxies > 0:
-            from werkzeug.middleware.proxy_fix import ProxyFix
-
-            app.wsgi_app = ProxyFix(
-                app.wsgi_app,
-                x_for=proxy_info_parsed["X-Forwarded-For"],
-                x_proto=proxy_info_parsed["X-Forwarded-Proto"],
-                x_host=proxy_info_parsed["X-Forwarded-Host"],
-                x_port=proxy_info_parsed["X-Forwarded-Port"],
-                x_prefix=proxy_info_parsed["X-Forwarded-Prefix"],
-            )
+        key = cfg["secret_key"]
+        if not isinstance(key, str):
+            raise Exception("config.json: secret_key must be string")
+        if key == "":
+            raise Exception("config.json: secret key must not be empty")
+        out["SECRET_KEY"] = key
 
         # get NIH subnets for checking that remote addr is in the network
         netspec = cfg["nih_networks"]
@@ -107,6 +117,15 @@ def load_user_settings(app):
         if len(netspec) == 0:
             raise Exception("config.json: nih_network cannot be empty")
         out["nih_networks"] = [ipaddress.ip_network(sn) for sn in netspec]
+
+        sender = cfg["site_default_sender"]
+        if not isinstance(sender, str):
+            raise Exception("config.json: site_default_sender must be string")
+        if "@" not in sender:
+            raise Exception(
+                "config.json: site_default_sender must be valid email address"
+            )
+        out["MAIL_DEFAULT_SENDER"] = sender
 
         ls_addr = cfg["listserv"]
         if not isinstance(ls_addr, str):
