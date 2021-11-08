@@ -1,4 +1,4 @@
-from flask import current_app
+from flask import current_app, url_for
 from flask_mail import Message
 
 
@@ -19,4 +19,6 @@ def send_msg(to: str, subj: str, msg: str) -> None:
 def index():
     routes = []
     # TODO add routes as they're added to the app, checking for visibility first if required
+
+    routes.append(("mailing lists", url_for("mailing_lists")))
     return {"routes": routes}

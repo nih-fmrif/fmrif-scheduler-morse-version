@@ -315,13 +315,24 @@ def force_login(token):
     return redirect("/")
 
 
-@app.route("/")
+def breadcrumb(routes):
+    return {"breadcrumb": [("home", url_for("home"))] + routes}
+
+
+@app.route("/", methods=["GET"])
 @login_required
 @render_to("index")
 def home():
     return {
         **views.index(),
-        "breadcrumb": [
-            ("home", url_for("home")),
-        ],
+        **breadcrumb([]),
+    }
+
+
+@app.route("/mailing-lists", methods=["GET", "POST"])
+@login_required
+@render_to("mailing-lists")
+def mailing_lists():
+    return {
+        **breadcrumb([("mailing lists", url_for("mailing_lists"))]),
     }
