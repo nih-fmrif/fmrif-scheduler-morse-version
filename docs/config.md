@@ -73,7 +73,7 @@ The email address for the listserv that holds the mailing lists of the mail acti
 
 ## `mailing_lists`
 
-This is an object with 0 or more entries that configures the mail action form. Each entry key is the name of a mailing list to include on the mail action form and each value is a string describing that mailing list (the descriptions may be the empty string). If no entries are included, the mail action form cannot be used.
+This is an object with 0 or more entries that configures the mail action form. Each entry key is the name of a mailing list to include on the mail action form and each value is a string describing that mailing list (the descriptions may be the empty string). If no entries are included, the mail action form cannot be used. The key must be the name of the list as understood by listserv.
 
 ## `nih_networks`
 
