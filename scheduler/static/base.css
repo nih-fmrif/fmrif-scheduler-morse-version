@@ -98,3 +98,7 @@ input-set input {
 input-description {
 	font-size: 95%;
 }
+input-set[is-required] label:after {
+	content: "*";
+	content: "*" / "";
+}

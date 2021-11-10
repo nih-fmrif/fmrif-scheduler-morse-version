@@ -18,7 +18,7 @@
 		</fieldset>
 	{% else %}
 		{% set option = f.type == "BooleanField" or f.type == "_Option" %}
-		<input-set{% if option %} is-option{% endif %}>
+		<input-set{% if option %} is-option{% endif %}{% if "required" in f.flags %} is-required{% endif %}>
 			{% if option %}
 				{{ field_render(f) }}
 				{{ f.label }}
