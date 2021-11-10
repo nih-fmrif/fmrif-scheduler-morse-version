@@ -10,5 +10,16 @@
 			{% endfor %}
 		</ul>
 	</nav>
+	{% with msgs = get_flashed_messages(with_categories=true) %}
+		{% if msgs %}
+			<section aria-label="status messages">
+				<ul>
+					{% for cat, msg in msgs %}
+						<li class="msg-{{ cat }}"><sr-only>{{ cat }}:</sr-only> {{ msg }}</li>
+					{% endfor %}
+				</ul>
+			</section>
+		{% endif %}
+	{% endwith %}
 	<main>{% block body %}{% endblock %}</main>
 {% endblock %}
