@@ -7,7 +7,7 @@ from typing import Tuple
 
 import click
 from flask import Flask, abort, g, redirect, request, session
-from flask.helpers import url_for
+from flask.helpers import flash, url_for
 from flask.templating import render_template
 from flask_mail import Mail
 from flask_session import Session
@@ -333,6 +333,13 @@ def home():
 @login_required
 @render_to("mailing-lists")
 def mailing_lists():
+    form = views.get_mailing_list_form(name=g.user.label, addr=g.user.addr)
+    if form.validate_on_submit():
+        views.process_mailing_list_form_submissions(form)
+        flash("your mailing list subscription status has been updated")
+        return redirect(url_for("home"))
     return {
-        **breadcrumb([("mailing lists", url_for("mailing_lists"))]),
+        "form": form,
+        "action": url_for("mailing_lists"),
+        **breadcrumb([("list action form", url_for("mailing_lists"))]),
     }

@@ -1,8 +1,13 @@
+from typing import Generator, Optional, Tuple
+
 from flask import current_app, url_for
 from flask_mail import Message
+from flask_wtf import FlaskForm
+from wtforms import fields, validators
+from wtforms.fields.simple import BooleanField
 
 
-def send_msg(to: str, subj: str, msg: str) -> None:
+def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None:
     mail = current_app.config["SESSION_MAILER"]
     m = Message()
     m.subject = to
@@ -11,6 +16,9 @@ def send_msg(to: str, subj: str, msg: str) -> None:
     if "," in to:
         addrs = [s.strip() for s in to.split(",")]
     m.recipients = addrs
+    # we only need to change the sender for the list action form
+    if sender is not None:
+        m.sender = sender
     mail.send(m)
     if current_app.debug:
         current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
@@ -20,5 +28,90 @@ def index():
     routes = []
     # TODO add routes as they're added to the app, checking for visibility first if required
 
-    routes.append(("mailing lists", url_for("mailing_lists")))
+    routes.append(("list action form", url_for("mailing_lists")))
     return {"routes": routes}
+
+
+def get_mailing_list_form(**kwargs):
+    # create the dynamic part of the form from the app settings
+    class MailingListsSubform(FlaskForm):
+        def all_checkboxes(self) -> Generator[Tuple[str, bool], None, None]:
+            for elm in self:
+                current_app.logger.info(elm.type)
+                if elm.type == "BooleanField":
+                    yield (elm.label.text, elm.data)
+
+        def validate(self) -> bool:
+            if not FlaskForm.validate(self):
+                return False
+
+            if not any(x[1] for x in self.all_checkboxes()):
+                self.form_errors.append("At least one list must be selected")
+                return False
+            return True
+
+    lists = current_app.config["nih_mailing_lists"].items()
+    for n, (name, description) in enumerate(lists):
+        setattr(
+            MailingListsSubform,
+            f"ml-{n}",
+            fields.BooleanField(label=name, description=description),
+        )
+
+    # this rest of the form is static
+    choices = (("sub", "subscribe"), ("unsub", "unsubscribe"))
+
+    class MailingListForm(FlaskForm):
+        addr = fields.EmailField(
+            validators=[
+                validators.InputRequired(message="an email address is required")
+            ],
+            label="email",
+            description="the NIH email address used for this list",
+        )
+        name = fields.StringField(
+            validators=[validators.InputRequired(message="Your name is required")],
+            label="name",
+            description="your full name",
+        )
+        # include the dynamically generated portion here
+        lists = fields.FormField(MailingListsSubform, label="lists")
+        action = fields.RadioField(label="action", choices=choices, default="sub")
+
+        def validate_addr(self, addr) -> None:
+            # browser should block illegal addrs like this but may as well double check
+            if "," in addr.data:
+                raise validators.ValidationError("only one email address allowed")
+            if "@" not in addr.data:
+                raise validators.ValidationError("email address must contain @")
+            # only let nih.gov addresses through
+            _, dom = addr.data.split("@", 1)
+            if not dom.endswith("nih.gov"):
+                raise validators.ValidationError("only nih.gov email addresses allowed")
+
+    return MailingListForm(**kwargs)
+
+
+def process_mailing_list_form_submissions(form):
+    # get all lists that have been selected
+    lists = [list[0] for list in form.lists.all_checkboxes() if list[1]]
+    addr = form.addr.data
+    name = normalize_name(form.name.data)
+    sub = form.action.data == "sub"
+    listserv = current_app.config["nih_listserv"]
+    for list in lists:
+        msg = format_mailing_list_message(sub, list, name)
+        send_msg(listserv, "Automated list change", msg, sender=addr)
+
+
+def normalize_name(name: str) -> str:
+    if "," in name:
+        last, first = [s.strip() for s in name.split(",", 1)]
+        return f"{first} {last}"
+    return name.strip()
+
+
+def format_mailing_list_message(sub: bool, which_list: str, name: str) -> str:
+    if sub:
+        return f"subscribe {which_list} {name}"
+    return f"signoff {which_list}"

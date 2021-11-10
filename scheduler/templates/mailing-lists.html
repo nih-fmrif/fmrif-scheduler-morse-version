@@ -1,5 +1,9 @@
 {% extends "page.html" %}
+{% import "macros.html" as macros %}
 {% block title %}mailing lists{% endblock %}
 {% block body %}
-form goes here
+<form method=post action="{{ action }}">
+	{{ macros.form(form)}}
+	<button type=submit>submit</button>
+</form>
 {% endblock %}
