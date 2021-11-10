@@ -1,0 +1,75 @@
+{% macro form(f) %}
+	{{ form_errors(f)}}
+	{% for e in f %}
+		{{ field(e) }}
+	{% endfor %}
+{% endmacro %}
+
+{% macro field(f) %}
+	{% if f.type == "HiddenField" or f.type == "CSRFTokenField" %}
+		{{ f }}
+	{% elif f.type == "FormField" or f.type == "RadioField" %}
+		<fieldset>
+			<legend>{{f.label.text}}</legend>
+			{{ form_errors(f) }}
+			{% for sf in f %}
+				{{ field(sf) }}
+			{% endfor %}
+		</fieldset>
+	{% else %}
+		{% set option = f.type == "BooleanField" or f.type == "_Option" %}
+		<input-set{% if option %} is-option{% endif %}>
+			{% if option %}
+				{{ field_render(f) }}
+				{{ f.label }}
+			{% else %}
+				{{ f.label }}
+				{{ field_render(f) }}
+			{% endif %}
+			{{ field_description(f) }}
+			{{ field_errors(f) }}
+		</input-set>
+	{% endif %}
+{% endmacro %}
+
+{% macro field_render(f) %}
+	{% set did %}{{f.id}}-dscr{% endset %}
+	{% set eid %}{{f.id}}-err{% endset %}
+	{% if f.description and f.errors %}
+		{% set ids %}{{ did }} {{ eid }}{% endset %}
+		{{ f(**{"aria-describedby": ids}) }}
+	{% elif f.description %}
+		{{ f(**{"aria-describedby": did}) }}
+	{% elif f.errors %}
+		{{ f(**{"aria-describedby": eid}) }}
+	{% else %}
+		{{ f }}
+	{% endif %}
+{% endmacro %}
+
+{% macro field_description(f) %}
+	{% if f.description %}
+		<input-description id="{{f.id}}-dscr">
+			{{ f.description }}
+		</input-description>
+	{% endif %}
+{% endmacro %}
+
+{% macro form_errors(f) %}
+	{{ error_list(false, f.form_errors) }}
+{% endmacro %}
+
+{% macro field_errors(f) %}
+	{% set id %}{{f.id}}-err{% endset %}
+	{{ error_list(id, f.errors) }}
+{% endmacro %}
+
+{% macro error_list(id, errors) %}
+	{% if errors %}
+		<input-errors{% if id %} id="{{id}}"{% endif %}>
+			{% for error in errors %}
+				<input-error><sr-only>Error: </sr-only>{{ error }}</input-error>
+			{% endfor %}
+		</input-errors>
+	{% endif %}
+{% endmacro %}
