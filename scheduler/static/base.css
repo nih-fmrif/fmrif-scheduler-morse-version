@@ -71,18 +71,22 @@ input-set {
 	gap: .25rem 1rem;
 	grid-template: 
 		"label input"
-		". bottom"
+		". description"
+		". errors"
 		/ auto 1fr;
 }
 input-set[is-option] {
 	grid-template: 
 		"input label"
-		". bottom"
+		". description"
+		". errors"
 		/ max-content 1fr;
 }
-input-errors,
 input-description {
-	grid-area: bottom;
+	grid-area: description;
+}
+input-errors {
+	grid-area: errors;
 }
 input-set label {
 	grid-area: label;
