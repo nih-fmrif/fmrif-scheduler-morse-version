@@ -1,10 +1,12 @@
-from typing import Generator, Optional, Tuple
+from typing import Generator, List, Optional, Tuple
 
 from flask import current_app, url_for
 from flask_mail import Message
 from flask_wtf import FlaskForm
 from wtforms import fields, validators
 from wtforms.fields.simple import BooleanField
+
+import model
 
 
 def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None:
@@ -27,6 +29,7 @@ def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None
 def index():
     routes = []
     # TODO add routes as they're added to the app, checking for visibility first if required
+    routes.append(("devices", url_for("devices")))
 
     routes.append(("list action form", url_for("mailing_lists")))
     return {"routes": routes}
@@ -115,3 +118,20 @@ def format_mailing_list_message(sub: bool, which_list: str, name: str) -> str:
     if sub:
         return f"subscribe {which_list} {name}"
     return f"signoff {which_list}"
+
+
+def get_devices(active: bool) -> List[model.Device]:
+    return (
+        model.Device.query.filter(model.Device.active == active)
+        .order_by(model.Device.label)
+        .all()
+    )
+
+
+def is_admin(user: model.User) -> bool:
+    q = model.Membership.query
+    q = q.filter(model.Membership.user == user.id)
+    q = q.filter(model.Membership.group == "admin")
+    q = q.filter(model.Membership.user_active)
+    q = q.filter(model.Membership.approved)
+    return bool(q.first())

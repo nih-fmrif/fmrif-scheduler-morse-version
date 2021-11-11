@@ -363,4 +363,30 @@ def mailing_lists():
     }
 
 
+@app.route("/devices", methods=["GET"])
+@app.route("/devices/inactive", endpoint="devices-inactive", methods=["GET"])
+@login_required
+@render_to("devices")
+def devices():
+    bc_title = "devices"
+    is_admin = views.is_admin(g.user)
+    active = request.endpoint == "devices"
+    if not active:
+        if not is_admin:
+            abort(403, "access denied")
+        bc_title += " (inactive)"
+    devices = views.get_devices(active)
+    return {
+        "is_admin": is_admin,
+        "active": active,
+        "devices": devices,
+        **breadcrumb(bc_title),
     }
+
+
+@app.route("/device/<device>")
+@login_required
+@render_to("device")
+def device(device):
+    # TODO just need this placeholder route
+    return {}

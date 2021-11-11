@@ -1,0 +1,24 @@
+{% extends "page.html" %}
+{% block title %}devices{% if not active %} (inactive){% endif %}{% endblock %}
+{% block body %}
+	{% if is_admin %}
+		<nav aria-labelledby=selector-lbl>
+			<span id=selector-lbl>Show<sr-only> which devices</sr-only></span>
+		<ul>
+			{% for name, url in [["active", url_for("devices")], ["inactive", url_for("devices-inactive")]] %}
+				<li><a href="{{url}}"{% if request.path == url %} aria-current=page{% endif %}>{{ name }}<sr-only> devices</sr-only></a></li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+	<article aria-labelledby=list-lbl>
+		<span id=list-lbl>Devices</span>
+		<ul>
+			{% for device in devices %}
+				<li>
+					<a href="{{ url_for("device", device=device.id) }}">{{device.label}}</a>
+					{% if device.description %}<p>{{device.description}}</p>{% endif %}
+				</li>
+			{% endfor %}
+		</ul>
+	</article>
+{% endblock %}
