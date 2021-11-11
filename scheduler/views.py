@@ -135,6 +135,7 @@ def get_devices(active: bool) -> List[model.Device]:
 def get_memberships(user: model.User) -> List[str]:
     q = model.Membership.query
     q = q.filter(model.Membership.user == user.id)
+    # inactive users are effectively not in any group
     q = q.filter(model.Membership.user_active)
     q = q.filter(model.Membership.group_active)
     q = q.filter(model.Membership.approved)
