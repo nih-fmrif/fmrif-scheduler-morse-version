@@ -330,6 +330,8 @@ def render_to(template):
                 ctx = {}
             elif not isinstance(ctx, dict):
                 return ctx
+            # always inject user into context for login info component
+            ctx["user"] = g.user
             return render_template(template + ".html", **ctx)
 
         return decorated_function
