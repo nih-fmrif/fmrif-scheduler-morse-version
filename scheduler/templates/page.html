@@ -3,6 +3,9 @@
 	{% block head %}{% endblock %}
 {% endblock %}
 {% block basebody %}
+	<nav aria-label="skip link">
+		<a href="#main">skip to main content</a>
+	</nav>
 	<nav aria-label=breadcrumb>
 		<ul>
 			{% for (name, url) in breadcrumb %}
@@ -25,5 +28,5 @@
 			</section>
 		{% endif %}
 	{% endwith %}
-	<main>{% block body %}{% endblock %}</main>
+	<main id=main tabindex="-1">{% block body %}{% endblock %}</main>
 {% endblock %}
