@@ -1,4 +1,4 @@
-from typing import Generator, List, Optional, Tuple
+from typing import Generator, List, Optional, Tuple, cast, Any
 
 from flask import current_app, url_for
 from flask_mail import Message
@@ -26,10 +26,14 @@ def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None
         current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
 
 
-def index():
+def index(user: model.User):
     routes = []
     # TODO add routes as they're added to the app, checking for visibility first if required
     routes.append(("devices", url_for("devices")))
+
+    memberships = get_memberships(user)
+    if len(memberships) > 0:
+        routes.append(("groups", url_for("groups")))
 
     routes.append(("list action form", url_for("mailing_lists")))
     return {"routes": routes}
@@ -126,6 +130,32 @@ def get_devices(active: bool) -> List[model.Device]:
         .order_by(model.Device.label)
         .all()
     )
+
+
+def get_memberships(user: model.User) -> List[str]:
+    q = model.Membership.query
+    q = q.filter(model.Membership.user == user.id)
+    q = q.filter(model.Membership.user_active)
+    q = q.filter(model.Membership.group_active)
+    q = q.filter(model.Membership.approved)
+    ms = q.order_by(model.Membership.group).all()
+    return [m.group for m in ms]
+
+
+def get_all_groups_with_members(active: bool) -> List[model.Group]:
+    q = model.Group.query
+    q = q.filter(model.Group.active == active)
+    q = q.filter(model.Group.has_membership)
+    return q.order_by(model.Group.label).all()
+
+
+def get_groups(which: List[str]) -> List[model.Group]:
+    # sqlalchemy metaclass has confused mypy but it's fine so we ignore
+    id_col = cast(Any, model.Group.id)
+    q = model.Group.query
+    q = q.filter(model.Group.active)
+    q = q.filter(id_col.in_(which))
+    return q.order_by(model.Group.label).all()
 
 
 def is_admin(user: model.User) -> bool:

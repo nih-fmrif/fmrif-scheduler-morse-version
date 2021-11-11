@@ -342,7 +342,7 @@ def breadcrumb(
 @render_to("index")
 def home():
     return {
-        **views.index(),
+        **views.index(g.user),
         **breadcrumb(),
     }
 
@@ -384,9 +384,47 @@ def devices():
     }
 
 
+@app.route("/groups", methods=["GET"])
+@app.route("/groups/inactive", endpoint="groups-inactive", methods=["GET"])
+@login_required
+@render_to("groups")
+def groups():
+    bc_title = "departments"
+    memberships = views.get_memberships(g.user)
+    is_admin = "admin" in memberships
+    active = request.endpoint == "groups"
+    if not active:
+        if not is_admin:
+            abort(403, "access denied")
+        bc_title += " (inactive)"
+
+    groups = []
+    if is_admin:
+        # admin see all groups with members
+        groups = views.get_all_groups_with_members(active)
+    else:
+        # nonadmins only see groups they're in
+        groups = views.get_groups(memberships)
+
+    return {
+        "is_admin": is_admin,
+        "active": active,
+        "groups": groups,
+        **breadcrumb(bc_title),
+    }
+
+
 @app.route("/device/<device>")
 @login_required
 @render_to("device")
 def device(device):
+    # TODO just need this placeholder route
+    return {}
+
+
+@app.route("/group/<group>")
+@login_required
+@render_to("group")
+def group(group):
     # TODO just need this placeholder route
     return {}
