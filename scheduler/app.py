@@ -171,24 +171,6 @@ mail = Mail(app)
 app.config["SESSION_MAILER"] = mail
 
 
-def render_to(template):
-    """decorator that applies template to return of wrapped func"""
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            ctx = f(*args, **kwargs)
-            if ctx is None:
-                ctx = {}
-            elif not isinstance(ctx, dict):
-                return ctx
-            return render_template(template + ".html", **ctx)
-
-        return decorated_function
-
-    return decorator
-
-
 @app.before_request
 def setup_user():
     # user already loaded
@@ -335,6 +317,24 @@ def breadcrumb(
         assert isinstance(last, str)
         trail.append((last, my_url()))
     return {"breadcrumb": trail}
+
+
+def render_to(template):
+    """decorator that applies template to return of wrapped func"""
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            ctx = f(*args, **kwargs)
+            if ctx is None:
+                ctx = {}
+            elif not isinstance(ctx, dict):
+                return ctx
+            return render_template(template + ".html", **ctx)
+
+        return decorated_function
+
+    return decorator
 
 
 @app.route("/", methods=["GET"])
