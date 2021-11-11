@@ -3,7 +3,7 @@ import json
 import os
 import re
 from functools import wraps
-from typing import Tuple
+from typing import Dict, List, Tuple, Union
 
 import click
 from flask import Flask, abort, g, redirect, request, session
@@ -315,8 +315,26 @@ def force_login(token):
     return redirect("/")
 
 
-def breadcrumb(routes):
-    return {"breadcrumb": [("home", url_for("home"))] + routes}
+def my_url() -> str:
+    route = request.endpoint
+    if not isinstance(route, str):
+        abort(500)
+    kwargs = request.view_args or {}
+    return url_for(route, **kwargs)
+
+
+def breadcrumb(
+    *routes: Union[str, Tuple[str, str]]
+) -> Dict[str, List[Tuple[str, str]]]:
+    trail = [("home", url_for("home"))]
+    if len(routes) > 0:
+        routes, last = routes[:-1], routes[-1]
+        for r in routes:
+            assert not isinstance(r, str)
+            trail.append(r)
+        assert isinstance(last, str)
+        trail.append((last, my_url()))
+    return {"breadcrumb": trail}
 
 
 @app.route("/", methods=["GET"])
@@ -325,7 +343,7 @@ def breadcrumb(routes):
 def home():
     return {
         **views.index(),
-        **breadcrumb([]),
+        **breadcrumb(),
     }
 
 
@@ -341,5 +359,8 @@ def mailing_lists():
     return {
         "form": form,
         "action": url_for("mailing_lists"),
-        **breadcrumb([("list action form", url_for("mailing_lists"))]),
+        **breadcrumb("list action form"),
+    }
+
+
     }
