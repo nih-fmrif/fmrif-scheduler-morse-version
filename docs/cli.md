@@ -21,3 +21,7 @@ The configuration described in `config.pdf` must be in place to execute any of t
 The `force-login` subcommand requires a valid username (`tlkpresearcher.researchercode`). If the username is invalid it reports an error, otherwise it returns a url for the site. Pasting this url into a browser will log you into the site as that user if SiteMinder is down. If SiteMinder is active, the credentials from SiteMinder will override any such request.
 
 The url can only be used once and must be used within 24 hours or it will expire.
+
+## `deactivate-user` and `activate-user`
+
+These subcommands both take a user name as input. The `deactivate-user` subcommand marks a user as no longer active. The `activate-user` subcommand marks a user as active. Users who are not active are operationally removed from all groups and have no special access, however the memberships are still maintained and will be restored if they're marked active again.

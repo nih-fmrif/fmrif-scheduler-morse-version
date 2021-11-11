@@ -287,6 +287,34 @@ def force_login_cli(user):
     click.echo(url_for("force_login", token=token))
 
 
+@app.cli.command("deactivate-user")
+@click.argument("user")
+def deactivate_user(user):
+    """mark USER as no longer active"""
+    u = get_user(user)
+    if u is None:
+        click.echo(f"no such user {user}")
+        return
+    u.active = False
+    db.session.add(u)
+    db.session.commit()
+    click.echo(f"{user} is now inactive")
+
+
+@app.cli.command("activate-user")
+@click.argument("user")
+def activate_user(user):
+    """mark USER as active"""
+    u = get_user(user)
+    if u is None:
+        click.echo(f"no such user {user}")
+        return
+    u.active = True
+    db.session.add(u)
+    db.session.commit()
+    click.echo(f"{user} is now active")
+
+
 @app.route("/force-login/<token>", methods=["GET"])
 def force_login(token):
     user = get_user_from_token(token)
