@@ -14,7 +14,8 @@
 		</ul>
 	</nav>
 	<section aria-label="login info">
-		You are {% if user %}logged in as {{user.id}}{% else %}not logged in{% endif %}.
+		<p>You are {% if user %}logged in as {{user.id}}{% else %}not logged in{% endif %}.</p>
+		{% if user and not user.active %}<p>Your account is inactive.</p>{% endif %}
 	</section>
 
 	{% with msgs = get_flashed_messages(with_categories=true) %}
