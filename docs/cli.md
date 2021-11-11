@@ -16,7 +16,7 @@ Failure to execute them inside `pipenv` will result in no harm other than a larg
 
 The configuration described in `config.pdf` must be in place to execute any of these subcommands.
 
-## force-login
+## `force-login`
 
 The `force-login` subcommand requires a valid username (`tlkpresearcher.researchercode`). If the username is invalid it reports an error, otherwise it returns a url for the site. Pasting this url into a browser will log you into the site as that user if SiteMinder is down. If SiteMinder is active, the credentials from SiteMinder will override any such request.
 
