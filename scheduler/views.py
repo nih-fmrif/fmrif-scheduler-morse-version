@@ -1,10 +1,9 @@
-from typing import Generator, List, Optional, Tuple, cast, Any
+from typing import Any, Generator, List, Optional, Tuple, cast
 
 from flask import current_app, url_for
 from flask_mail import Message
 from flask_wtf import FlaskForm
 from wtforms import fields, validators
-from wtforms.fields.simple import BooleanField
 
 import model
 
