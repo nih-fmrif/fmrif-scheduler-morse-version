@@ -1,5 +1,6 @@
 from typing import Any, Generator, List, Optional, Tuple, cast
 
+import itsdangerous
 from flask import current_app, url_for
 from flask_mail import Message
 from flask_wtf import FlaskForm
@@ -165,3 +166,24 @@ def is_admin(user: model.User) -> bool:
     q = q.filter(model.Membership.user_active)
     q = q.filter(model.Membership.approved)
     return bool(q.first())
+
+
+def sign_message(msg: List[str]) -> str:
+    signer = current_app.config["URL_SIGNER"]
+    return signer.dumps(msg)
+
+
+def read_signed_message(signature: str) -> Optional[List[str]]:
+    signer = current_app.config["URL_SIGNER"]
+    try:
+        result = signer.loads(signature)
+        # if we somehow got ill-typed data, consider it a failure
+        if not isinstance(result, list):
+            return None
+        for v in result:
+            if not isinstance(v, str):
+                return None
+        return result
+    except itsdangerous.exc.BadData:
+        return None
+

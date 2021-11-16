@@ -11,6 +11,7 @@ from flask.helpers import flash, url_for
 from flask.templating import render_template
 from flask_mail import Mail
 from flask_session import Session
+from itsdangerous.url_safe import URLSafeSerializer
 
 import views
 from model import create_reset_token_for, db, get_user, get_user_from_token, upsert_user
@@ -171,6 +172,8 @@ app.config["SESSION_SQL_ALCHEMY"] = db
 Session(app)
 mail = Mail(app)
 app.config["SESSION_MAILER"] = mail
+signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
+app.config["URL_SIGNER"] = signer
 
 
 @app.before_request
