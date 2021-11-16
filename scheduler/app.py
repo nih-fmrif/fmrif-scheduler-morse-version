@@ -132,6 +132,8 @@ def load_user_settings(app):
         if len(netspec) == 0:
             raise Exception("config.json: nih_network cannot be empty")
         out["nih_networks"] = [ipaddress.ip_network(sn) for sn in netspec]
+        if app.debug:  # allow localhost in debug mode
+            out["nih_networks"].append(ipaddress.ip_network("127.0.0.1"))
 
         sender = cfg["site_default_sender"]
         if not isinstance(sender, str):
