@@ -116,8 +116,8 @@ def load_user_settings(app):
         cfg = json.loads(f.read())
         if not isinstance(cfg, dict):
             raise Exception("config.json needs to be {}")
-        if len(cfg) != 5:
-            raise Exception("config.json unexpected number of keys, must be 5")
+        if len(cfg) != 6:
+            raise Exception("config.json unexpected number of keys, must be 6")
 
         key = cfg["secret_key"]
         if not isinstance(key, str):
@@ -135,6 +135,11 @@ def load_user_settings(app):
         out["nih_networks"] = [ipaddress.ip_network(sn) for sn in netspec]
         if app.debug:  # allow localhost in debug mode
             out["nih_networks"].append(ipaddress.ip_network("127.0.0.1"))
+
+        login_prefix = cfg["siteminder_login_url_prefix"]
+        if not isinstance(login_prefix, str):
+            raise Exception("config.json: siteminder_login_url_prefix must be string")
+        out["SM_LOGIN_URL_PREFIX"] = login_prefix
 
         sender = cfg["site_default_sender"]
         if not isinstance(sender, str):
@@ -264,6 +269,7 @@ def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[st
         "code": code,
         "msg": msg,
         "show_login": show_login,
+        "login_url_prefix": app.config["SM_LOGIN_URL_PREFIX"],
     }
     return render_template("error.html", **data), code
 

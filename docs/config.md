@@ -63,6 +63,10 @@ The `config.json` file must be in the scheduler directory. It consists of a sing
 
 The secret key used for signing session cookies and tokens sent via SMTP. [See the flask documentation for more info about the secret key](https://flask.palletsprojects.com/en/2.0.x/config/#SECRET_KEY).
 
+## `siteminder_login_url_prefix`
+
+The login url for siteminder ending in `&TARGET=-SM-` (the rest is filled in by the site).
+
 ## `site_default_sender`
 
 This is the email address that will be used by the site to send emails.

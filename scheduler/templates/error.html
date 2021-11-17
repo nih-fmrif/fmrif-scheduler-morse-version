@@ -3,6 +3,6 @@
 {% block basebody %}
 	{{code}} - {{msg}}
 	{% if show_login %}
-		login
+		<a class=login-link href="{{login_url_prefix}}{{request.url|urlencode|replace("/", "%2f")}}">login with SiteMinder</a>
 	{% endif %}
 {% endblock %}
