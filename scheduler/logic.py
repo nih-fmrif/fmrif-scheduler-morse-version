@@ -93,7 +93,6 @@ def get_mailing_list_form(**kwargs):
     class MailingListsSubform(FlaskForm):
         def all_checkboxes(self) -> Generator[Tuple[str, bool], None, None]:
             for elm in self:
-                current_app.logger.info(elm.type)
                 if elm.type == "BooleanField":
                     yield (elm.label.text, elm.data)
 
