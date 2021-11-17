@@ -33,6 +33,7 @@
 		"schedhour",
 		"schedid",
 		"schedulable",
+		"siteminder",
 		"sqlpostgresql",
 		"supportkind",
 		"supportlog",
