@@ -61,7 +61,7 @@ The `config.json` file must be in the scheduler directory. It consists of a sing
 
 ## `secret_key`
 
-The secret key used for signing session cookies. [See the flask documentation for more info about the secret key](https://flask.palletsprojects.com/en/2.0.x/config/#SECRET_KEY).
+The secret key used for signing session cookies and tokens sent via SMTP. [See the flask documentation for more info about the secret key](https://flask.palletsprojects.com/en/2.0.x/config/#SECRET_KEY).
 
 ## `site_default_sender`
 
