@@ -1,7 +1,7 @@
 from typing import Any, Generator, List, Optional, Tuple, cast
 
 import itsdangerous
-from flask import current_app, url_for
+from flask import current_app
 from flask_mail import Message
 from flask_wtf import FlaskForm
 from wtforms import fields, validators
@@ -24,20 +24,6 @@ def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None
     mail.send(m)
     if current_app.debug:
         current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
-
-
-def index(user: model.User):
-    routes = []
-    # TODO add routes as they're added to the app, checking for visibility first if required
-    routes.append(("devices", url_for("devices")))
-
-    memberships = get_memberships(user)
-    if len(memberships) > 0:
-        routes.append(("groups", url_for("groups")))
-
-    routes.append(("join form", url_for("join_form")))
-    routes.append(("list action form", url_for("mailing_lists")))
-    return {"routes": routes}
 
 
 def get_mailing_list_form(**kwargs):

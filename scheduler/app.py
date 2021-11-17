@@ -418,8 +418,18 @@ def force_login(token):
 @login_required
 @render_to("index")
 def home():
+    routes = []
+    routes.append(("devices", url_for("devices")))
+
+    memberships = logic.get_memberships(g.user)
+    if len(memberships) > 0:
+        routes.append(("groups", url_for("groups")))
+
+    routes.append(("join form", url_for("join_form")))
+    routes.append(("list action form", url_for("mailing_lists")))
+
     return {
-        **logic.index(g.user),
+        "routes": routes,
         **breadcrumb(),
     }
 
