@@ -1,3 +1,5 @@
+import datetime
+import secrets
 from typing import Any, Generator, List, Optional, Tuple, cast
 
 import itsdangerous
@@ -24,6 +26,66 @@ def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None
     mail.send(m)
     if current_app.debug:
         current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
+
+
+def upsert_user(user: str, mail: str, name: str) -> model.User:
+    # upsert the user to ensure the record exists
+    model.db.session.execute(
+        "insert into tlkpresearcher(researchercode) values (:user) on conflict do nothing",
+        {
+            "user": user,
+        },
+    )
+    # load the user
+    u = model.User.query.get(user)
+
+    # if the mail and/or display name have changed, update them
+    # as long as the new values are not empty.
+    add = False
+    if mail != "" and u.addr != mail:
+        u.addr = mail
+        add = True
+    if name != "" and u.label != name:
+        u.label = name
+        add = True
+    if add:
+        model.db.session.add(u)
+
+    return u
+
+
+def get_user(user: str) -> Optional[model.User]:
+    return model.User.query.get(user)
+
+
+def create_reset_token_for(user: str) -> str:
+    token = secrets.token_urlsafe(64)
+    # delete any previous tokens for user
+    model.ResetTokens.query.filter(model.ResetTokens.for_user == user).delete()
+    t = model.ResetTokens(token=token, for_user=user)
+    # this can technically fail if we happen to generate the same token twice
+    # but the odds against that are so great that it would actually be cool
+    # if it happened
+    model.db.session.add(t)
+    # this is only expected to be called from cli so save it now
+    # let any fk errors bubble up
+    model.db.session.commit()
+    return token
+
+
+def get_user_from_token(token: str) -> Optional[model.User]:
+    # delete all old tokens before we check
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    model.ResetTokens.query.filter(model.ResetTokens.issued < yesterday).delete()
+    # see if the token exists
+    rt = model.ResetTokens.query.get(token)
+    if rt is None:
+        return None
+    # if it does grab the user and delete the token
+    user = rt.user
+    model.db.session.delete(rt)
+    model.db.session.commit()
+    return user
 
 
 def get_mailing_list_form(**kwargs):

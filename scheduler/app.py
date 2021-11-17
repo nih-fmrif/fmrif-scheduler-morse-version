@@ -14,7 +14,7 @@ from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
 import logic
-from model import create_reset_token_for, db, get_user, get_user_from_token, upsert_user
+from model import db
 
 ## Configuration
 
@@ -232,12 +232,12 @@ def setup_user():
         # display name has some cruft after the name part, trim off
         name = re.sub(" [([].*$", "", name)
         session["user_name"] = login_as
-        g.user = upsert_user(login_as, mail, name)
+        g.user = logic.upsert_user(login_as, mail, name)
         db.session.commit()  # ensure these changes even if the rest of the request fails
         app.logger.info("new login for user: %s", login_as)
     else:
         # we are an existing login, just fetch the user object
-        g.user = get_user(user_name)
+        g.user = logic.get_user(user_name)
         # it's possible that this can fail if the user record
         # gets deleted while the session is ongoing but then
         # this would return None so it would be the same as being
@@ -300,11 +300,11 @@ def not_found(e):
 @click.argument("user")
 def force_login_cli(user):
     """Create a login link for USER"""
-    u = get_user(user)
+    u = logic.get_user(user)
     if u is None:
         click.echo(f"no such user {user}")
         return
-    token = create_reset_token_for(user)
+    token = logic.create_reset_token_for(user)
     click.echo(url_for("force_login", token=token))
 
 
@@ -312,7 +312,7 @@ def force_login_cli(user):
 @click.argument("user")
 def deactivate_user(user):
     """mark USER as no longer active"""
-    u = get_user(user)
+    u = logic.get_user(user)
     if u is None:
         click.echo(f"no such user {user}")
         return
@@ -326,7 +326,7 @@ def deactivate_user(user):
 @click.argument("user")
 def activate_user(user):
     """mark USER as active"""
-    u = get_user(user)
+    u = logic.get_user(user)
     if u is None:
         click.echo(f"no such user {user}")
         return
@@ -406,7 +406,7 @@ def render_to(template):
 
 @app.route("/force-login/<token>", methods=["GET"])
 def force_login(token):
-    user = get_user_from_token(token)
+    user = logic.get_user_from_token(token)
     if user is None:
         abort(400)
     session["user_name"] = user.id
