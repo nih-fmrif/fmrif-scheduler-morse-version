@@ -1,3 +1,11 @@
+{% macro datalist(id, entries) %}
+	<datalist id="{{ id }}">
+		{% for entry in entries %}
+			<option value="{{ entry[0] }}">{{ entry[1] }}</option>
+		{% endfor %}
+	</datalist>
+{% endmacro %}
+
 {% macro form(f) %}
 	{{ form_errors(f)}}
 	{% for e in f %}
