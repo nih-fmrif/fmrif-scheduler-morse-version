@@ -13,7 +13,7 @@ from flask_mail import Mail
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
-import views
+import logic
 from model import create_reset_token_for, db, get_user, get_user_from_token, upsert_user
 
 ## Configuration
@@ -419,7 +419,7 @@ def force_login(token):
 @render_to("index")
 def home():
     return {
-        **views.index(g.user),
+        **logic.index(g.user),
         **breadcrumb(),
     }
 
@@ -428,9 +428,9 @@ def home():
 @login_required
 @render_to("mailing-lists")
 def mailing_lists():
-    form = views.get_mailing_list_form(name=g.user.label, addr=g.user.addr)
+    form = logic.get_mailing_list_form(name=g.user.label, addr=g.user.addr)
     if form.validate_on_submit():
-        views.process_mailing_list_form_submissions(form)
+        logic.process_mailing_list_form_submissions(form)
         flash("your mailing list subscription status has been updated")
         return redirect(url_for("home"))
     return {
@@ -450,9 +450,9 @@ def join_form():
             403,
             "Your account is inactive: you must be re-authorized by a site admin before you may use the join form",
         )
-    is_dev = "DEV" in views.get_memberships(g.user)
-    departments = views.get_departments_for_join_form(db, g.user)
-    form = views.JoinForm(departments)
+    is_dev = "DEV" in logic.get_memberships(g.user)
+    departments = logic.get_departments_for_join_form(db, g.user)
+    form = logic.JoinForm(departments)
     no_departments = False
     if len(departments) == 0:
         no_departments = True
@@ -485,7 +485,7 @@ def join_form_tech():
             403,
             "Your account is inactive: you must be re-authorized by a site admin before you may use the join form",
         )
-    if "DEV" not in views.get_memberships(g.user):
+    if "DEV" not in logic.get_memberships(g.user):
         abort(403, "Only DEV members may access this form")
     # TODO form
     return {**breadcrumb(("join form", url_for("join_form")), "technologist join form")}
@@ -497,13 +497,13 @@ def join_form_tech():
 @render_to("devices")
 def devices():
     title = "devices"
-    is_admin = views.is_admin(g.user)
+    is_admin = logic.is_admin(g.user)
     active = request.endpoint == "devices"
     if not active:
         if not is_admin:
             abort(403, "access denied")
         title += " (inactive)"
-    devices = views.get_devices(active)
+    devices = logic.get_devices(active)
     return {
         "title": title,
         "devices": devices,
@@ -528,7 +528,7 @@ def devices():
 @render_to("groups")
 def groups():
     title = "groups"
-    memberships = views.get_memberships(g.user)
+    memberships = logic.get_memberships(g.user)
     is_admin = "admin" in memberships
     active = request.endpoint == "groups"
     if not active:
@@ -539,10 +539,10 @@ def groups():
     groups = []
     if is_admin:
         # admin see all groups with members
-        groups = views.get_all_groups_with_members(active)
+        groups = logic.get_all_groups_with_members(active)
     else:
         # nonadmins only see groups they're in
-        groups = views.get_groups(memberships)
+        groups = logic.get_groups(memberships)
 
     return {
         "title": title,
