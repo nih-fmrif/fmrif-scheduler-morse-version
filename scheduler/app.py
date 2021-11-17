@@ -16,6 +16,8 @@ from itsdangerous.url_safe import URLSafeSerializer
 import views
 from model import create_reset_token_for, db, get_user, get_user_from_token, upsert_user
 
+## Configuration
+
 app = Flask(__name__)
 
 
@@ -180,6 +182,8 @@ app.config["SESSION_MAILER"] = mail
 signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
 app.config["URL_SIGNER"] = signer
 
+## Authentication
+
 
 @app.before_request
 def setup_user():
@@ -264,6 +268,9 @@ def in_network_required(f):
     return protect
 
 
+## Error handlers
+
+
 def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[str, int]:
     data = {
         "code": code,
@@ -284,6 +291,9 @@ def access_denied(e):
 @app.errorhandler(404)
 def not_found(e):
     return render_error_page(404, "Not found")
+
+
+## CLI commands
 
 
 @app.cli.command("force-login")
@@ -326,14 +336,7 @@ def activate_user(user):
     click.echo(f"{user} is now active")
 
 
-@app.route("/force-login/<token>", methods=["GET"])
-def force_login(token):
-    user = get_user_from_token(token)
-    if user is None:
-        abort(400)
-    session["user_name"] = user.id
-    g.user = user
-    return redirect("/")
+## Route helpers
 
 
 def my_url() -> str:
@@ -396,6 +399,19 @@ def render_to(template):
         return decorated_function
 
     return decorator
+
+
+## Routes
+
+
+@app.route("/force-login/<token>", methods=["GET"])
+def force_login(token):
+    user = get_user_from_token(token)
+    if user is None:
+        abort(400)
+    session["user_name"] = user.id
+    g.user = user
+    return redirect("/")
 
 
 @app.route("/", methods=["GET"])
