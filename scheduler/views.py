@@ -35,6 +35,7 @@ def index(user: model.User):
     if len(memberships) > 0:
         routes.append(("groups", url_for("groups")))
 
+    routes.append(("join form", url_for("join_form")))
     routes.append(("list action form", url_for("mailing_lists")))
     return {"routes": routes}
 
@@ -187,3 +188,28 @@ def read_signed_message(signature: str) -> Optional[List[str]]:
     except itsdangerous.exc.BadData:
         return None
 
+
+class JoinForm(FlaskForm):
+    group = fields.StringField(
+        label="department",
+        validators=[validators.InputRequired()],
+        render_kw={"list": "departments"},
+    )
+
+    def __init__(self, departments, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.departments = departments
+
+
+def get_departments_for_join_form(db, user: model.User) -> List[Tuple[str, str]]:
+    # get all active departments (and DEV group) that user is NOT a current or pending member of.
+    q = db.session.execute(
+        """
+        select D.deptcode, D.dept from tlkpdept D
+        where D.iscurrent and (D.department or D.deptcode = 'Dev') and deptcode not in (
+            select M."group" from membership M where M."user" = :user
+        ) order by 2;
+    """,
+        {"user": user.id},
+    )
+    return q.fetchall()

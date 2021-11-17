@@ -1,0 +1,19 @@
+{% extends "page.html" %}
+{% import "macros.html" as macros %}
+{% block title %}join form{% endblock %}
+{% block body %}
+	{% if no_departments %}
+		<p>There are no departments for you to join</p>
+	{% else %}
+		<form method=post action="{{ action }}">
+			{{ macros.form(form)}}
+			<datalist id="departments">
+				{% for department in form.departments %}
+					<option value="{{ department[0] }}">{{ department[1] }}</option>
+				{% endfor %}
+			</datalist>
+			<p>Upon submission of this form, the primary investigator of the department will be emailed to confirm your membership.</p>
+			<button type=submit>submit</button>
+		</form>
+	{% endif %}
+{% endblock %}

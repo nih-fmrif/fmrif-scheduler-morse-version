@@ -440,6 +440,57 @@ def mailing_lists():
     }
 
 
+@app.route("/join", methods=["GET", "POST"])
+@login_required
+@in_network_required
+@render_to("join")
+def join_form():
+    if not g.user.active:
+        abort(
+            403,
+            "Your account is inactive: you must be re-authorized by a site admin before you may use the join form",
+        )
+    is_dev = "DEV" in views.get_memberships(g.user)
+    departments = views.get_departments_for_join_form(db, g.user)
+    form = views.JoinForm(departments)
+    no_departments = False
+    if len(departments) == 0:
+        no_departments = True
+    if form.validate_on_submit():
+        # TODO process request
+        flash("your membership request is being processed")
+        return redirect(url_for("home"))
+    return {
+        "form": form,
+        "action": my_url(),
+        "no_departments": no_departments,
+        **subpage_nav(
+            "Show [which form]",
+            [
+                (True, "join form", url_for("join_form")),
+                (is_dev, "technologist join form", url_for("join_form_tech")),
+            ],
+        ),
+        **breadcrumb("join form"),
+    }
+
+
+@app.route("/join/tech", methods=["GET", "POST"])
+@login_required
+@in_network_required
+@render_to("join_tech")
+def join_form_tech():
+    if not g.user.active:
+        abort(
+            403,
+            "Your account is inactive: you must be re-authorized by a site admin before you may use the join form",
+        )
+    if "DEV" not in views.get_memberships(g.user):
+        abort(403, "Only DEV members may access this form")
+    # TODO form
+    return {**breadcrumb(("join form", url_for("join_form")), "technologist join form")}
+
+
 @app.route("/devices", methods=["GET"])
 @app.route("/devices/inactive", endpoint="devices-inactive", methods=["GET"])
 @login_required
