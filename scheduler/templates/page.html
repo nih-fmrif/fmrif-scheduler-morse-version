@@ -29,5 +29,16 @@
 			</section>
 		{% endif %}
 	{% endwith %}
-	<main id=main tabindex="-1">{% block body %}{% endblock %}</main>
+	<main id=main tabindex="-1">
+		{% if subpage_nav %}
+			<nav aria-labelledby="subpage-nav-title">
+				<span id="subpage-nav-title">{{ subpage_nav.title | safe }}</span>
+				<ul>
+					{% for link, href in subpage_nav.links %}
+						<li><a href="{{ href }}"{% if request.path == href %} aria-current=page{% endif %}>{{ link | safe}}</a></li>
+					{% endfor %}
+				</ul>
+		{% endif %}
+		{% block body %}{% endblock %}
+	</main>
 {% endblock %}

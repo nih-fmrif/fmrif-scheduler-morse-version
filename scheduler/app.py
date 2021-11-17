@@ -352,6 +352,26 @@ def breadcrumb(
     return {"breadcrumb": trail}
 
 
+def sr_only_tag(s: str) -> str:
+    """replace " [" with "<sr-only>" and "]" with "</sr-only>",
+    allowing more compact representation of common pattern."""
+    return s.replace(" [", "<sr-only> ").replace("]", "</sr-only>")
+
+
+def subpage_nav(
+    title: str, links: List[Tuple[bool, str, str]]
+) -> Dict[str, Dict[str, Union[str, List[Tuple[str, str]]]]]:
+    shown = [(sr_only_tag(link), href) for (include, link, href) in links if include]
+    if len(shown) <= 1:
+        return {"subpage_nav": {}}
+    return {
+        "subpage_nav": {
+            "title": sr_only_tag(title),
+            "links": shown,
+        },
+    }
+
+
 def render_to(template):
     """decorator that applies template to return of wrapped func"""
 
@@ -403,19 +423,29 @@ def mailing_lists():
 @login_required
 @render_to("devices")
 def devices():
-    bc_title = "devices"
+    title = "devices"
     is_admin = views.is_admin(g.user)
     active = request.endpoint == "devices"
     if not active:
         if not is_admin:
             abort(403, "access denied")
-        bc_title += " (inactive)"
+        title += " (inactive)"
     devices = views.get_devices(active)
     return {
-        "is_admin": is_admin,
-        "active": active,
+        "title": title,
         "devices": devices,
-        **breadcrumb(bc_title),
+        **subpage_nav(
+            "Show [which devices]",
+            [
+                (True, "active [devices]", url_for("devices")),
+                (
+                    is_admin,
+                    "inactive [devices]",
+                    url_for("devices-inactive"),
+                ),
+            ],
+        ),
+        **breadcrumb(title),
     }
 
 
@@ -424,14 +454,14 @@ def devices():
 @login_required
 @render_to("groups")
 def groups():
-    bc_title = "departments"
+    title = "groups"
     memberships = views.get_memberships(g.user)
     is_admin = "admin" in memberships
     active = request.endpoint == "groups"
     if not active:
         if not is_admin:
             abort(403, "access denied")
-        bc_title += " (inactive)"
+        title += " (inactive)"
 
     groups = []
     if is_admin:
@@ -442,10 +472,20 @@ def groups():
         groups = views.get_groups(memberships)
 
     return {
-        "is_admin": is_admin,
-        "active": active,
+        "title": title,
         "groups": groups,
-        **breadcrumb(bc_title),
+        **subpage_nav(
+            "Show [which groups]",
+            [
+                (True, "active [groups]", url_for("groups")),
+                (
+                    is_admin,
+                    "inactive [groups]",
+                    url_for("groups-inactive"),
+                ),
+            ],
+        ),
+        **breadcrumb(title),
     }
 
 

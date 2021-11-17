@@ -1,15 +1,6 @@
 {% extends "page.html" %}
-{% block title %}groups{% if not active %} (inactive){% endif %}{% endblock %}
+{% block title %}{{ title }}{% endblock %}
 {% block body %}
-	{% if is_admin %}
-		<nav aria-labelledby=selector-lbl>
-			<span id=selector-lbl>Show<sr-only> which groups</sr-only></span>
-		<ul>
-			{% for name, url in [["active", url_for("groups")], ["inactive", url_for("groups-inactive")]] %}
-				<li><a href="{{url}}"{% if request.path == url %} aria-current=page{% endif %}>{{ name }}<sr-only> groups</sr-only></a></li>
-			{% endfor %}
-		</ul>
-	{% endif %}
 	<article aria-labelledby=list-lbl>
 		<span id=list-lbl>Group</span>
 		<ul>
