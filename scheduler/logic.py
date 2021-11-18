@@ -1,4 +1,5 @@
 import datetime
+import re
 import secrets
 from typing import Any, Generator, List, Optional, Tuple, cast
 
@@ -26,6 +27,11 @@ def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None
     mail.send(m)
     if current_app.debug:
         current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
+
+
+def discard_user_titles(name: str) -> str:
+    # user's name is followed by bracketed titles that can be discarded
+    return re.sub(" [([].*$", "", name)
 
 
 def upsert_user(user: str, mail: str, name: str) -> model.User:

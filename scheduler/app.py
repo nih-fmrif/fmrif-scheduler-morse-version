@@ -1,5 +1,4 @@
 import ipaddress
-import re
 from functools import wraps
 from typing import Dict, List, Tuple, Union
 
@@ -94,8 +93,7 @@ def setup_user():
     if login_as != "":
         mail = request.headers.get("HTTP_USER_EMAIL", "")
         name = request.headers.get("HTTP_NIH_DISPLAYNAME", "")
-        # display name has some cruft after the name part, trim off
-        name = re.sub(" [([].*$", "", name)
+        name = logic.discard_user_titles(name)
         session["user_name"] = login_as
         g.user = logic.upsert_user(login_as, mail, name)
         db.session.commit()  # ensure these changes even if the rest of the request fails
