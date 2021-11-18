@@ -6,7 +6,7 @@
 		<ul>
 			{% for group in groups %}
 				<li>
-					<a href="{{ url_for("group", group=group.id) }}">{{group.label}}</a>
+					<a href="{{ url_for("group", the_group=group.id) }}">{{group.label}}</a>
 					{% if group.description %}<p>{{group.description}}</p>{% endif %}
 				</li>
 			{% endfor %}

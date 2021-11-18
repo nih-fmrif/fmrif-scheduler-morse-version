@@ -131,6 +131,16 @@ def in_network_required(f):
     return protect
 
 
+def active_user(f):
+    @wraps(f)
+    def protect(*args, **kwargs):
+        if not g.user.active:
+            abort(403, "Access denied: this page is limited to active users")
+        return f(*args, **kwargs)
+
+    return protect
+
+
 ## Error handlers
 
 
@@ -289,10 +299,12 @@ def home():
     routes = []
     routes.append(("devices", url_for("devices")))
 
+    active = g.user.active
     memberships = logic.get_memberships(g.user)
-    if len(memberships) > 0:
+    if active and len(memberships) > 0:
         routes.append(("groups", url_for("groups")))
 
+    if active:
     routes.append(("join form", url_for("join_form")))
     routes.append(("list action form", url_for("mailing_lists")))
 
@@ -321,13 +333,9 @@ def mailing_lists():
 @app.route("/join", methods=["GET", "POST"])
 @login_required
 @in_network_required
+@active_user
 @render_to("join")
 def join_form():
-    if not g.user.active:
-        abort(
-            403,
-            "Your account is inactive: you must be re-authorized by a site admin before you may use the join form",
-        )
     is_dev = "DEV" in logic.get_memberships(g.user)
     departments = logic.get_departments_for_join_form(db, g.user)
     form = logic.JoinForm(departments)
@@ -356,13 +364,9 @@ def join_form():
 @app.route("/join/tech", methods=["GET", "POST"])
 @login_required
 @in_network_required
+@active_user
 @render_to("join_tech")
 def join_form_tech():
-    if not g.user.active:
-        abort(
-            403,
-            "Your account is inactive: you must be re-authorized by a site admin before you may use the join form",
-        )
     if "DEV" not in logic.get_memberships(g.user):
         abort(403, "Only DEV members may access this form")
     # TODO form
@@ -403,6 +407,7 @@ def devices():
 @app.route("/groups", methods=["GET"])
 @app.route("/groups/inactive", endpoint="groups-inactive", methods=["GET"])
 @login_required
+@active_user
 @render_to("groups")
 def groups():
     title = "groups"
@@ -448,9 +453,8 @@ def device(device):
     return {}
 
 
-@app.route("/group/<group>")
+@app.route("/group/<the_group>")
 @login_required
+@active_user
 @render_to("group")
-def group(group):
-    # TODO just need this placeholder route
-    return {}
+def group(the_group):
