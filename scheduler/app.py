@@ -6,12 +6,13 @@ import click
 from flask import Flask, abort, g, redirect, request, session
 from flask.helpers import flash, url_for
 from flask.templating import render_template
+from flask.wrappers import Response
 from flask_mail import Mail
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
-import logic
 import config
+import logic
 import message
 from model import db
 
@@ -264,6 +265,11 @@ def render_to(template):
 
 
 ## Routes
+
+
+@app.route("/robots.txt")
+def robots():
+    return Response("User-agent: *\nDisallow: /", mimetype="text/plain")
 
 
 @app.route("/force-login/<token>", methods=["GET"])
