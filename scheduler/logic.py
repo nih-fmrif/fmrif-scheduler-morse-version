@@ -10,23 +10,7 @@ from flask_wtf import FlaskForm
 from wtforms import fields, validators
 
 import model
-
-
-def send_msg(to: str, subj: str, msg: str, sender: Optional[str] = None) -> None:
-    mail = current_app.config["SESSION_MAILER"]
-    m = Message()
-    m.subject = to
-    m.body = msg
-    addrs = [to]
-    if "," in to:
-        addrs = [s.strip() for s in to.split(",")]
-    m.recipients = addrs
-    # we only need to change the sender for the list action form
-    if sender is not None:
-        m.sender = sender
-    mail.send(m)
-    if current_app.debug:
-        current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
+import message
 
 
 def discard_user_titles(name: str) -> str:
@@ -162,7 +146,7 @@ def process_mailing_list_form_submissions(form):
     listserv = current_app.config["nih_listserv"]
     for list in lists:
         msg = format_mailing_list_message(sub, list, name)
-        send_msg(listserv, "Automated list change", msg, sender=addr)
+        message.send(listserv, "Automated list change", msg, sender=addr)
 
 
 def normalize_name(name: str) -> str:

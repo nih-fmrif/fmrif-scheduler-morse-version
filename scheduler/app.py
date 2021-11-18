@@ -12,6 +12,7 @@ from itsdangerous.url_safe import URLSafeSerializer
 
 import logic
 import config
+import message
 from model import db
 
 ## Configuration
@@ -41,8 +42,7 @@ with app.open_resource("config.json", "r") as f:
 db.init_app(app)
 app.config["SESSION_SQL_ALCHEMY"] = db
 Session(app)
-mail = Mail(app)
-app.config["SESSION_MAILER"] = mail
+message.mailer.init_app(app)
 signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
 app.config["URL_SIGNER"] = signer
 
