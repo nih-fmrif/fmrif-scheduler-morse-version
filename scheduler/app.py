@@ -1,6 +1,4 @@
 import ipaddress
-import json
-import os
 import re
 from functools import wraps
 from typing import Dict, List, Tuple, Union
@@ -14,165 +12,32 @@ from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
 import logic
+import config
 from model import db
 
 ## Configuration
 
 app = Flask(__name__)
 
-
-def env(s: str) -> str:
-    return os.environ[s]
+app.config.update(**config.basic_settings(app.debug))
 
 
-def env_or(s: str, default: str) -> str:
-    return os.environ.get(s, default)
-
-
-def bool_env(s: str) -> bool:
-    return env_or(s, "").lower() not in ("", "false")
-
-
-app.config.update(
-    SERVER_NAME=env("MMSCHED_SERVER_NAME"),
-    # config for Flask-Mail
-    MAIL_SERVER=env_or("MMSCHED_MAIL_SERVER", "localhost"),
-    MAIL_PORT=int(env_or("MMSCHED_MAIL_PORT", "25")),
-    MAIL_USE_TLS=bool_env("MMSCHED_MAIL_USE_TLS"),
-    MAIL_USE_SSL=bool_env("MMSCHED_MAIL_USE_SSL"),
-    MAIL_USERNAME=env("MMSCHED_MAIL_USERNAME"),
-    MAIL_PASSWORD=env("MMSCHED_MAIL_PASSWORD"),
-    # config for Flask-SQLAlchemy
-    SQLALCHEMY_DATABASE_URI=env("MMSCHED_DB_URL"),
-    SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    # config for Flask-Session
-    SESSION_COOKIE_NAME="dsid",
-    PERMANENT_SESSION_LIFETIME=8 * 60 * 60,  # 8 hours in seconds
-    SESSION_TYPE="sqlalchemy",
-    SESSION_USE_SIGNER=True,
-    SESSION_SQLALCHEMY_TABLE="site_sessions",
-)
-
-
-def do_url_fix():
-    root = env_or("MMSCHED_APPLICATION_ROOT", "")
-    if root != "":
-        app.config["APPLICATION_ROOT"] = root
-
-
-do_url_fix()
-
-
-if app.debug:
-    app.config.update(
-        SQLALCHEMY_ECHO=True,
-        MAIL_SUPPRESS_SEND=True,
-    )
-else:
-    app.config.update(
-        SESSION_COOKIE_SECURE=True,  # no https on dev server
-        PREFERRED_URL_SCHEME="https",
-    )
-
-
-def do_proxy_fix():
+def proxy_fix(app):
     # load info about proxies so we can get correct remote addr
     # see: https://werkzeug.palletsprojects.com/en/2.0.x/middleware/proxy_fix/
 
-    total, count = 0, {
-        "For": 0,
-        "Proto": 0,
-        "Host": 0,
-        "Port": 0,
-        "Prefix": 0,
-    }
-
-    for ev in count.keys():
-        nm = f"MMSCHED_X_FORWARDED_{ev.upper()}"
-        n = int(os.environ.get(nm, 0))
-        if n < 0:
-            raise Exception(f"{nm} must be nonnegative integer")
-        total += n
-        count[ev] = n
-
-    if total > 0:
+    counts = config.proxy_count()
+    if counts is not None:
         from werkzeug.middleware.proxy_fix import ProxyFix
 
-        app.wsgi_app = ProxyFix(
-            app.wsgi_app,
-            x_for=count["For"],
-            x_proto=count["Proto"],
-            x_host=count["Host"],
-            x_port=count["Port"],
-            x_prefix=count["Prefix"],
-        )
+        app.wsgi_app = ProxyFix(app.wsgi_app, **counts)
 
 
-do_proxy_fix()
+proxy_fix(app)
 
+with app.open_resource("config.json", "r") as f:
+    app.config.update(**config.load_user_settings(app.debug, f))
 
-def load_user_settings(app):
-    # we let any error here crash the app as these all must be set
-    out = {}
-    with app.open_resource("config.json", "r") as f:
-        cfg = json.loads(f.read())
-        if not isinstance(cfg, dict):
-            raise Exception("config.json needs to be {}")
-        if len(cfg) != 6:
-            raise Exception("config.json unexpected number of keys, must be 6")
-
-        key = cfg["secret_key"]
-        if not isinstance(key, str):
-            raise Exception("config.json: secret_key must be string")
-        if key == "":
-            raise Exception("config.json: secret key must not be empty")
-        out["SECRET_KEY"] = key
-
-        # get NIH subnets for checking that remote addr is in the network
-        netspec = cfg["nih_networks"]
-        if not isinstance(netspec, list):
-            raise Exception("config.json: nih_networks needs to be []")
-        if len(netspec) == 0:
-            raise Exception("config.json: nih_network cannot be empty")
-        out["nih_networks"] = [ipaddress.ip_network(sn) for sn in netspec]
-        if app.debug:  # allow localhost in debug mode
-            out["nih_networks"].append(ipaddress.ip_network("127.0.0.1"))
-
-        login_prefix = cfg["siteminder_login_url_prefix"]
-        if not isinstance(login_prefix, str):
-            raise Exception("config.json: siteminder_login_url_prefix must be string")
-        out["SM_LOGIN_URL_PREFIX"] = login_prefix
-
-        sender = cfg["site_default_sender"]
-        if not isinstance(sender, str):
-            raise Exception("config.json: site_default_sender must be string")
-        if "@" not in sender:
-            raise Exception(
-                "config.json: site_default_sender must be valid email address"
-            )
-        out["MAIL_DEFAULT_SENDER"] = sender
-
-        ls_addr = cfg["listserv"]
-        if not isinstance(ls_addr, str):
-            raise Exception("config.json: listserv must be string")
-        if "@" not in ls_addr:
-            raise Exception("config.json: listserv must be valid email address")
-        out["nih_listserv"] = ls_addr
-
-        ml = cfg["mailing_lists"]
-        if not isinstance(ml, dict):
-            raise Exception("config.js: mailing_lists must be {}")
-        for v in ml.values():
-            if not isinstance(v, str):
-                raise Exception(
-                    'config.js: mailing_list entries must be "name": "description" pairs'
-                )
-        out["nih_mailing_lists"] = ml
-
-    return out
-
-
-app.config.update(**load_user_settings(app))
 
 db.init_app(app)
 app.config["SESSION_SQL_ALCHEMY"] = db
