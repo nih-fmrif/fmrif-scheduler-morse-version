@@ -337,7 +337,6 @@ def mailing_lists():
 @active_user
 @render_to("join")
 def join_form():
-    is_dev = "DEV" in logic.get_memberships(g.user)
     departments = logic.get_departments_for_join_form(g.user)
     form = logic.JoinForm(departments)
     no_departments = False
@@ -355,7 +354,11 @@ def join_form():
             "Show [which form]",
             [
                 (True, "join form", url_for("join_form")),
-                (is_dev, "technologist join form", url_for("join_form_tech")),
+                (
+                    logic.show_tech_join_form(g.user),
+                    "technologist join form",
+                    url_for("join_form_tech"),
+                ),
             ],
         ),
         **breadcrumb("join form"),

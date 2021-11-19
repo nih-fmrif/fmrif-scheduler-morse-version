@@ -278,6 +278,23 @@ class JoinForm(FlaskForm):
         self.departments = departments
 
 
+def show_tech_join_form(user: model.User) -> bool:
+    # return a row if user is in DEV unless they have already submitted the form
+    q = model.db.session.execute(
+        """
+        select researchercode from groupmembers G 
+        where G.deptcode = 'DEV'
+        and G.researchercode = :user
+        and approved is not null
+        except
+        select researchercode from technologist T
+        where T.researchercode = :user
+        """,
+        {"user": user.id},
+    )
+    return bool(q.first())
+
+
 def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
     # get all active departments (and DEV group) that user is NOT a current or pending member of.
     q = model.db.session.execute(
