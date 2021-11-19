@@ -15,7 +15,6 @@ import config
 import logic
 import message
 import model
-from model import db
 
 ## Configuration
 
@@ -41,7 +40,7 @@ with app.open_resource("config.json", "r") as f:
     app.config.update(**config.load_user_settings(app.debug, f))
 
 
-db.init_app(app)
+model.db.init_app(app)
 Session(app)
 message.mailer.init_app(app)
 signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
@@ -97,7 +96,7 @@ def setup_user():
         name = logic.discard_user_titles(name)
         session["user_name"] = login_as
         g.user = logic.upsert_user(login_as, mail, name)
-        db.session.commit()  # ensure these changes even if the rest of the request fails
+        model.db.session.commit()  # ensure these changes even if the rest of the request fails
         app.logger.info("new login for user: %s", login_as)
     else:
         # we are an existing login, just fetch the user object
@@ -191,8 +190,8 @@ def deactivate_user(user):
         click.echo(f"no such user {user}")
         return
     u.active = False
-    db.session.add(u)
-    db.session.commit()
+    model.db.session.add(u)
+    model.db.session.commit()
     click.echo(f"{user} is now inactive")
 
 
@@ -205,8 +204,8 @@ def activate_user(user):
         click.echo(f"no such user {user}")
         return
     u.active = True
-    db.session.add(u)
-    db.session.commit()
+    model.db.session.add(u)
+    model.db.session.commit()
     click.echo(f"{user} is now active")
 
 
@@ -339,7 +338,7 @@ def mailing_lists():
 @render_to("join")
 def join_form():
     is_dev = "DEV" in logic.get_memberships(g.user)
-    departments = logic.get_departments_for_join_form(db, g.user)
+    departments = logic.get_departments_for_join_form(model.db, g.user)
     form = logic.JoinForm(departments)
     no_departments = False
     if len(departments) == 0:
