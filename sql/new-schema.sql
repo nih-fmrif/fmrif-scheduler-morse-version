@@ -464,9 +464,7 @@ COMMENT ON COLUMN public.devicegroup.deptcode IS 'second half of primary key';
 CREATE TABLE public.groupmembers (
     deptcode character varying(10) NOT NULL,
     researchercode character varying(20) NOT NULL,
-    approve1 timestamp with time zone,
-    approve2 timestamp with time zone,
-    approved boolean GENERATED ALWAYS AS (((approve1 IS NOT NULL) AND (approve2 IS NOT NULL))) STORED NOT NULL
+    approved timestamp with time zone
 );
 
 
@@ -492,24 +490,10 @@ COMMENT ON COLUMN public.groupmembers.researchercode IS 'second half of primary 
 
 
 --
--- Name: COLUMN groupmembers.approve1; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.groupmembers.approve1 IS 'approval to join (type 1)';
-
-
---
--- Name: COLUMN groupmembers.approve2; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.groupmembers.approve2 IS 'approval to join (type 2)';
-
-
---
 -- Name: COLUMN groupmembers.approved; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.groupmembers.approved IS 'true if approved member of group';
+COMMENT ON COLUMN public.groupmembers.approved IS 'NULL if pending, timestamp of approval date otherwise';
 
 
 --
@@ -809,7 +793,7 @@ CREATE VIEW public.membership AS
             WHEN (p.deptcode IS NOT NULL) THEN true
             ELSE false
         END AS pi,
-    m.approved,
+    (m.approved IS NOT NULL) AS approved,
     d.iscurrent AS group_active,
     r.active AS user_active
    FROM (((public.groupmembers m
@@ -1376,6 +1360,37 @@ ALTER SEQUENCE public.technicalscans_tsid_seq OWNED BY public.technicalscans.tsi
 
 
 --
+-- Name: technologist; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.technologist (
+    researchercode character varying(20) NOT NULL,
+    approved_on timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: TABLE technologist; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.technologist IS 'users who may answer technologist support requests on a device';
+
+
+--
+-- Name: COLUMN technologist.researchercode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.technologist.researchercode IS 'the user in question';
+
+
+--
+-- Name: COLUMN technologist.approved_on; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.technologist.approved_on IS 'the date the user submitted the technologist join form';
+
+
+--
 -- Name: tlkpinst; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1782,6 +1797,14 @@ ALTER TABLE ONLY public.technicalscans
 
 
 --
+-- Name: technologist technologist_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.technologist
+    ADD CONSTRAINT technologist_pkey PRIMARY KEY (researchercode);
+
+
+--
 -- Name: tlkpdept tlkpdept_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2099,6 +2122,14 @@ ALTER TABLE ONLY public.tbltemplate
 
 ALTER TABLE ONLY public.tbltemplates
     ADD CONSTRAINT tbltemplates_scannercode_fkey FOREIGN KEY (scannercode) REFERENCES public.tlkpscanner(scannercode) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: technologist technologist_researchercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.technologist
+    ADD CONSTRAINT technologist_researchercode_fkey FOREIGN KEY (researchercode) REFERENCES public.tlkpresearcher(researchercode) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

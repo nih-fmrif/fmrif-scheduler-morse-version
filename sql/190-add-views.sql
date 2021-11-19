@@ -3,7 +3,7 @@ create view membership as select
 	M.deptcode "group",
 	M.researchercode "user",
 	case when P.deptcode is not null then true else false end as pi,
-	M.approved,
+	M.approved is not null as approved,
 	D.iscurrent group_active,
 	R.active user_active
 from groupmembers M

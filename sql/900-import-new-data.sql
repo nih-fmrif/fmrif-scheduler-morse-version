@@ -67,8 +67,7 @@ insert into new_departments(dept) select distinct dept from (
 	select deptcode dept from tlkpdept
 ) t;
 
--- list out all the new entities being created to fill in gaps and then create them
-select usr as "Users that will be created" from new_users order by 1;
+-- list out all the new entities (except for users) being created to fill in gaps and then create them
 select dept as "Departments that will be created" from new_departments order by 1;
 select dev as "Devices that will be created" from new_devices order by 1;
 insert into tlkpresearcher(researchercode) select usr from new_users;
@@ -76,7 +75,7 @@ insert into tlkpdept(deptcode, dept, dept_short, color) select dept, dept, dept,
 insert into tlkpscanner(scannercode, scanner) select dev, dev from new_devices;
 
 -- now that we know everything exists properly we can create the real relations
-insert into groupmembers(deptcode, researchercode, approve1, approve2) select dept, usr, current_timestamp, current_timestamp from tmpmembers;
+insert into groupmembers(deptcode, researchercode, approved) select dept, usr, current_timestamp from tmpmembers;
 insert into primarygroupmember(deptcode, researchercode) select dept, usr from tmpmembers where pi = 'pi';
 insert into devicegroup(scannercode, deptcode) select dev, dept from tmpdev; 
 insert into userdevice(researchercode, scannercode, templates, slot, tech, medical, training) select

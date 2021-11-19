@@ -167,13 +167,15 @@ This table consists of (**scannercode**, **deptcode**) pairs meaning that group 
 
 The *groupmembers* table records the state of user membership in a group. The primary key is the composite foreign key (**deptcode**, **researchercode**).
 
-The **approve1** and **approve2** columns are `null` or a timestamp for when the appropriate approval was recorded. If one or both are `null` the user is not in the group yet but has requested to be in the group. Most groups only require one approval so the columns are either both `null` or the same timestamp. The row will be deleted if approval is denied.
-
-The **approved** generated column is `true` iff both **approve1** and **approve2** are not `null`.
+The **approved** column is `null` for a pending member or a timestamp of when the approval was recorded for an approved member. The row will be deleted if approval is denied.
 
 The *primarygroupmember* consists only of the pair **deptcode** and **researchercode** where the corresponding pair must exist in *groupmembers*. An entry in this table means that the respective user is the primary investigator of the respective group.
 
 It is safe to delete an approved row from *groupmembers* iff there does not exist a corresponding row in *primarygroupmember*. It is always safe to delete an unapproved row.
+
+### technologist
+
+The *technologist* table records DEV group members who have filled out the technologist join form. The **researchercode** identifies the user and **approved_on** records the date of the submission.
 
 ### membership
 
@@ -205,7 +207,7 @@ This table records the special per-device permissions for members of the DEV spe
 
 The primary key is (**researchercode**, **scannercode**) and the entry is meaningless if the user is not an active member of the DEV group.
 
-The remaining columns are booleans corresponding to each of the special permissions with the additional constraint that at least one must be `true`.
+The remaining columns are booleans corresponding to each of the special permissions with the additional constraint that at least one must be `true`. Technologist permissions are reserved for users with an entry in the [*technologist*](#technologist) table.
 
 ### site_sessions and reset_tokens
 

@@ -300,8 +300,7 @@ class GroupMember(Model):
         "researchercode", db.String(20), db.ForeignKey("tlkpresearcher.researchercode")
     )
 
-    approve1: Any = db.Column("approve1", db.DateTime(timezone=True), nullable=True)
-    approve2: Any = db.Column("approve2", db.DateTime(timezone=True), nullable=True)
+    approved: Any = db.Column("approve1", db.DateTime(timezone=True), nullable=True)
 
     __table_args__ = (db.PrimaryKeyConstraint("deptcode", "researchercode"),)
 
@@ -319,6 +318,16 @@ class PrimaryGroupMember(Model):
     )
 
     __table_args__ = (db.PrimaryKeyConstraint("deptcode", "researchercode"),)
+
+
+class Technologist(Model):
+    __tablename__ = "technologist"
+    user: str = db.Column(
+        "researchercode",
+        db.String(20),
+        db.ForeignKey("tlkpresearcher.researchercode"),
+        primary_key=True,
+    )
 
 
 class DeviceGroup(Model):

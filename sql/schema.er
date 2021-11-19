@@ -111,6 +111,12 @@ groupmembers 1--* tlkpresearcher
 
 primarygroupmember 1--? groupmembers
 
+[technologist]
+*+researchercode
+approved_on
+
+technologist 1--? tlkpresearcher
+
 [userdevice]
 *+researchercode
 *+scannercode
