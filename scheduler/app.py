@@ -338,7 +338,7 @@ def mailing_lists():
 @render_to("join")
 def join_form():
     is_dev = "DEV" in logic.get_memberships(g.user)
-    departments = logic.get_departments_for_join_form(model.db, g.user)
+    departments = logic.get_departments_for_join_form(g.user)
     form = logic.JoinForm(departments)
     no_departments = False
     if len(departments) == 0:

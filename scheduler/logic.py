@@ -278,9 +278,9 @@ class JoinForm(FlaskForm):
         self.departments = departments
 
 
-def get_departments_for_join_form(db, user: model.User) -> List[Tuple[str, str]]:
+def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
     # get all active departments (and DEV group) that user is NOT a current or pending member of.
-    q = db.session.execute(
+    q = model.db.session.execute(
         """
         select D.deptcode, D.dept from tlkpdept D
         where D.iscurrent and (D.department or D.deptcode = 'Dev') and deptcode not in (
