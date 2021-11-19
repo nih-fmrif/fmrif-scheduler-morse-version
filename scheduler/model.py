@@ -300,7 +300,7 @@ class GroupMember(Model):
         "researchercode", db.String(20), db.ForeignKey("tlkpresearcher.researchercode")
     )
 
-    approved: Any = db.Column("approve1", db.DateTime(timezone=True), nullable=True)
+    approved: Any = db.Column("approved", db.DateTime(timezone=True), nullable=True)
 
     __table_args__ = (db.PrimaryKeyConstraint("deptcode", "researchercode"),)
 
