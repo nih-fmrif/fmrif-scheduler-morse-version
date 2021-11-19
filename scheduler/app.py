@@ -14,6 +14,7 @@ from itsdangerous.url_safe import URLSafeSerializer
 import config
 import logic
 import message
+import model
 from model import db
 
 ## Configuration
@@ -240,9 +241,10 @@ def sr_only_tag(s: str) -> str:
     return s.replace(" [", "<sr-only> ").replace("]", "</sr-only>")
 
 
-def subpage_nav(
-    title: str, links: List[Tuple[bool, str, str]]
-) -> Dict[str, Dict[str, Union[str, List[Tuple[str, str]]]]]:
+Subpage_links = Dict[str, Dict[str, Union[str, List[Tuple[str, str]]]]]
+
+
+def subpage_nav(title: str, links: List[Tuple[bool, str, str]]) -> Subpage_links:
     shown = [(sr_only_tag(link), href) for (include, link, href) in links if include]
     if len(shown) <= 1:
         return {"subpage_nav": {}}
@@ -305,7 +307,7 @@ def home():
         routes.append(("groups", url_for("groups")))
 
     if active:
-    routes.append(("join form", url_for("join_form")))
+        routes.append(("join form", url_for("join_form")))
     routes.append(("list action form", url_for("mailing_lists")))
 
     return {
@@ -453,8 +455,44 @@ def device(device):
     return {}
 
 
+# shared subpage nav for all group pages
+def group_subpage_nav(group: model.Group, su: logic.Group_leader_kind) -> Subpage_links:
+    return subpage_nav(
+        "Show",
+        [
+            # view has further protections, but if you can see any of them you can see it
+            (True, "view", url_for("group", the_group=group)),
+            # TODO edit page
+            # TODO membership
+        ],
+    )
+
+
 @app.route("/group/<the_group>")
 @login_required
 @active_user
 @render_to("group")
 def group(the_group):
+    group = logic.get_group(the_group)
+    if group is None:
+        abort(404)
+
+    su = logic.get_group_leader_kind(g.user, group)
+
+    # inactive groups can only be viewed by admins
+    if not (group.active or "admin" in su):
+        abort(403)
+
+    members = logic.get_members_of_group(group)
+
+    # must be admin, dev_pi, or member
+    if not (len(su) > 0 or any(m == g.user.id for (m, _) in members)):
+        abort(403)
+
+    return {
+        "group": group,
+        "members": members,
+        "su": su,
+        **group_subpage_nav(group, su),
+        **breadcrumb(("groups", url_for("groups")), group.label),
+    }

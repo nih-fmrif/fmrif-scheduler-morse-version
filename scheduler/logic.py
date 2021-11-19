@@ -1,16 +1,17 @@
 import datetime
 import re
 import secrets
-from typing import Any, Generator, List, Optional, Tuple, cast
+from typing import Any, Generator, List, Literal, Optional, Set, Tuple, cast
 
 import itsdangerous
 from flask import current_app
 from flask_mail import Message
 from flask_wtf import FlaskForm
+from sqlalchemy.sql.expression import and_, or_
 from wtforms import fields, validators
 
-import model
 import message
+import model
 
 
 def discard_user_titles(name: str) -> str:
@@ -197,6 +198,18 @@ def get_groups(which: List[str]) -> List[model.Group]:
     return q.order_by(model.Group.label).all()
 
 
+def get_group(which: str) -> Optional[model.Group]:
+    return model.Group.query.get(which)
+
+
+def get_members_of_group(group: model.Group) -> List[Tuple[str, bool]]:
+    q = model.Membership.query
+    q = q.filter(model.Membership.group == group.id)
+    q = q.filter(model.Membership.user_active)
+    q = q.filter(model.Membership.approved)
+    return [(r.user, r.pi) for r in q.all()]
+
+
 def is_admin(user: model.User) -> bool:
     q = model.Membership.query
     q = q.filter(model.Membership.user == user.id)
@@ -204,6 +217,33 @@ def is_admin(user: model.User) -> bool:
     q = q.filter(model.Membership.user_active)
     q = q.filter(model.Membership.approved)
     return bool(q.first())
+
+
+Group_leader_kind = Set[Literal["group_pi", "dev_pi", "admin"]]
+
+
+def get_group_leader_kind(user: model.User, group: model.Group) -> Group_leader_kind:
+    M = model.Membership
+    q = M.query
+    q = q.filter(M.user == user.id)
+    q = q.filter(M.user_active)
+    q = q.filter(M.approved)
+    q = q.filter(
+        or_(
+            and_(M.group == group.id, M.pi),  # pi of current group
+            and_(M.group == "DEV", M.pi),  # pi of DEV group
+            M.group == "admin",  # any admin
+        )
+    )
+    result: Group_leader_kind = set()
+    for r in q.all():
+        if r.group == group.id and r.pi:
+            result.add("group_pi")
+        elif r.group == "DEV" and r.pi:
+            result.add("dev_pi")
+        elif r.group == "admin":
+            result.add("admin")
+    return result
 
 
 def sign_message(msg: List[str]) -> str:

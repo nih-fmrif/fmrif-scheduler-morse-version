@@ -1,0 +1,15 @@
+{% extends "page.html" %}
+{% block title %}{{ group.label }}{% endblock %}
+{% block body %}
+	<h1>{{ group.label }}{% if not group.active %} (inactive){% endif %}</h1>
+	{% if group.description %}<p>{{ group.description|replace("\n", "<br><br>") }}</p>{% endif %}
+	{% if group.link %}<p>Home: <a href="{{ group.link }}">{{ group.link }}</a></p>{% endif %}
+	{% if members %}
+		<h2>Members</h2>
+		<ul>
+			{% for member, pi in members %}
+				<li>{{ member }}{% if pi %} (<b>PI</b>){% endif %}</li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+{% endblock %}
