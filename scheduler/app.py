@@ -331,6 +331,20 @@ def mailing_lists():
     }
 
 
+def join_form_subnav(user: model.User) -> Subpage_links:
+    return subpage_nav(
+        "Show [which form]",
+        [
+            (True, "join form", url_for("join_form")),
+            (
+                logic.show_tech_join_form(g.user),
+                "technologist join form",
+                url_for("join_form_tech"),
+            ),
+        ],
+    )
+
+
 @app.route("/join", methods=["GET", "POST"])
 @login_required
 @in_network_required
@@ -343,24 +357,16 @@ def join_form():
     if len(departments) == 0:
         no_departments = True
     if form.validate_on_submit():
-        # TODO process request
+        logic.record_join_form(g.user, form.group.data)
+        model.db.session.commit()
+        logic.notify_group_pi_of_join_form(g.user, form.group.data)
         flash("your membership request is being processed")
         return redirect(url_for("home"))
     return {
         "form": form,
         "action": my_url(),
         "no_departments": no_departments,
-        **subpage_nav(
-            "Show [which form]",
-            [
-                (True, "join form", url_for("join_form")),
-                (
-                    logic.show_tech_join_form(g.user),
-                    "technologist join form",
-                    url_for("join_form_tech"),
-                ),
-            ],
-        ),
+        **join_form_subnav(g.user),
         **breadcrumb("join form"),
     }
 
@@ -371,10 +377,73 @@ def join_form():
 @active_user
 @render_to("join_tech")
 def join_form_tech():
-    if "DEV" not in logic.get_memberships(g.user):
-        abort(403, "Only DEV members may access this form")
-    # TODO form
-    return {**breadcrumb(("join form", url_for("join_form")), "technologist join form")}
+    if not logic.show_tech_join_form(g.user):
+        abort(
+            403,
+            "Only DEV members who have not become technologists already may access this form",
+        )
+    # we only need to show the form on GET and there's nothing to validate on post:
+    # if the browser allowed the form to be submitted, it's good
+    if request.method == "POST":
+        logic.record_tech_join(g.user)
+        model.db.session.commit()
+        logic.notify_dev_pi_of_tech_join_form(g.user)
+        flash("you are now a technologist")
+        return redirect(url_for("home"))
+    return {
+        **join_form_subnav(g.user),
+        **breadcrumb(("join form", url_for("join_form")), "technologist join form"),
+    }
+
+
+@app.route("/join/approve/<token>", endpoint="join-group-approve", methods=["GET"])
+@app.route("/join/deny/<token>", endpoint="join-group-deny", methods=["GET"])
+@login_required
+@active_user
+def handle_join_group(token):
+    req = logic.read_signed_message(token)
+
+    # make sure token is a real token
+    if req is None or len(req) != 3 or req[0] != "join-group":
+        abort(400)
+
+    # get the user and group from the token data
+    _, uid, gid = req
+    u = logic.get_user(uid)
+    if u is None or not u.active:
+        abort(400)
+    grp = logic.get_group(gid)
+    if grp is None or not grp.active:
+        abort(400)
+
+    to_home = redirect(url_for("home"))
+
+    # make sure the request is unprocessed
+    req = logic.get_join_request(u, grp)
+    if req is None:
+        flash("this request was previously denied")
+        return to_home
+
+    if req.approved is not None:
+        flash("this request was previously approved")
+        return to_home
+
+    # make sure current user is PI of g
+    pi = logic.pi_of_group(gid)
+    if pi != g.user.id:
+        abort(403, f"only the PI of {grp.label} can approve or deny this request")
+
+    approve = request.endpoint == "join-group-approve"
+
+    logic.handle_join_request(approve, req)
+    model.db.session.commit()
+
+    if approve:
+        flash(f"you have approved {u.id} to be a member of {grp.label}")
+    else:
+        flash(f"you have denied {u.id} from becoming a member {grp.label}")
+
+    return to_home
 
 
 @app.route("/devices", methods=["GET"])

@@ -2,12 +2,14 @@ import datetime
 import re
 import secrets
 from typing import Any, Generator, List, Literal, Optional, Set, Tuple, cast
+from flask.helpers import url_for
 
 import itsdangerous
 from flask import current_app
 from flask_mail import Message
 from flask_wtf import FlaskForm
 from sqlalchemy.sql.expression import and_, or_
+from sqlalchemy.sql.functions import func
 from wtforms import fields, validators
 
 import message
@@ -293,6 +295,94 @@ def show_tech_join_form(user: model.User) -> bool:
         {"user": user.id},
     )
     return bool(q.first())
+
+
+def pi_of_group(group: str) -> str:
+    M = model.Membership
+    m = M.query.filter(M.group == group).filter(M.pi).first()
+    return m.user
+
+
+def record_join_form(user: model.User, group: str) -> None:
+    r = model.GroupMember(user=user.id, group=group)
+    model.db.session.add(r)
+
+
+def notify_group_pi_of_join_form(user: model.User, group: model.Group) -> None:
+    g = model.Group.query.get(group)
+    if g is None:
+        raise Exception(
+            f"{user.id} attempted to join group that does not exist: {group}"
+        )
+
+    current_app.logger.info(f"{user.id} has requested to join {group}")
+
+    M = model.Membership
+    m = M.query.filter(M.group == group).filter(M.pi).first()
+    u = get_user(m.user)
+    if u is None:
+        current_app.logger.warning(f"no PI to notify for {user.id} joining {group}")
+        return
+    if u.addr == "":
+        current_app.logger.warning(
+            f"no address to notify PI {u.id} about {user.id} joining {group}"
+        )
+        return
+
+    token = sign_message(["join-group", user.id, group])
+    approve = url_for("join-group-approve", token=token)
+    deny = url_for("join-group-deny", token=token)
+    # TODO include url for membership management page
+    message.send(
+        u.addr,
+        f"{user.id} has requested to join {group}",
+        f"""
+{user.id} has requested to join {group}
+
+click to approve: {approve}
+
+click to deny: {deny}
+        """.strip(),
+    )
+
+
+def get_join_request(
+    user: model.User, group: model.Group
+) -> Optional[model.GroupMember]:
+    return model.GroupMember.query.get((group.id, user.id))
+
+
+def handle_join_request(approved: bool, req: model.GroupMember) -> None:
+    if not approved:
+        model.db.session.delete(req)
+        return
+
+    req.approved = func.now()
+    model.db.session.add(req)
+
+
+def record_tech_join(user: model.User) -> None:
+    r = model.Technologist(user=user.id)
+    model.db.session.add(r)
+
+
+def notify_dev_pi_of_tech_join_form(user: model.User) -> None:
+    M = model.Membership
+    m = M.query.filter(M.group == "DEV").filter(M.pi).first()
+    u = get_user(m.user)
+    current_app.logger.info(f"{user.id} submitted the technologist join form")
+    if u is None:
+        current_app.logger.warning("no DEV PI found")
+        return
+    if u.addr == "":
+        current_app.logger.warning("could not find email address for dev pi")
+        return
+
+    message.send(
+        u.addr,
+        f"technologist join from submission from {user.id}",
+        f"{user.id} submitted the technologist join form",
+    )
 
 
 def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
