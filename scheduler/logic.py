@@ -323,7 +323,7 @@ class GroupEditForm(FlaskForm):
             del self.id
 
 
-def update_group(is_admin: bool, group: model.Group, form: GroupEditForm):
+def update_group(is_admin: bool, group: model.Group, form: GroupEditForm) -> bool:
     group.label = form.label.data
     group.description = form.description.data
     group.addr = form.addr.data
