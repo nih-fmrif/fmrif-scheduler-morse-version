@@ -1,0 +1,12 @@
+{% extends "page.html" %}
+{% import "macros.html" as macros %}
+{% block title %}{{title}}{% endblock %}
+{% block body %}
+	{% if no_entries %}
+		{{ no_entries }}
+	{% else %}
+		<form method=post action="{{ action }}">
+			{{ macros.form(form)}}
+		</form>
+	{% endif %}
+{% endblock %}

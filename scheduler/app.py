@@ -545,7 +545,11 @@ def group_subpage_nav(group: model.Group, su: logic.Group_leader_kind) -> Subpag
                 f"edit [{group.label}]",
                 url_for("group_edit", the_group=group.id),
             ),
-            # TODO membership
+            (
+                group.active and can_edit,
+                f"membership [for {group.label}]",
+                url_for("group_membership", the_group=group.id),
+            ),
         ],
     )
 
@@ -620,6 +624,77 @@ def group_edit(the_group):
         "form": form,
         "action": my_url(),
         "submit": "save",
+        **group_subpage_nav(group, su),
+        **group_breadcrumb(group),
+    }
+
+
+@app.route("/group/<the_group>/membership", methods=["GET", "POST"])
+@login_required
+@active_user
+@render_to("group_membership")
+def group_membership(the_group):
+    group = logic.get_group(the_group)
+    if group is None:
+        abort(404)
+
+    # cannot work with membership of inactive group, even if admin
+    if not group.active:
+        abort(403)
+
+    su = logic.get_group_leader_kind(g.user, group)
+
+    if not ("group_pi" in su or "admin" in su):
+        abort(403)
+
+    members = logic.get_members_of_group(group, all=True)
+
+    form = logic.get_group_membership_form(group, members)
+
+    no_entries = ""
+    # sum evals to 0 if no members or only member is pi
+    if sum(1 for m, pi, active in members if not (pi and active)) == 0:
+        no_entries = "there is no membership data that can be updated for this group"
+
+    if form.validate_on_submit():
+        action, u = form.action()
+        user = logic.get_user(u)
+        if user is None:
+            abort(400, f"{u} does not exist in db")
+        if action == "rm":
+            logic.remove_user_from_group(user, group)
+            model.db.session.commit()
+            flash(f"{user.id} is no longer a member of {group.label}")
+        elif action == "approve" or action == "deny":
+            req = logic.get_join_request(user, group)
+            if req is not None:
+                # if req is None, membership was deleted by someone else
+                # between getting the form and submitting it
+                approved = action == "approve"
+                logic.handle_join_request(approved, req)
+                model.db.session.commit()
+                logic.notify_user_of_join_request_outcome(approved, user, group.label)
+                outcome = "denied membership"
+                if approved:
+                    outcome = "approved"
+                flash(f"{user.id} was {outcome}")
+        elif action == "pi":
+            logic.change_pi_of_group(group, user)
+            model.db.session.commit()
+            flash(f"{user.id} is now PI")
+            if "admin" not in su:
+                # if we were the PI but are not now we no longer have access to this page
+                # but we're still a member of the group
+                return redirect(url_for("group", the_group=group.id))
+
+        # redirect to self so that reloading the page doesn't resubmit the form
+        return redirect(my_url())
+
+    return {
+        "title": f"edit {group.label} membership",
+        "action": my_url(),
+        "form": form,
+        "no_entries": no_entries,
         **group_subpage_nav(group, su),
         **group_breadcrumb(group),
     }

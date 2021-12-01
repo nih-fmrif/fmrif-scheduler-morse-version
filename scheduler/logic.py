@@ -212,7 +212,7 @@ def get_members_of_group(
     q = q.filter(model.Membership.group == group.id)
     q = q.filter(model.Membership.user_active)
     if not all:
-    q = q.filter(model.Membership.approved)
+        q = q.filter(model.Membership.approved)
     return [(r.user, r.pi, r.approved) for r in q.all()]
 
 
@@ -413,6 +413,89 @@ def create_group(form: GroupEditForm) -> bool:
     return True
 
 
+def get_group_membership_form(group: model.Group, membership_data):
+    pi = None
+    active = []
+    pending = []
+    for m, is_pi, is_active in membership_data:
+        if is_pi and is_active:
+            pi = m
+        elif is_active:
+            active.append(m)
+        else:
+            pending.append(m)
+    active.sort()
+    pending.sort()
+
+    choices = active
+    if pi is not None:
+        choices = [pi] + active
+
+    class PrimarySubForm(FlaskForm):
+        members = fields.SelectField(label="members", choices=choices, default=pi)
+        submit = fields.SubmitField(label="change")
+
+    class ActiveMemberForm(FlaskForm):
+        remove = fields.SubmitField(label="remove")
+
+    class ActiveMembersForm(FlaskForm):
+        pass
+
+    for m in active:
+        setattr(
+            ActiveMembersForm,
+            f"member-{m}",
+            fields.FormField(ActiveMemberForm, label=m),
+        )
+
+    class PendingMemberForm(FlaskForm):
+        approve = fields.SubmitField(label="approve")
+        deny = fields.SubmitField(label="deny")
+
+    class PendingMembersForm(FlaskForm):
+        pass
+
+    for m in pending:
+        setattr(
+            PendingMembersForm,
+            f"member-{m}",
+            fields.FormField(PendingMemberForm, label=m),
+        )
+
+    class MembershipForm(FlaskForm):
+        pi = fields.FormField(PrimarySubForm, label="change primary investigator")
+        members = fields.FormField(ActiveMembersForm, label="active members")
+        pending = fields.FormField(PendingMembersForm, label="pending members")
+
+        def action(self):
+            # only one action is possible at a time so grab the first hit and bail
+            if self.pi and self.pi.submit.data:
+                return "pi", self.pi.members.data
+
+            if self.members:
+                for m in self.members:
+                    if m.remove.data:
+                        return "rm", m.label.text
+
+            if self.pending:
+                for m in self.pending:
+                    if m.approve.data:
+                        return "approve", m.label.text
+                    if m.deny.data:
+                        return "deny", m.label.text
+
+            return "none", ""  # form was not submitted yet
+
+    form = MembershipForm()
+    if len(active) == 0:
+        del form.pi  # can't change pi if no other options
+        del form.members
+    if len(pending) == 0:
+        del form.pending
+
+    return form
+
+
 class JoinForm(FlaskForm):
     group = fields.StringField(
         label="department",
@@ -477,7 +560,7 @@ def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
     token = sign_message(["join-group", user.id, group])
     approve = url_for("join-group-approve", token=token)
     deny = url_for("join-group-deny", token=token)
-    # TODO include url for membership management page
+    page = url_for("group_membership", the_group=group)
     message.send(
         u.addr,
         f"{user.id} has requested to join {group}",
@@ -487,6 +570,8 @@ def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
 click to approve: {approve}
 
 click to deny: {deny}
+
+or go to {page} to manage all memberships for {group}.
         """.strip(),
     )
 
@@ -521,6 +606,14 @@ def notify_user_of_join_request_outcome(
         outcome = "approved"
     msg = f"your request to join {group} was {outcome}"
     message.send(user.addr, msg, msg)
+
+
+def remove_user_from_group(user: model.User, group: model.Group) -> None:
+    req = model.GroupMember.query.get((group.id, user.id))
+    if req is None:
+        return  # not a member of group
+    model.db.session.delete(req)
+
 
 def record_tech_join(user: model.User) -> None:
     r = model.Technologist(user=user.id)
@@ -567,3 +660,10 @@ def get_institutes_for_group_edit_form() -> List[Tuple[str, str]]:
     for i in q.all():
         r.append((i.id, i.label))
     return r
+
+
+def change_pi_of_group(group: model.Group, user: model.User) -> None:
+    m = model.PrimaryGroupMember
+    m.query.filter(m.group == group.id).delete()
+    new = m(group=group.id, user=user.id)
+    model.db.session.add(new)
