@@ -574,7 +574,7 @@ def group(the_group):
     members = logic.get_members_of_group(group)
 
     # must be admin, dev_pi, or member
-    if not (len(su) > 0 or any(m == g.user.id for (m, _) in members)):
+    if not (len(su) > 0 or any(m == g.user.id for (m, _, _) in members)):
         abort(403)
 
     return {

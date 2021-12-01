@@ -205,12 +205,15 @@ def get_group(which: str) -> Optional[model.Group]:
     return model.Group.query.get(which)
 
 
-def get_members_of_group(group: model.Group) -> List[Tuple[str, bool]]:
+def get_members_of_group(
+    group: model.Group, all: bool = False
+) -> List[Tuple[str, bool, bool]]:
     q = model.Membership.query
     q = q.filter(model.Membership.group == group.id)
     q = q.filter(model.Membership.user_active)
+    if not all:
     q = q.filter(model.Membership.approved)
-    return [(r.user, r.pi) for r in q.all()]
+    return [(r.user, r.pi, r.approved) for r in q.all()]
 
 
 def is_admin(user: model.User) -> bool:

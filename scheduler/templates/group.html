@@ -7,7 +7,7 @@
 	{% if members %}
 		<h2>Members</h2>
 		<ul>
-			{% for member, pi in members %}
+			{% for member, pi, _ in members %}
 				<li>{{ member }}{% if pi %} (<b>PI</b>){% endif %}</li>
 			{% endfor %}
 		</ul>
