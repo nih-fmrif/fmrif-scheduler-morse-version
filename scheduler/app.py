@@ -490,6 +490,25 @@ def devices():
     }
 
 
+def groups_subpage_nav(is_admin: bool) -> Subpage_links:
+    return subpage_nav(
+        "Show [which groups]",
+        [
+            (True, "active [groups]", url_for("groups")),
+            (
+                is_admin,
+                "inactive [groups]",
+                url_for("groups-inactive"),
+            ),
+            (is_admin, "new group", url_for("group_add")),
+        ],
+    )
+
+
+def groups_breadcrumb() -> Breadcrumb_links:
+    return breadcrumb(("groups", url_for("groups")))
+
+
 @app.route("/groups", methods=["GET"])
 @app.route("/groups/inactive", endpoint="groups-inactive", methods=["GET"])
 @login_required
@@ -516,18 +535,30 @@ def groups():
     return {
         "title": title,
         "groups": groups,
-        **subpage_nav(
-            "Show [which groups]",
-            [
-                (True, "active [groups]", url_for("groups")),
-                (
-                    is_admin,
-                    "inactive [groups]",
-                    url_for("groups-inactive"),
-                ),
-            ],
-        ),
-        **breadcrumb(title),
+        **groups_subpage_nav(is_admin),
+        **groups_breadcrumb(),
+    }
+
+
+@app.route("/groups/add", methods=["GET", "POST"])
+@admin_only
+@render_to("group_edit")
+def group_add():
+    institutes = logic.get_institutes_for_group_edit_form()
+    form = logic.GroupEditForm(institutes, is_admin=True, create=True)
+
+    if form.validate_on_submit():
+        if logic.create_group(form):
+            flash("new group added")
+            return redirect(url_for("group", the_group=form.id.data))
+
+    return {
+        "title": "add new group",
+        "form": form,
+        "action": my_url(),
+        "submit": "create",
+        **groups_subpage_nav(True),
+        **groups_breadcrumb(),
     }
 
 

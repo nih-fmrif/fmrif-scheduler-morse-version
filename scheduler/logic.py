@@ -365,7 +365,42 @@ def update_group(is_admin: bool, group: model.Group, form: GroupEditForm) -> boo
     return True
 
 
-# TODO create group that also attempts to set pi
+def create_group(form: GroupEditForm) -> bool:
+    # make sure pi is valid before we do anything
+    u = get_user(form.pi.data)
+    if u is None:
+        form.pi.errors.append("user not found")
+        return False
+    if not u.active:
+        form.pi.errors.append("only active user may be PI")
+        return False
+
+    # create new group
+    group = model.Group()
+    group.id = form.id.data
+    group.label = form.label.data
+    group.description = form.description.data
+    group.addr = form.addr.data
+    group.link = form.link.data
+    group.inst = form.inst.data
+    if group.inst == "":
+        group.inst = None
+    group.active = form.active.data
+    model.db.session.add(group)
+
+    # add u as member of new group and mark as pi
+    j = model.GroupMember(user=u.id, group=group.id, approved=func.now())
+    model.db.session.add(j)
+    pi = model.PrimaryGroupMember(user=u.id, group=group.id)
+    model.db.session.add(pi)
+
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return False
+    return True
 
 
 class JoinForm(FlaskForm):
