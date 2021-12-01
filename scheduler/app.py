@@ -459,37 +459,6 @@ def handle_join_group(token):
     return to_home
 
 
-@app.route("/devices", methods=["GET"])
-@app.route("/devices/inactive", endpoint="devices-inactive", methods=["GET"])
-@login_required
-@render_to("devices")
-def devices():
-    title = "devices"
-    is_admin = logic.is_admin(g.user)
-    active = request.endpoint == "devices"
-    if not active:
-        if not is_admin:
-            abort(403, "access denied")
-        title += " (inactive)"
-    devices = logic.get_devices(active)
-    return {
-        "title": title,
-        "devices": devices,
-        **subpage_nav(
-            "Show [which devices]",
-            [
-                (True, "active [devices]", url_for("devices")),
-                (
-                    is_admin,
-                    "inactive [devices]",
-                    url_for("devices-inactive"),
-                ),
-            ],
-        ),
-        **breadcrumb(title),
-    }
-
-
 def groups_subpage_nav(is_admin: bool) -> Subpage_links:
     return subpage_nav(
         "Show [which groups]",
@@ -560,14 +529,6 @@ def group_add():
         **groups_subpage_nav(True),
         **groups_breadcrumb(),
     }
-
-
-@app.route("/device/<device>")
-@login_required
-@render_to("device")
-def device(device):
-    # TODO just need this placeholder route
-    return {}
 
 
 # shared subpage nav for all group pages
@@ -661,3 +622,42 @@ def group_edit(the_group):
         **group_subpage_nav(group, su),
         **group_breadcrumb(group),
     }
+
+
+@app.route("/devices", methods=["GET"])
+@app.route("/devices/inactive", endpoint="devices-inactive", methods=["GET"])
+@login_required
+@render_to("devices")
+def devices():
+    title = "devices"
+    is_admin = logic.is_admin(g.user)
+    active = request.endpoint == "devices"
+    if not active:
+        if not is_admin:
+            abort(403, "access denied")
+        title += " (inactive)"
+    devices = logic.get_devices(active)
+    return {
+        "title": title,
+        "devices": devices,
+        **subpage_nav(
+            "Show [which devices]",
+            [
+                (True, "active [devices]", url_for("devices")),
+                (
+                    is_admin,
+                    "inactive [devices]",
+                    url_for("devices-inactive"),
+                ),
+            ],
+        ),
+        **breadcrumb(title),
+    }
+
+
+@app.route("/device/<device>")
+@login_required
+@render_to("device")
+def device(device):
+    # TODO just need this placeholder route
+    return {}
