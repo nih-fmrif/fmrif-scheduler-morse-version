@@ -455,6 +455,7 @@ def handle_join_group(token):
         flash(f"you have approved {u.id} to be a member of {grp.label}")
     else:
         flash(f"you have denied {u.id} from becoming a member {grp.label}")
+    logic.notify_user_of_join_request_outcome(approve, u, grp.label)
 
     return to_home
 

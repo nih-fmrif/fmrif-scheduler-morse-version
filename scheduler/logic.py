@@ -506,6 +506,22 @@ def handle_join_request(approved: bool, req: model.GroupMember) -> None:
     model.db.session.add(req)
 
 
+def notify_user_of_join_request_outcome(
+    approved: bool, user: model.User, group: str
+) -> None:
+    if "@" not in user.addr:
+        # don't have an address to send the notification
+        current_app.logger.info(
+            f"could not notify {user.id} of group membership change due to lack of address on file"
+        )
+        return
+
+    outcome = "denied"
+    if approved:
+        outcome = "approved"
+    msg = f"your request to join {group} was {outcome}"
+    message.send(user.addr, msg, msg)
+
 def record_tech_join(user: model.User) -> None:
     r = model.Technologist(user=user.id)
     model.db.session.add(r)
