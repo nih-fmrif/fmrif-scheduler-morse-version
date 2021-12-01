@@ -38,6 +38,7 @@
 						<li><a href="{{ href }}"{% if request.path == href %} aria-current=page{% endif %}>{{ link | safe}}</a></li>
 					{% endfor %}
 				</ul>
+			</nav>
 		{% endif %}
 		{% block body %}{% endblock %}
 	</main>
