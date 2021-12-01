@@ -306,7 +306,7 @@ class GroupEditForm(FlaskForm):
     )
     # pi is only used on the creation form
     pi = fields.StringField(label="pi", validators=[validators.InputRequired()])
-    active = fields.BooleanField(label="active")
+    active = fields.BooleanField(label="active", default=True)
 
     def __init__(self, institutes, is_admin=False, create=False, *args, **kwargs):
         if create and not is_admin:
