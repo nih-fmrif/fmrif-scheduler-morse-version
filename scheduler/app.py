@@ -220,17 +220,20 @@ def my_url() -> str:
     return url_for(route, **kwargs)
 
 
-def breadcrumb(
-    *routes: Union[str, Tuple[str, str]]
-) -> Dict[str, List[Tuple[str, str]]]:
-    trail = [("home", url_for("home"))]
+Breadcrumb_links = Dict[str, List[Tuple[str, str]]]
+
+
+def breadcrumb(*routes: Union[str, Tuple[str, str]]) -> Breadcrumb_links:
+    trail: List[Tuple[str, str]] = [("home", url_for("home"))]
     if len(routes) > 0:
         routes, last = routes[:-1], routes[-1]
         for r in routes:
             assert not isinstance(r, str)
             trail.append(r)
-        assert isinstance(last, str)
+        if isinstance(last, str):
         trail.append((last, my_url()))
+        else:
+            trail.append(last)
     return {"breadcrumb": trail}
 
 
