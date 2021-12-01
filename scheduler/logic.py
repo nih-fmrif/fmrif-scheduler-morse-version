@@ -8,7 +8,7 @@ import sqlalchemy
 from flask import current_app
 from flask.helpers import url_for
 from flask_wtf import FlaskForm
-import sqlalchemy
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import func
 from wtforms import fields, validators, widgets
@@ -323,6 +323,27 @@ class GroupEditForm(FlaskForm):
             del self.pi
             del self.id
 
+    def set_errors_from_exception(self, ex: IntegrityError) -> None:
+        prefix, c = constraint_of(ex)
+        if prefix == "tlkpdept":
+            if c == "dept_short_key":
+                self.label.errors.append(
+                    "this label is already in use by another group"
+                )
+            elif c == "dept_key":
+                self.description.errors.append(
+                    "this description is already in use by another group"
+                )
+            elif c == "valid_color":  # this should never happen
+                self.color.errors.append("invalid color sent by browser")
+            elif c == "inst_fkey":
+                self.inst.errors.append("invalid institute selected")
+
+
+def constraint_of(ex: IntegrityError) -> Tuple[str, str]:
+    prefix, name = ex.orig.diag.constraint_name.split("_", maxsplit=1)
+    return (prefix, name)
+
 
 def update_group(is_admin: bool, group: model.Group, form: GroupEditForm) -> bool:
     group.label = form.label.data
@@ -337,22 +358,8 @@ def update_group(is_admin: bool, group: model.Group, form: GroupEditForm) -> boo
     model.db.session.add(group)
     try:
         model.db.session.commit()
-    except sqlalchemy.exc.IntegrityError as ex:
-        c = ex.orig.diag.constraint_name
-        if c.startswith("tlkpdept_"):
-            c = c[len("tlkpdept_") :]
-            if c == "dept_short_key":
-                form.label.errors.append(
-                    "this label is already in use by another group"
-                )
-            elif c == "dept_key":
-                form.description.errors.append(
-                    "this description is already in use by another group"
-                )
-            elif c == "valid_color":  # this should never happen
-                form.color.errors.append("invalid color sent by browser")
-            elif c == "inst_fkey":
-                form.inst.errors.append("invalid institute selected")
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
         model.db.session.rollback()
         return False
     return True
