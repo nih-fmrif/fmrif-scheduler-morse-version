@@ -298,7 +298,9 @@ class GroupEditForm(FlaskForm):
         ],
     )
     addr = fields.StringField(
-        label="email", render_kw={"multiple": "multiple", "type": "email"}
+        label="email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
     )
     link = fields.URLField(label="link")
     color = fields.StringField(label="legend color", widget=widgets.ColorInput())
@@ -307,7 +309,11 @@ class GroupEditForm(FlaskForm):
         render_kw={"list": "institutes"},
     )
     # pi is only used on the creation form
-    pi = fields.StringField(label="pi", validators=[validators.InputRequired()])
+    pi = fields.StringField(
+        label="pi",
+        description="must be valid AD name of user in database",
+        validators=[validators.InputRequired()],
+    )
     active = fields.BooleanField(label="active", default=True)
 
     def __init__(self, institutes, is_admin=False, create=False, *args, **kwargs):
