@@ -141,6 +141,16 @@ def active_user(f):
     return protect
 
 
+def admin_only(f):
+    @wraps(f)
+    def protect(*args, **kwargs):
+        if not (g.user is not None and g.user.active and logic.is_admin(g.user)):
+            abort(403, "Access denied: this page is admin only")
+        return f(*args, **kwargs)
+
+    return protect
+
+
 ## Error handlers
 
 
