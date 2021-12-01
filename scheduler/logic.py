@@ -291,9 +291,10 @@ class GroupEditForm(FlaskForm):
     description = fields.StringField(
         label="label, long",
         validators=[
+            validators.InputRequired(),
             validators.Length(
                 max=75, message="long label must be 75 characters or fewer"
-            )
+            ),
         ],
     )
     addr = fields.StringField(
