@@ -453,7 +453,7 @@ def record_join_form(user: model.User, group: str) -> None:
     model.db.session.add(r)
 
 
-def notify_group_pi_of_join_form(user: model.User, group: model.Group) -> None:
+def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
     g = model.Group.query.get(group)
     if g is None:
         raise Exception(
