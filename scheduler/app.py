@@ -231,7 +231,7 @@ def breadcrumb(*routes: Union[str, Tuple[str, str]]) -> Breadcrumb_links:
             assert not isinstance(r, str)
             trail.append(r)
         if isinstance(last, str):
-        trail.append((last, my_url()))
+            trail.append((last, my_url()))
         else:
             trail.append(last)
     return {"breadcrumb": trail}
@@ -531,14 +531,26 @@ def device(device):
 
 # shared subpage nav for all group pages
 def group_subpage_nav(group: model.Group, su: logic.Group_leader_kind) -> Subpage_links:
+    can_edit = "group_pi" in su or "admin" in su
     return subpage_nav(
         "Show",
         [
             # view has further protections, but if you can see any of them you can see it
-            (True, "view", url_for("group", the_group=group)),
-            # TODO edit page
+            (True, f"view [{group.label}]", url_for("group", the_group=group.id)),
+            (
+                can_edit,
+                f"edit [{group.label}]",
+                url_for("group_edit", the_group=group.id),
+            ),
             # TODO membership
         ],
+    )
+
+
+def group_breadcrumb(group: model.Group) -> Breadcrumb_links:
+    return breadcrumb(
+        ("groups", url_for("groups")),
+        (group.label, url_for("group", the_group=group.id)),
     )
 
 
@@ -568,5 +580,43 @@ def group(the_group):
         "members": members,
         "su": su,
         **group_subpage_nav(group, su),
-        **breadcrumb(("groups", url_for("groups")), group.label),
+        **group_breadcrumb(group),
+    }
+
+
+@app.route("/group/<the_group>/edit", methods=["GET", "POST"])
+@login_required
+@active_user
+@render_to("group_edit")
+def group_edit(the_group):
+    group = logic.get_group(the_group)
+    if group is None:
+        abort(404)
+
+    su = logic.get_group_leader_kind(g.user, group)
+    is_admin = "admin" in su
+
+    # only admins and group pi (if group active) can edit
+    if not (is_admin or (group.active and "group_pi" in su)):
+        abort(403)
+
+    institutes = []
+    if is_admin:
+        institutes = logic.get_institutes_for_group_edit_form()
+    form = logic.GroupEditForm(institutes, is_admin=is_admin, obj=group)
+
+    if form.validate_on_submit():
+        if logic.update_group(is_admin, group, form):
+            flash(f"{group.label} has been updated")
+            return redirect(url_for("group", the_group=the_group))
+
+    return {
+        "title": f"edit {group.label}",
+        "group": group,
+        "su": su,
+        "form": form,
+        "action": my_url(),
+        "submit": "save",
+        **group_subpage_nav(group, su),
+        **group_breadcrumb(group),
     }

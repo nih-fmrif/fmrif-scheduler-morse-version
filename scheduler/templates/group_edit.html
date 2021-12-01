@@ -1,0 +1,10 @@
+{% extends "page.html" %}
+{% import "macros.html" as macros %}
+{% block title %}{{title}}{% endblock %}
+{% block body %}
+	<form method=post action="{{ action }}">
+		{{ macros.form(form)}}
+		{{ macros.datalist("institutes", form.institutes) }}
+		<button type=submit>{{ submit }}</button>
+	</form>
+{% endblock %}

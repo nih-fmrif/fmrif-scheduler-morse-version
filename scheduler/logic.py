@@ -6,11 +6,11 @@ from flask.helpers import url_for
 
 import itsdangerous
 from flask import current_app
-from flask_mail import Message
 from flask_wtf import FlaskForm
+import sqlalchemy
 from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import func
-from wtforms import fields, validators
+from wtforms import fields, validators, widgets
 
 import message
 import model
@@ -268,6 +268,98 @@ def read_signed_message(signature: str) -> Optional[List[str]]:
         return None
 
 
+class GroupEditForm(FlaskForm):
+    id = fields.StringField(
+        label="deptcode",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(
+                max=10, message="deptcode must be 10 characters or fewer"
+            ),
+        ],
+    )
+    label = fields.StringField(
+        label="label, short",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(
+                max=20, message="short label must be 20 characters or fewer"
+            ),
+        ],
+    )
+    description = fields.StringField(
+        label="label, long",
+        validators=[
+            validators.Length(
+                max=75, message="long label must be 75 characters or fewer"
+            )
+        ],
+    )
+    addr = fields.StringField(
+        label="email", render_kw={"multiple": "multiple", "type": "email"}
+    )
+    link = fields.URLField(label="link")
+    color = fields.StringField(label="legend color", widget=widgets.ColorInput())
+    inst = fields.StringField(
+        label="institute",
+        render_kw={"list": "institutes"},
+    )
+    # pi is only used on the creation form
+    pi = fields.StringField(label="pi", validators=[validators.InputRequired()])
+    active = fields.BooleanField(label="active")
+
+    def __init__(self, institutes, is_admin=False, create=False, *args, **kwargs):
+        if create and not is_admin:
+            raise Exception("internal error, illegal state")
+        super().__init__(*args, **kwargs)
+        self.institutes = institutes
+        if not is_admin:
+            # only admins can change these
+            del self.inst
+            del self.active
+        if not create:
+            # only use these on creation form
+            del self.pi
+            del self.id
+
+
+def update_group(is_admin: bool, group: model.Group, form: GroupEditForm):
+    group.label = form.label.data
+    group.description = form.description.data
+    group.addr = form.addr.data
+    group.link = form.link.data
+    if is_admin:
+        group.inst = form.inst.data
+        if group.inst == "":
+            group.inst = None
+        group.active = form.active.data
+    model.db.session.add(group)
+    try:
+        model.db.session.commit()
+    except sqlalchemy.exc.IntegrityError as ex:
+        c = ex.orig.diag.constraint_name
+        if c.startswith("tlkpdept_"):
+            c = c[len("tlkpdept_") :]
+            if c == "dept_short_key":
+                form.label.errors.append(
+                    "this label is already in use by another group"
+                )
+            elif c == "dept_key":
+                form.description.errors.append(
+                    "this description is already in use by another group"
+                )
+            elif c == "valid_color":  # this should never happen
+                form.color.errors.append("invalid color sent by browser")
+            elif c == "inst_fkey":
+                form.inst.errors.append("invalid institute selected")
+        model.db.session.rollback()
+        return False
+    return True
+
+
+# TODO create group that also attempts to set pi
+
+
 class JoinForm(FlaskForm):
     group = fields.StringField(
         label="department",
@@ -397,3 +489,12 @@ def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
         {"user": user.id},
     )
     return q.fetchall()
+
+
+def get_institutes_for_group_edit_form() -> List[Tuple[str, str]]:
+    m = model.Inst
+    q = m.query.filter(m.active)
+    r = []
+    for i in q.all():
+        r.append((i.id, i.label))
+    return r
