@@ -700,6 +700,24 @@ def group_membership(the_group):
     }
 
 
+def devices_breadcrumb() -> Breadcrumb_links:
+    return breadcrumb(("devices", url_for("devices")))
+
+
+def devices_subpage_nav(is_admin: bool) -> Subpage_links:
+    return subpage_nav(
+        "Show [which devices]",
+        [
+            (True, "active [devices]", url_for("devices")),
+            (
+                is_admin,
+                "inactive [devices]",
+                url_for("devices-inactive"),
+            ),
+        ],
+    )
+
+
 @app.route("/devices", methods=["GET"])
 @app.route("/devices/inactive", endpoint="devices-inactive", methods=["GET"])
 @login_required
@@ -716,18 +734,8 @@ def devices():
     return {
         "title": title,
         "devices": devices,
-        **subpage_nav(
-            "Show [which devices]",
-            [
-                (True, "active [devices]", url_for("devices")),
-                (
-                    is_admin,
-                    "inactive [devices]",
-                    url_for("devices-inactive"),
-                ),
-            ],
-        ),
-        **breadcrumb(title),
+        **devices_subpage_nav(is_admin),
+        **devices_breadcrumb(),
     }
 
 
