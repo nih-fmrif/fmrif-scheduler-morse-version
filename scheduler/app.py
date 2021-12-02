@@ -131,7 +131,7 @@ def in_network_required(f):
     return protect
 
 
-def active_user(f):
+def active_user_required(f):
     @wraps(f)
     def protect(*args, **kwargs):
         if g.user is None:
@@ -362,7 +362,7 @@ def join_form_subnav(user: model.User) -> Subpage_links:
 
 @app.route("/join", methods=["GET", "POST"])
 @in_network_required
-@active_user
+@active_user_required
 @render_to("join")
 def join_form():
     departments = logic.get_departments_for_join_form(g.user)
@@ -387,7 +387,7 @@ def join_form():
 
 @app.route("/join/tech", methods=["GET", "POST"])
 @in_network_required
-@active_user
+@active_user_required
 @render_to("join_tech")
 def join_form_tech():
     if not logic.show_tech_join_form(g.user):
@@ -411,7 +411,7 @@ def join_form_tech():
 
 @app.route("/join/approve/<token>", endpoint="join-group-approve", methods=["GET"])
 @app.route("/join/deny/<token>", endpoint="join-group-deny", methods=["GET"])
-@active_user
+@active_user_required
 def handle_join_group(token):
     req = logic.read_signed_message(token)
 
@@ -480,7 +480,7 @@ def groups_breadcrumb() -> Breadcrumb_links:
 
 @app.route("/groups", methods=["GET"])
 @app.route("/groups/inactive", endpoint="groups-inactive", methods=["GET"])
-@active_user
+@active_user_required
 @render_to("groups")
 def groups():
     title = "groups"
@@ -560,7 +560,7 @@ def group_breadcrumb(group: model.Group) -> Breadcrumb_links:
 
 
 @app.route("/group/<the_group>")
-@active_user
+@active_user_required
 @render_to("group")
 def group(the_group):
     group = logic.get_group(the_group)
@@ -589,7 +589,7 @@ def group(the_group):
 
 
 @app.route("/group/<the_group>/edit", methods=["GET", "POST"])
-@active_user
+@active_user_required
 @render_to("group_edit")
 def group_edit(the_group):
     group = logic.get_group(the_group)
@@ -626,7 +626,7 @@ def group_edit(the_group):
 
 
 @app.route("/group/<the_group>/membership", methods=["GET", "POST"])
-@active_user
+@active_user_required
 @render_to("group_membership")
 def group_membership(the_group):
     group = logic.get_group(the_group)
@@ -803,7 +803,7 @@ def device(the_device):
 
 
 @app.route("/device/<the_device>/edit", methods=["GET", "POST"])
-@active_user
+@active_user_required
 @render_to("device_edit")
 def device_edit(the_device):
     device = logic.get_device(the_device)
@@ -833,7 +833,7 @@ def device_edit(the_device):
 
 
 @app.route("/device/<the_device>/templates")
-@active_user
+@active_user_required
 @render_to("template")
 def device_tmpl(the_device):
     device = logic.get_device(the_device)
@@ -850,7 +850,7 @@ def device_tmpl(the_device):
 
 
 @app.route("/device/<the_device>/groups")
-@active_user
+@active_user_required
 @render_to("device_groups")
 def device_groups(the_device):
     device = logic.get_device(the_device)
@@ -867,7 +867,7 @@ def device_groups(the_device):
 
 
 @app.route("/device/<the_device>/users")
-@active_user
+@active_user_required
 @render_to("device_users")
 def device_users(the_device):
     device = logic.get_device(the_device)
