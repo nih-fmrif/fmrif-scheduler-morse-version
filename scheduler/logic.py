@@ -386,6 +386,108 @@ def read_signed_message(signature: str) -> Optional[List[str]]:
         return None
 
 
+class DeviceEditForm(FlaskForm):
+    id = fields.StringField(
+        label="scannercode",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(
+                max=5, message="scannercode must be 5 characters or fewer"
+            ),
+        ],
+    )
+
+    label = fields.StringField(
+        label="label",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(max=25, message="label must be 25 characters or fewer"),
+        ],
+    )
+    description = fields.TextAreaField(label="description")
+    addr = fields.StringField(
+        "email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+    tech_addr = fields.StringField(
+        "technologist email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+    med_addr = fields.StringField(
+        "medical email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+    train_addr = fields.StringField(
+        "training email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+
+    active = fields.BooleanField(label="active", default=True)
+
+    def __init__(self, is_admin=False, create=False, *args, **kwargs):
+        if create and not is_admin:
+            raise Exception("internal error, illegal state")
+
+        super().__init__(*args, **kwargs)
+        if not create:
+            del self.id
+        if not is_admin:
+            del self.active
+
+    def set_errors_from_exception(self, ex: IntegrityError) -> None:
+        prefix, c = constraint_of(ex)
+        if prefix == "tlkpscanner":
+            if c == "pkey":
+                self.id.errors("this id is already in use by another device")
+            elif c == "scanner_key":
+                self.label.errors.append(
+                    "this label is already in use by another device"
+                )
+
+
+def update_device(is_admin: bool, device: model.Device, form: DeviceEditForm) -> bool:
+    device.label = form.label.data
+    device.description = form.description.data
+    device.addr = form.addr.data
+    device.tech_addr = form.tech_addr.data
+    device.med_addr = form.med_addr.data
+    device.train_addr = form.train_addr.data
+    if is_admin:
+        device.active = form.active.data
+    model.db.session.add(device)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return False
+    return True
+
+
+def create_device(form: DeviceEditForm) -> Optional[model.Device]:
+    device = model.Device()
+    device.id = form.id.data
+    device.label = form.label.data
+    device.description = form.description.data
+    device.addr = form.addr.data
+    device.tech_addr = form.tech_addr.data
+    device.med_addr = form.med_addr.data
+    device.train_addr = form.train_addr.data
+    device.active = form.active.data
+    model.db.session.add(device)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return None
+    return device
+
+
 class GroupEditForm(FlaskForm):
     id = fields.StringField(
         label="deptcode",

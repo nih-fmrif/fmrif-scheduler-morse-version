@@ -714,6 +714,7 @@ def devices_subpage_nav(is_admin: bool) -> Subpage_links:
                 "inactive [devices]",
                 url_for("devices-inactive"),
             ),
+            (is_admin, "add device", url_for("device_add")),
         ],
     )
 
@@ -739,6 +740,28 @@ def devices():
     }
 
 
+@app.route("/device-add", methods=["POST", "GET"])
+@admin_only
+@render_to("device_edit")
+def device_add():
+    form = logic.DeviceEditForm(is_admin=True, create=True)
+
+    if form.validate_on_submit():
+        device = logic.create_device(form)
+        if device is not None:
+            flash(f"{device.label} created")
+            return redirect(url_for("device", the_device=device.id))
+
+    return {
+        "title": "add new device",
+        "action": my_url(),
+        "submit": "create",
+        "form": form,
+        **devices_subpage_nav(True),
+        **devices_breadcrumb(),
+    }
+
+
 def device_breadcrumb(device: model.Device) -> Breadcrumb_links:
     return breadcrumb(
         ("devices", url_for("devices")),
@@ -747,10 +770,12 @@ def device_breadcrumb(device: model.Device) -> Breadcrumb_links:
 
 
 def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> Subpage_links:
+    edit = perms.admin or (perms.dev_pi and device.active)
     return subpage_nav(
         f"show [{device.label}]",
         [
             (True, "schedule", url_for("device", the_device=device.id)),
+            (edit, "edit [device]", url_for("device_edit", the_device=device.id)),
         ],
     )
 
@@ -776,5 +801,33 @@ def device(the_device):
         **device_subpage_nav(device, perms),
     }
 
+
+@app.route("/device/<the_device>/edit", methods=["GET", "POST"])
+@login_required
+@active_user
+@render_to("device_edit")
+def device_edit(the_device):
+    device = logic.get_device(the_device)
+    if device is None:
+        abort(404)
+
+    perms = logic.get_dev_perms(g.user, device)
+    can_edit = perms.admin or (perms.dev_pi and device.active)
+    if not can_edit:
+        abort(403)
+
+    form = logic.DeviceEditForm(is_admin=perms.admin, obj=device)
+
+    if form.validate_on_submit():
+        if logic.update_device(perms.admin, device, form):
+            flash(f"{device.label} has been updated")
+            return redirect(url_for("device", the_device=the_device))
+
+    return {
+        "device": device,
+        "action": my_url(),
+        "submit": "save",
+        "form": form,
+        **device_breadcrumb(device),
+        **device_subpage_nav(device, perms),
     }
-    return {}
