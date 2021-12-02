@@ -739,9 +739,39 @@ def devices():
     }
 
 
+def device_breadcrumb(device: model.Device) -> Breadcrumb_links:
+    return breadcrumb(
+        ("devices", url_for("devices")),
+        (device.label, url_for("device", the_device=device.id)),
+    )
+
+
+def device_subpage_nav(device: model.Device, su: logic.Leader_kind) -> Subpage_links:
+    return subpage_nav(
+        f"show [{device.label}]",
+        [
+            (True, "schedule", url_for("device", the_device=device.id)),
+        ],
+    )
+
+
 @app.route("/device/<the_device>")
 @login_required
 @render_to("device")
 def device(the_device):
-    # TODO just need this placeholder route
+    device = logic.get_device(the_device)
+    if device is None:
+        abort(404)
+
+    su = logic.get_leader_kind(g.user)
+
+    if not device.active and "admin" not in su:
+        abort(403)
+
+    # TODO display schedule
+    return {
+        "device": device,
+        **device_breadcrumb(device),
+        **device_subpage_nav(device, su),
+    }
     return {}

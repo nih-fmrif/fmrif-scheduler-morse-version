@@ -252,6 +252,31 @@ def get_group_leader_kind(user: model.User, group: model.Group) -> Group_leader_
     return result
 
 
+Leader_kind = Set[Literal["dev_pi", "admin"]]
+
+
+def get_leader_kind(user: model.User) -> Leader_kind:
+    M = model.Membership
+    q = M.query
+    q = M.query
+    q = q.filter(M.user == user.id)
+    q = q.filter(M.user_active)
+    q = q.filter(M.approved)
+    q = q.filter(
+        or_(
+            and_(M.group == "DEV", M.pi),  # pi of DEV group
+            M.group == "admin",  # any admin
+        )
+    )
+    result: Leader_kind = set()
+    for r in q.all():
+        if r.group == "DEV" and r.pi:
+            result.add("dev_pi")
+        elif r.group == "admin":
+            result.add("admin")
+    return result
+
+
 def sign_message(msg: List[str]) -> str:
     signer = current_app.config["URL_SIGNER"]
     return signer.dumps(msg)
@@ -667,3 +692,7 @@ def change_pi_of_group(group: model.Group, user: model.User) -> None:
     m.query.filter(m.group == group.id).delete()
     new = m(group=group.id, user=user.id)
     model.db.session.add(new)
+
+
+def get_device(id: str) -> Optional[model.Device]:
+    return model.Device.query.get(id)
