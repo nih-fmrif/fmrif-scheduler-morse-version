@@ -6,7 +6,7 @@
 		<ul>
 			{% for device in devices %}
 				<li>
-					<a href="{{ url_for("device", device=device.id) }}">{{device.label}}</a>
+					<a href="{{ url_for("device", the_device=device.id) }}">{{device.label}}</a>
 					{% if device.description %}<p>{{device.description}}</p>{% endif %}
 				</li>
 			{% endfor %}

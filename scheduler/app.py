@@ -739,9 +739,9 @@ def devices():
     }
 
 
-@app.route("/device/<device>")
+@app.route("/device/<the_device>")
 @login_required
 @render_to("device")
-def device(device):
+def device(the_device):
     # TODO just need this placeholder route
     return {}
