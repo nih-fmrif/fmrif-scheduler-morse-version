@@ -450,7 +450,9 @@ class GroupEditForm(FlaskForm):
     def set_errors_from_exception(self, ex: IntegrityError) -> None:
         prefix, c = constraint_of(ex)
         if prefix == "tlkpdept":
-            if c == "dept_short_key":
+            if c == "pkey":
+                self.id.errors.append("this id is already in use by another group")
+            elif c == "dept_short_key":
                 self.label.errors.append(
                     "this label is already in use by another group"
                 )
