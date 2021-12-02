@@ -770,12 +770,17 @@ def device_breadcrumb(device: model.Device) -> Breadcrumb_links:
 
 
 def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> Subpage_links:
-    edit = perms.admin or (perms.dev_pi and device.active)
+    can = lambda p: perms.admin or (p and device.active)
+    edit = can(perms.dev_pi)
+    id = device.id
     return subpage_nav(
-        f"show [{device.label}]",
+        f"show",
         [
-            (True, "schedule", url_for("device", the_device=device.id)),
-            (edit, "edit [device]", url_for("device_edit", the_device=device.id)),
+            (True, "schedule", url_for("device", the_device=id)),
+            (can(perms.template), "templates", url_for("device_tmpl", the_device=id)),
+            (edit, "groups", url_for("device_groups", the_device=id)),
+            (edit, "users", url_for("device_users", the_device=id)),
+            (edit, "edit [{device.label}]", url_for("device_edit", the_device=id)),
         ],
     )
 
@@ -831,3 +836,57 @@ def device_edit(the_device):
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
+
+
+@app.route("/device/<the_device>/templates")
+@login_required
+@active_user
+@render_to("template")
+def device_tmpl(the_device):
+    device = logic.get_device(the_device)
+    if device is None:
+        abort(404)
+
+    perms = logic.get_dev_perms(g.user, device)
+    can_edit = perms.admin or (perms.template and device.active)
+    if not can_edit:
+        abort(403)
+
+    # TODO just a placeholder for now
+    pass
+
+
+@app.route("/device/<the_device>/groups")
+@login_required
+@active_user
+@render_to("device_groups")
+def device_groups(the_device):
+    device = logic.get_device(the_device)
+    if device is None:
+        abort(404)
+
+    perms = logic.get_dev_perms(g.user, device)
+    can_edit = perms.admin or (perms.dev_pi and device.active)
+    if not can_edit:
+        abort(403)
+
+    # TODO just a placeholder for now
+    pass
+
+
+@app.route("/device/<the_device>/users")
+@login_required
+@active_user
+@render_to("device_users")
+def device_users(the_device):
+    device = logic.get_device(the_device)
+    if device is None:
+        abort(404)
+
+    perms = logic.get_dev_perms(g.user, device)
+    can_edit = perms.admin or (perms.dev_pi and device.active)
+    if not can_edit:
+        abort(403)
+
+    # TODO just a placeholder for now
+    pass
