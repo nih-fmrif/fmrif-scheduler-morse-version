@@ -252,12 +252,79 @@ def get_group_leader_kind(user: model.User, group: model.Group) -> Group_leader_
     return result
 
 
-Leader_kind = Set[Literal["dev_pi", "admin"]]
+class DevicePerms(object):
+    def __init__(
+        self,
+        is_admin: bool,
+        is_dev_pi: bool,
+        can_edit: bool,
+        ud: Optional[model.UserDevice],
+    ):
+        self._admin = is_admin
+        self._dpi = is_dev_pi
+        self._edit = can_edit
+
+        self._tmpl = False
+        self._slot = False
+        self._tech = False
+        self._med = False
+        self._train = False
+
+        if ud is not None:
+            self._tmpl = ud.templates
+            self._slot = ud.slot
+            self._tech = ud.tech
+            self._med = ud.medical
+            self._train = ud.training
+
+    @property
+    def admin(self) -> bool:
+        return self._admin
+
+    @property
+    def dev_pi(self) -> bool:
+        return self._dpi
+
+    @property
+    def doa(self) -> bool:
+        """doa = dev pi or admin"""
+        return self.dev_pi or self.admin
+
+    @property
+    def edit(self) -> bool:
+        """edit = normal editing capabilities"""
+        return self._edit or self.edit_any
+
+    @property
+    def edit_any(self) -> bool:
+        """edit_any includes regular editing as well as special editing permissions"""
+        return self._slot or self.doa
+
+    @property
+    def template(self) -> bool:
+        return self._slot or self.doa
+
+    @property
+    def tech(self) -> bool:
+        return self._tech or self.doa
+
+    @property
+    def medical(self) -> bool:
+        return self._med or self.doa
+
+    @property
+    def training(self) -> bool:
+        return self._train or self.doa
 
 
-def get_leader_kind(user: model.User) -> Leader_kind:
+def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
+    if not user.active:
+        # read only access
+        return DevicePerms(False, False, False, None)
+
+    # is user an admin or the DEV PI
+    is_admin, is_dpi = False, False
     M = model.Membership
-    q = M.query
     q = M.query
     q = q.filter(M.user == user.id)
     q = q.filter(M.user_active)
@@ -268,13 +335,35 @@ def get_leader_kind(user: model.User) -> Leader_kind:
             M.group == "admin",  # any admin
         )
     )
-    result: Leader_kind = set()
     for r in q.all():
         if r.group == "DEV" and r.pi:
-            result.add("dev_pi")
+            is_dpi = True
         elif r.group == "admin":
-            result.add("admin")
-    return result
+            is_admin = True
+
+    if is_admin or is_dpi:
+        # we don't need any further information, even if it exists, since we can do everything now
+        return DevicePerms(is_admin, is_dpi, True, None)
+
+    # see if we have regular edit access
+    q = model.db.session.execute(
+        """
+            select count(G.deptcode) from devicegroup G where scannercode = :device and exists (
+                select * from membership M where M."user" = :user and M.approved and M."group" = G.deptcode
+            )
+        """,
+        {
+            "user": user.id,
+            "device": device.id,
+        },
+    )
+    # member of at least one department associated with this device
+    can_edit = q.first() > 0
+
+    # grab any special permissions on this device
+    UD = model.UserDevice.query.get((user.id, device.id))
+
+    return DevicePerms(False, False, can_edit, UD)
 
 
 def sign_message(msg: List[str]) -> str:

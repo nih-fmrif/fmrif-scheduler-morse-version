@@ -746,7 +746,7 @@ def device_breadcrumb(device: model.Device) -> Breadcrumb_links:
     )
 
 
-def device_subpage_nav(device: model.Device, su: logic.Leader_kind) -> Subpage_links:
+def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> Subpage_links:
     return subpage_nav(
         f"show [{device.label}]",
         [
@@ -763,15 +763,18 @@ def device(the_device):
     if device is None:
         abort(404)
 
-    su = logic.get_leader_kind(g.user)
+    perms = logic.get_dev_perms(g.user, device)
 
-    if not device.active and "admin" not in su:
+    if not (device.active or perms.admin):
         abort(403)
 
     # TODO display schedule
     return {
         "device": device,
+        "perms": perms,
         **device_breadcrumb(device),
-        **device_subpage_nav(device, su),
+        **device_subpage_nav(device, perms),
+    }
+
     }
     return {}
