@@ -82,6 +82,13 @@ input-set[is-option] {
 		". errors"
 		/ max-content 1fr;
 }
+input-set[label-above] {
+	grid-template:
+		"label"
+		"input"
+		"description"
+		"errors";
+}
 input-description {
 	grid-area: description;
 }

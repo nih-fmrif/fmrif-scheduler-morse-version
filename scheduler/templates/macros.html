@@ -26,7 +26,8 @@
 		</fieldset>
 	{% else %}
 		{% set option = f.type == "BooleanField" or f.type == "_Option" %}
-		<input-set{% if option %} is-option{% endif %}{% if "required" in f.flags %} is-required{% endif %}>
+		{% set above = f.type == "TextAreaField" %}
+		<input-set{% if option %} is-option{% endif %}{% if "required" in f.flags %} is-required{% endif %}{% if above %} label-above{% endif %}>
 			{% if option %}
 				{{ field_render(f) }}
 				{{ f.label }}
