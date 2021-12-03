@@ -341,7 +341,7 @@ def mailing_lists():
         return redirect(url_for("home"))
     return {
         "form": form,
-        "action": url_for("mailing_lists"),
+        "action": my_url(),
         **breadcrumb("list action form"),
     }
 
