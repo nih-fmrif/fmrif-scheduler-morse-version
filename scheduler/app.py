@@ -232,6 +232,12 @@ def my_url() -> str:
     return url_for(route, **kwargs)
 
 
+# arguably a bad name but always used as return to(route)
+# so it makes a lot of sense in context and is very concise
+def to(page: str, *args):
+    return redirect(url_for(page, *args))
+
+
 Breadcrumb_links = Dict[str, List[Tuple[str, str]]]
 
 
@@ -338,7 +344,7 @@ def mailing_lists():
     if form.validate_on_submit():
         logic.process_mailing_list_form_submissions(form)
         flash("your mailing list subscription status has been updated")
-        return redirect(url_for("home"))
+        return to("home")
     return {
         "form": form,
         "action": my_url(),
@@ -375,7 +381,7 @@ def join_form():
         model.db.session.commit()
         logic.notify_group_pi_of_join_form(g.user, form.group.data)
         flash("your membership request is being processed")
-        return redirect(url_for("home"))
+        return to("home")
     return {
         "form": form,
         "action": my_url(),
@@ -402,7 +408,7 @@ def join_form_tech():
         model.db.session.commit()
         logic.notify_dev_pi_of_tech_join_form(g.user)
         flash("you are now a technologist")
-        return redirect(url_for("home"))
+        return to("home")
     return {
         **join_form_subnav(g.user),
         **breadcrumb(("join form", url_for("join_form")), "technologist join form"),
@@ -428,17 +434,15 @@ def handle_join_group(token):
     if grp is None or not grp.active:
         abort(400)
 
-    to_home = redirect(url_for("home"))
-
     # make sure the request is unprocessed
     req = logic.get_join_request(u, grp)
     if req is None:
         flash("this request was previously denied")
-        return to_home
+        return to("home")
 
     if req.approved is not None:
         flash("this request was previously approved")
-        return to_home
+        return to("home")
 
     # make sure current user is PI of g
     pi = logic.pi_of_group(gid)
@@ -456,7 +460,7 @@ def handle_join_group(token):
         flash(f"you have denied {u.id} from becoming a member {grp.label}")
     logic.notify_user_of_join_request_outcome(approve, u, grp.label)
 
-    return to_home
+    return to("home")
 
 
 def groups_subpage_nav(is_admin: bool) -> Subpage_links:
@@ -518,7 +522,7 @@ def group_add():
     if form.validate_on_submit():
         if logic.create_group(form):
             flash("new group added")
-            return redirect(url_for("group", the_group=form.id.data))
+            return to("group", the_group=form.id.data)
 
     return {
         "title": "add new group",
@@ -611,7 +615,7 @@ def group_edit(the_group):
     if form.validate_on_submit():
         if logic.update_group(is_admin, group, form):
             flash(f"{group.label} has been updated")
-            return redirect(url_for("group", the_group=the_group))
+            return to("group", the_group=the_group)
 
     return {
         "title": f"edit {group.label}",
@@ -680,7 +684,7 @@ def group_membership(the_group):
             if "admin" not in su:
                 # if we were the PI but are not now we no longer have access to this page
                 # but we're still a member of the group
-                return redirect(url_for("group", the_group=group.id))
+                return to("group", the_group=group.id)
 
         # redirect to self so that reloading the page doesn't resubmit the form
         return redirect(my_url())
@@ -745,7 +749,7 @@ def device_add():
         device = logic.create_device(form)
         if device is not None:
             flash(f"{device.label} created")
-            return redirect(url_for("device", the_device=device.id))
+            return to("device", the_device=device.id)
 
     return {
         "title": "add new device",
@@ -820,7 +824,7 @@ def device_edit(the_device):
     if form.validate_on_submit():
         if logic.update_device(perms.admin, device, form):
             flash(f"{device.label} has been updated")
-            return redirect(url_for("device", the_device=the_device))
+            return to("device", the_device=the_device)
 
     return {
         "device": device,
