@@ -10,6 +10,7 @@ from flask.wrappers import Response
 from flask_mail import Mail
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
+import sqlalchemy
 
 import config
 import logic
@@ -853,7 +854,7 @@ def device_tmpl(the_device):
     pass
 
 
-@app.route("/device/<the_device>/groups")
+@app.route("/device/<the_device>/groups", methods=["GET", "POST"])
 @active_user_required
 @render_to("device_groups")
 def device_groups(the_device):
@@ -866,8 +867,32 @@ def device_groups(the_device):
     if not can_edit:
         abort(403)
 
-    # TODO just a placeholder for now
-    pass
+    related, unrelated = logic.groups_of_device(device)
+    form = logic.get_device_groups_form(related, unrelated)
+
+    if form.validate_on_submit():
+        act, dept = form.action()
+        if act == "add":
+            logic.add_group_to_device(dept, device.id)
+        elif act == "rm":
+            logic.remove_group_from_device(dept, device.id)
+        try:
+            model.db.session.commit()
+        except sqlalchemy.exc.IntegrityError:
+            # can only fire if adding a pairing that already exists
+            # but that means the request is already fulfilled
+            # so we ignore the error
+            model.db.session.rollback()
+        return redirect(my_url())
+
+    return {
+        "title": f"manage departments of {device.label}",
+        "device": device,
+        "action": my_url(),
+        "form": form,
+        **device_breadcrumb(device),
+        **device_subpage_nav(device, perms),
+    }
 
 
 @app.route("/device/<the_device>/users")

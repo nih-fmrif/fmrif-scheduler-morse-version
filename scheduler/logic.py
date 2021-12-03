@@ -888,3 +888,89 @@ def create_device(form: DeviceEditForm) -> Optional[model.Device]:
         model.db.session.rollback()
         return None
     return device
+
+
+def groups_of_device(device: model.Device) -> Tuple[List[str], List[str]]:
+    # get all active departments and whether they're associated with device
+    q = model.db.session.execute(
+        """
+        select G.deptcode, D.scannercode from tlkpdept G left join devicegroup D using(deptcode)
+        where G.department and G.iscurrent and D.scannercode is null or D.scannercode = :device
+        order by 1
+        """,
+        {"device": device.id},
+    )
+    # bucket results and return
+    related, unrelated = [], []
+    for dept, dev in q.fetchall():
+        if dev == device.id:
+            related.append(dept)
+        else:
+            unrelated.append(dept)
+    return related, unrelated
+
+
+def get_device_groups_form(related: List[str], unrelated: List[str]):
+    class ActiveGroupForm(FlaskForm):
+        remove = fields.SubmitField(label="remove")
+
+    class ActiveGroupsForm(FlaskForm):
+        pass
+
+    for g in related:
+        setattr(
+            ActiveGroupsForm, f"group-{g}", fields.FormField(ActiveGroupForm, label=g)
+        )
+
+    class InactiveGroupForm(FlaskForm):
+        dept = fields.StringField(label="department", render_kw={"list": "departments"})
+        add = fields.SubmitField(label="add")
+
+        def validate(self) -> bool:
+            if not FlaskForm.validate(self):
+                return False
+            if self.add.data and self.dept.data == "":
+                self.dept.errors.append("must select department to add")
+                return False
+            return True
+
+    class Form(FlaskForm):
+        active = fields.FormField(ActiveGroupsForm, label="assigned departments")
+        inactive = fields.FormField(InactiveGroupForm, label="add department")
+
+        def __init__(self, departments, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            # datalist builder expects each entry to be in (key, value) format
+            self.departments = zip(departments, departments)
+
+        def action(self):
+            if self.inactive:
+                if self.inactive.add.data:
+                    return "add", self.inactive.dept.data
+            if self.active:
+                for d in self.active:
+                    if d.remove.data:
+                        return "rm", d.label.text
+            return "", ""
+
+    form = Form(unrelated)
+    if len(related) == 0:
+        del form.active
+    if len(unrelated) == 0:
+        del form.inactive
+
+    return form
+
+
+def add_group_to_device(group: str, device: str):
+    dg = model.DeviceGroup(group=group, device=device)
+    model.db.session.add(dg)
+
+
+def remove_group_from_device(group: str, device: str):
+    dg = model.DeviceGroup.query.get((device, group))
+    if dg is None:
+        # pairing does not exist so request
+        # for pairing to not exit has succeeded
+        return
+    model.db.session.delete(dg)
