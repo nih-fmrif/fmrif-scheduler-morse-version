@@ -16,69 +16,79 @@ import message
 import model
 
 
+def constraint_of(ex: IntegrityError) -> Tuple[str, str]:
+    prefix, name = ex.orig.diag.constraint_name.split("_", maxsplit=1)
+    return (prefix, name)
+
+
+def sign_message(msg: List[str]) -> str:
+    signer = current_app.config["URL_SIGNER"]
+    return signer.dumps(msg)
+
+
+def read_signed_message(signature: str) -> Optional[List[str]]:
+    signer = current_app.config["URL_SIGNER"]
+    try:
+        result = signer.loads(signature)
+        # if we somehow got ill-typed data, consider it a failure
+        if not isinstance(result, list):
+            return None
+        for v in result:
+            if not isinstance(v, str):
+                return None
+        return result
+    except itsdangerous.exc.BadData:
+        return None
+
+
 def discard_user_titles(name: str) -> str:
     # user's name is followed by bracketed titles that can be discarded
     return re.sub(" [([].*$", "", name)
 
 
-def upsert_user(user: str, mail: str, name: str) -> model.User:
-    # upsert the user to ensure the record exists
-    model.db.session.execute(
-        "insert into tlkpresearcher(researchercode) values (:user) on conflict do nothing",
-        {
-            "user": user,
-        },
+def normalize_name(name: str) -> str:
+    if "," in name:
+        last, first = [s.strip() for s in name.split(",", 1)]
+        return f"{first} {last}"
+    return name.strip()
+
+
+def record_tech_join(user: model.User) -> None:
+    r = model.Technologist(user=user.id)
+    model.db.session.add(r)
+
+
+def notify_dev_pi_of_tech_join_form(user: model.User) -> None:
+    M = model.Membership
+    m = M.query.filter(M.group == "DEV").filter(M.pi).first()
+    u = get_user(m.user)
+    current_app.logger.info(f"{user.id} submitted the technologist join form")
+    if u is None:
+        current_app.logger.warning("no DEV PI found")
+        return
+    if u.addr == "":
+        current_app.logger.warning("could not find email address for dev pi")
+        return
+
+    message.send(
+        u.addr,
+        f"technologist join from submission from {user.id}",
+        f"{user.id} submitted the technologist join form",
     )
-    # load the user
-    u = model.User.query.get(user)
-
-    # if the mail and/or display name have changed, update them
-    # as long as the new values are not empty.
-    add = False
-    if mail != "" and u.addr != mail:
-        u.addr = mail
-        add = True
-    if name != "" and u.label != name:
-        u.label = name
-        add = True
-    if add:
-        model.db.session.add(u)
-
-    return u
 
 
-def get_user(user: str) -> Optional[model.User]:
-    return model.User.query.get(user)
-
-
-def create_reset_token_for(user: str) -> str:
-    token = secrets.token_urlsafe(64)
-    # delete any previous tokens for user
-    model.ResetTokens.query.filter(model.ResetTokens.for_user == user).delete()
-    t = model.ResetTokens(token=token, for_user=user)
-    # this can technically fail if we happen to generate the same token twice
-    # but the odds against that are so great that it would actually be cool
-    # if it happened
-    model.db.session.add(t)
-    # this is only expected to be called from cli so save it now
-    # let any fk errors bubble up
-    model.db.session.commit()
-    return token
-
-
-def get_user_from_token(token: str) -> Optional[model.User]:
-    # delete all old tokens before we check
-    yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    model.ResetTokens.query.filter(model.ResetTokens.issued < yesterday).delete()
-    # see if the token exists
-    rt = model.ResetTokens.query.get(token)
-    if rt is None:
-        return None
-    # if it does grab the user and delete the token
-    user = rt.user
-    model.db.session.delete(rt)
-    model.db.session.commit()
-    return user
+def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
+    # get all active departments (and DEV group) that user is NOT a current or pending member of.
+    q = model.db.session.execute(
+        """
+        select D.deptcode, D.dept from tlkpdept D
+        where D.iscurrent and (D.department or D.deptcode = 'Dev') and deptcode not in (
+            select M."group" from membership M where M."user" = :user
+        ) order by 2;
+    """,
+        {"user": user.id},
+    )
+    return q.fetchall()
 
 
 def get_mailing_list_form(**kwargs):
@@ -152,25 +162,185 @@ def process_mailing_list_form_submissions(form):
         message.send(listserv, "Automated list change", msg, sender=addr)
 
 
-def normalize_name(name: str) -> str:
-    if "," in name:
-        last, first = [s.strip() for s in name.split(",", 1)]
-        return f"{first} {last}"
-    return name.strip()
-
-
 def format_mailing_list_message(sub: bool, which_list: str, name: str) -> str:
     if sub:
         return f"subscribe {which_list} {name}"
     return f"signoff {which_list}"
 
 
-def get_devices(active: bool) -> List[model.Device]:
-    return (
-        model.Device.query.filter(model.Device.active == active)
-        .order_by(model.Device.label)
-        .all()
+class JoinForm(FlaskForm):
+    group = fields.StringField(
+        label="department",
+        validators=[validators.InputRequired()],
+        render_kw={"list": "departments"},
     )
+
+    def __init__(self, departments, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.departments = departments
+
+
+def show_tech_join_form(user: model.User) -> bool:
+    # return a row if user is in DEV unless they have already submitted the form
+    q = model.db.session.execute(
+        """
+        select researchercode from groupmembers G 
+        where G.deptcode = 'DEV'
+        and G.researchercode = :user
+        and approved is not null
+        except
+        select researchercode from technologist T
+        where T.researchercode = :user
+        """,
+        {"user": user.id},
+    )
+    return bool(q.first())
+
+
+def record_join_form(user: model.User, group: str) -> None:
+    r = model.GroupMember(user=user.id, group=group)
+    model.db.session.add(r)
+
+
+def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
+    g = model.Group.query.get(group)
+    if g is None:
+        raise Exception(
+            f"{user.id} attempted to join group that does not exist: {group}"
+        )
+
+    current_app.logger.info(f"{user.id} has requested to join {group}")
+
+    M = model.Membership
+    m = M.query.filter(M.group == group).filter(M.pi).first()
+    u = get_user(m.user)
+    if u is None:
+        current_app.logger.warning(f"no PI to notify for {user.id} joining {group}")
+        return
+    if u.addr == "":
+        current_app.logger.warning(
+            f"no address to notify PI {u.id} about {user.id} joining {group}"
+        )
+        return
+
+    token = sign_message(["join-group", user.id, group])
+    approve = url_for("join-group-approve", token=token)
+    deny = url_for("join-group-deny", token=token)
+    page = url_for("group_membership", the_group=group)
+    message.send(
+        u.addr,
+        f"{user.id} has requested to join {group}",
+        f"""
+{user.id} has requested to join {group}
+
+click to approve: {approve}
+
+click to deny: {deny}
+
+or go to {page} to manage all memberships for {group}.
+        """.strip(),
+    )
+
+
+def get_join_request(
+    user: model.User, group: model.Group
+) -> Optional[model.GroupMember]:
+    return model.GroupMember.query.get((group.id, user.id))
+
+
+def handle_join_request(approved: bool, req: model.GroupMember) -> None:
+    if not approved:
+        model.db.session.delete(req)
+        return
+
+    req.approved = func.now()
+    model.db.session.add(req)
+
+
+def notify_user_of_join_request_outcome(
+    approved: bool, user: model.User, group: str
+) -> None:
+    if "@" not in user.addr:
+        # don't have an address to send the notification
+        current_app.logger.info(
+            f"could not notify {user.id} of group membership change due to lack of address on file"
+        )
+        return
+
+    outcome = "denied"
+    if approved:
+        outcome = "approved"
+    msg = f"your request to join {group} was {outcome}"
+    message.send(user.addr, msg, msg)
+
+
+def get_user(user: str) -> Optional[model.User]:
+    return model.User.query.get(user)
+
+
+def upsert_user(user: str, mail: str, name: str) -> model.User:
+    # upsert the user to ensure the record exists
+    model.db.session.execute(
+        "insert into tlkpresearcher(researchercode) values (:user) on conflict do nothing",
+        {
+            "user": user,
+        },
+    )
+    # load the user
+    u = model.User.query.get(user)
+
+    # if the mail and/or display name have changed, update them
+    # as long as the new values are not empty.
+    add = False
+    if mail != "" and u.addr != mail:
+        u.addr = mail
+        add = True
+    if name != "" and u.label != name:
+        u.label = name
+        add = True
+    if add:
+        model.db.session.add(u)
+
+    return u
+
+
+def is_admin(user: model.User) -> bool:
+    q = model.Membership.query
+    q = q.filter(model.Membership.user == user.id)
+    q = q.filter(model.Membership.group == "admin")
+    q = q.filter(model.Membership.user_active)
+    q = q.filter(model.Membership.approved)
+    return bool(q.first())
+
+
+def create_reset_token_for(user: str) -> str:
+    token = secrets.token_urlsafe(64)
+    # delete any previous tokens for user
+    model.ResetTokens.query.filter(model.ResetTokens.for_user == user).delete()
+    t = model.ResetTokens(token=token, for_user=user)
+    # this can technically fail if we happen to generate the same token twice
+    # but the odds against that are so great that it would actually be cool
+    # if it happened
+    model.db.session.add(t)
+    # this is only expected to be called from cli so save it now
+    # let any fk errors bubble up
+    model.db.session.commit()
+    return token
+
+
+def get_user_from_token(token: str) -> Optional[model.User]:
+    # delete all old tokens before we check
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    model.ResetTokens.query.filter(model.ResetTokens.issued < yesterday).delete()
+    # see if the token exists
+    rt = model.ResetTokens.query.get(token)
+    if rt is None:
+        return None
+    # if it does grab the user and delete the token
+    user = rt.user
+    model.db.session.delete(rt)
+    model.db.session.commit()
+    return user
 
 
 def get_memberships(user: model.User) -> List[str]:
@@ -182,6 +352,23 @@ def get_memberships(user: model.User) -> List[str]:
     q = q.filter(model.Membership.approved)
     ms = q.order_by(model.Membership.group).all()
     return [m.group for m in ms]
+
+
+def get_group(which: str) -> Optional[model.Group]:
+    return model.Group.query.get(which)
+
+
+def pi_of_group(group: str) -> str:
+    M = model.Membership
+    m = M.query.filter(M.group == group).filter(M.pi).first()
+    return m.user
+
+
+def change_pi_of_group(group: model.Group, user: model.User) -> None:
+    m = model.PrimaryGroupMember
+    m.query.filter(m.group == group.id).delete()
+    new = m(group=group.id, user=user.id)
+    model.db.session.add(new)
 
 
 def get_all_groups_with_members(active: bool) -> List[model.Group]:
@@ -200,10 +387,6 @@ def get_groups(which: List[str]) -> List[model.Group]:
     return q.order_by(model.Group.label).all()
 
 
-def get_group(which: str) -> Optional[model.Group]:
-    return model.Group.query.get(which)
-
-
 def get_members_of_group(
     group: model.Group, all: bool = False
 ) -> List[Tuple[str, bool, bool]]:
@@ -215,13 +398,11 @@ def get_members_of_group(
     return [(r.user, r.pi, r.approved) for r in q.all()]
 
 
-def is_admin(user: model.User) -> bool:
-    q = model.Membership.query
-    q = q.filter(model.Membership.user == user.id)
-    q = q.filter(model.Membership.group == "admin")
-    q = q.filter(model.Membership.user_active)
-    q = q.filter(model.Membership.approved)
-    return bool(q.first())
+def remove_user_from_group(user: model.User, group: model.Group) -> None:
+    req = model.GroupMember.query.get((group.id, user.id))
+    if req is None:
+        return  # not a member of group
+    model.db.session.delete(req)
 
 
 Group_leader_kind = Set[Literal["group_pi", "dev_pi", "admin"]]
@@ -249,242 +430,6 @@ def get_group_leader_kind(user: model.User, group: model.Group) -> Group_leader_
         elif r.group == "admin":
             result.add("admin")
     return result
-
-
-class DevicePerms(object):
-    def __init__(
-        self,
-        is_admin: bool,
-        is_dev_pi: bool,
-        can_edit: bool,
-        ud: Optional[model.UserDevice],
-    ):
-        self._admin = is_admin
-        self._dpi = is_dev_pi
-        self._edit = can_edit
-
-        self._tmpl = False
-        self._slot = False
-        self._tech = False
-        self._med = False
-        self._train = False
-
-        if ud is not None:
-            self._tmpl = ud.templates
-            self._slot = ud.slot
-            self._tech = ud.tech
-            self._med = ud.medical
-            self._train = ud.training
-
-    @property
-    def admin(self) -> bool:
-        return self._admin
-
-    @property
-    def dev_pi(self) -> bool:
-        return self._dpi
-
-    @property
-    def doa(self) -> bool:
-        """doa = dev pi or admin"""
-        return self.dev_pi or self.admin
-
-    @property
-    def edit(self) -> bool:
-        """edit = normal editing capabilities"""
-        return self._edit or self.edit_any
-
-    @property
-    def edit_any(self) -> bool:
-        """edit_any includes regular editing as well as special editing permissions"""
-        return self._slot or self.doa
-
-    @property
-    def template(self) -> bool:
-        return self._slot or self.doa
-
-    @property
-    def tech(self) -> bool:
-        return self._tech or self.doa
-
-    @property
-    def medical(self) -> bool:
-        return self._med or self.doa
-
-    @property
-    def training(self) -> bool:
-        return self._train or self.doa
-
-
-def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
-    if not user.active:
-        # read only access
-        return DevicePerms(False, False, False, None)
-
-    # is user an admin or the DEV PI
-    is_admin, is_dpi = False, False
-    M = model.Membership
-    q = M.query
-    q = q.filter(M.user == user.id)
-    q = q.filter(M.user_active)
-    q = q.filter(M.approved)
-    q = q.filter(
-        or_(
-            and_(M.group == "DEV", M.pi),  # pi of DEV group
-            M.group == "admin",  # any admin
-        )
-    )
-    for r in q.all():
-        if r.group == "DEV" and r.pi:
-            is_dpi = True
-        elif r.group == "admin":
-            is_admin = True
-
-    if is_admin or is_dpi:
-        # we don't need any further information, even if it exists, since we can do everything now
-        return DevicePerms(is_admin, is_dpi, True, None)
-
-    # see if we have regular edit access
-    q = model.db.session.execute(
-        """
-            select count(G.deptcode) from devicegroup G where scannercode = :device and exists (
-                select * from membership M where M."user" = :user and M.approved and M."group" = G.deptcode
-            )
-        """,
-        {
-            "user": user.id,
-            "device": device.id,
-        },
-    )
-    # member of at least one department associated with this device
-    can_edit = q.first() > 0
-
-    # grab any special permissions on this device
-    UD = model.UserDevice.query.get((user.id, device.id))
-
-    return DevicePerms(False, False, can_edit, UD)
-
-
-def sign_message(msg: List[str]) -> str:
-    signer = current_app.config["URL_SIGNER"]
-    return signer.dumps(msg)
-
-
-def read_signed_message(signature: str) -> Optional[List[str]]:
-    signer = current_app.config["URL_SIGNER"]
-    try:
-        result = signer.loads(signature)
-        # if we somehow got ill-typed data, consider it a failure
-        if not isinstance(result, list):
-            return None
-        for v in result:
-            if not isinstance(v, str):
-                return None
-        return result
-    except itsdangerous.exc.BadData:
-        return None
-
-
-class DeviceEditForm(FlaskForm):
-    id = fields.StringField(
-        label="scannercode",
-        validators=[
-            validators.InputRequired(),
-            validators.Length(
-                max=5, message="scannercode must be 5 characters or fewer"
-            ),
-        ],
-    )
-
-    label = fields.StringField(
-        label="label",
-        validators=[
-            validators.InputRequired(),
-            validators.Length(max=25, message="label must be 25 characters or fewer"),
-        ],
-    )
-    description = fields.TextAreaField(label="description")
-    addr = fields.StringField(
-        "email",
-        description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
-    )
-    tech_addr = fields.StringField(
-        "technologist email",
-        description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
-    )
-    med_addr = fields.StringField(
-        "medical email",
-        description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
-    )
-    train_addr = fields.StringField(
-        "training email",
-        description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
-    )
-
-    active = fields.BooleanField(label="active", default=True)
-
-    def __init__(self, is_admin=False, create=False, *args, **kwargs):
-        if create and not is_admin:
-            raise Exception("internal error, illegal state")
-
-        super().__init__(*args, **kwargs)
-        if not create:
-            del self.id
-        if not is_admin:
-            del self.active
-
-    def set_errors_from_exception(self, ex: IntegrityError) -> None:
-        prefix, c = constraint_of(ex)
-        if prefix == "tlkpscanner":
-            if c == "pkey":
-                self.id.errors("this id is already in use by another device")
-            elif c == "scanner_key":
-                self.label.errors.append(
-                    "this label is already in use by another device"
-                )
-
-
-def update_device(is_admin: bool, device: model.Device, form: DeviceEditForm) -> bool:
-    device.label = form.label.data
-    device.description = form.description.data
-    device.addr = form.addr.data
-    device.tech_addr = form.tech_addr.data
-    device.med_addr = form.med_addr.data
-    device.train_addr = form.train_addr.data
-    if is_admin:
-        device.active = form.active.data
-    model.db.session.add(device)
-    try:
-        model.db.session.commit()
-    except IntegrityError as ex:
-        form.set_errors_from_exception(ex)
-        model.db.session.rollback()
-        return False
-    return True
-
-
-def create_device(form: DeviceEditForm) -> Optional[model.Device]:
-    device = model.Device()
-    device.id = form.id.data
-    device.label = form.label.data
-    device.description = form.description.data
-    device.addr = form.addr.data
-    device.tech_addr = form.tech_addr.data
-    device.med_addr = form.med_addr.data
-    device.train_addr = form.train_addr.data
-    device.active = form.active.data
-    model.db.session.add(device)
-    try:
-        model.db.session.commit()
-    except IntegrityError as ex:
-        form.set_errors_from_exception(ex)
-        model.db.session.rollback()
-        return None
-    return device
 
 
 class GroupEditForm(FlaskForm):
@@ -567,9 +512,13 @@ class GroupEditForm(FlaskForm):
                 self.inst.errors.append("invalid institute selected")
 
 
-def constraint_of(ex: IntegrityError) -> Tuple[str, str]:
-    prefix, name = ex.orig.diag.constraint_name.split("_", maxsplit=1)
-    return (prefix, name)
+def get_institutes_for_group_edit_form() -> List[Tuple[str, str]]:
+    m = model.Inst
+    q = m.query.filter(m.active)
+    r = []
+    for i in q.all():
+        r.append((i.id, i.label))
+    return r
 
 
 def update_group(is_admin: bool, group: model.Group, form: GroupEditForm) -> bool:
@@ -713,178 +662,229 @@ def get_group_membership_form(group: model.Group, membership_data):
     return form
 
 
-class JoinForm(FlaskForm):
-    group = fields.StringField(
-        label="department",
-        validators=[validators.InputRequired()],
-        render_kw={"list": "departments"},
-    )
-
-    def __init__(self, departments, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.departments = departments
-
-
-def show_tech_join_form(user: model.User) -> bool:
-    # return a row if user is in DEV unless they have already submitted the form
-    q = model.db.session.execute(
-        """
-        select researchercode from groupmembers G 
-        where G.deptcode = 'DEV'
-        and G.researchercode = :user
-        and approved is not null
-        except
-        select researchercode from technologist T
-        where T.researchercode = :user
-        """,
-        {"user": user.id},
-    )
-    return bool(q.first())
-
-
-def pi_of_group(group: str) -> str:
-    M = model.Membership
-    m = M.query.filter(M.group == group).filter(M.pi).first()
-    return m.user
-
-
-def record_join_form(user: model.User, group: str) -> None:
-    r = model.GroupMember(user=user.id, group=group)
-    model.db.session.add(r)
-
-
-def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
-    g = model.Group.query.get(group)
-    if g is None:
-        raise Exception(
-            f"{user.id} attempted to join group that does not exist: {group}"
-        )
-
-    current_app.logger.info(f"{user.id} has requested to join {group}")
-
-    M = model.Membership
-    m = M.query.filter(M.group == group).filter(M.pi).first()
-    u = get_user(m.user)
-    if u is None:
-        current_app.logger.warning(f"no PI to notify for {user.id} joining {group}")
-        return
-    if u.addr == "":
-        current_app.logger.warning(
-            f"no address to notify PI {u.id} about {user.id} joining {group}"
-        )
-        return
-
-    token = sign_message(["join-group", user.id, group])
-    approve = url_for("join-group-approve", token=token)
-    deny = url_for("join-group-deny", token=token)
-    page = url_for("group_membership", the_group=group)
-    message.send(
-        u.addr,
-        f"{user.id} has requested to join {group}",
-        f"""
-{user.id} has requested to join {group}
-
-click to approve: {approve}
-
-click to deny: {deny}
-
-or go to {page} to manage all memberships for {group}.
-        """.strip(),
-    )
-
-
-def get_join_request(
-    user: model.User, group: model.Group
-) -> Optional[model.GroupMember]:
-    return model.GroupMember.query.get((group.id, user.id))
-
-
-def handle_join_request(approved: bool, req: model.GroupMember) -> None:
-    if not approved:
-        model.db.session.delete(req)
-        return
-
-    req.approved = func.now()
-    model.db.session.add(req)
-
-
-def notify_user_of_join_request_outcome(
-    approved: bool, user: model.User, group: str
-) -> None:
-    if "@" not in user.addr:
-        # don't have an address to send the notification
-        current_app.logger.info(
-            f"could not notify {user.id} of group membership change due to lack of address on file"
-        )
-        return
-
-    outcome = "denied"
-    if approved:
-        outcome = "approved"
-    msg = f"your request to join {group} was {outcome}"
-    message.send(user.addr, msg, msg)
-
-
-def remove_user_from_group(user: model.User, group: model.Group) -> None:
-    req = model.GroupMember.query.get((group.id, user.id))
-    if req is None:
-        return  # not a member of group
-    model.db.session.delete(req)
-
-
-def record_tech_join(user: model.User) -> None:
-    r = model.Technologist(user=user.id)
-    model.db.session.add(r)
-
-
-def notify_dev_pi_of_tech_join_form(user: model.User) -> None:
-    M = model.Membership
-    m = M.query.filter(M.group == "DEV").filter(M.pi).first()
-    u = get_user(m.user)
-    current_app.logger.info(f"{user.id} submitted the technologist join form")
-    if u is None:
-        current_app.logger.warning("no DEV PI found")
-        return
-    if u.addr == "":
-        current_app.logger.warning("could not find email address for dev pi")
-        return
-
-    message.send(
-        u.addr,
-        f"technologist join from submission from {user.id}",
-        f"{user.id} submitted the technologist join form",
-    )
-
-
-def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
-    # get all active departments (and DEV group) that user is NOT a current or pending member of.
-    q = model.db.session.execute(
-        """
-        select D.deptcode, D.dept from tlkpdept D
-        where D.iscurrent and (D.department or D.deptcode = 'Dev') and deptcode not in (
-            select M."group" from membership M where M."user" = :user
-        ) order by 2;
-    """,
-        {"user": user.id},
-    )
-    return q.fetchall()
-
-
-def get_institutes_for_group_edit_form() -> List[Tuple[str, str]]:
-    m = model.Inst
-    q = m.query.filter(m.active)
-    r = []
-    for i in q.all():
-        r.append((i.id, i.label))
-    return r
-
-
-def change_pi_of_group(group: model.Group, user: model.User) -> None:
-    m = model.PrimaryGroupMember
-    m.query.filter(m.group == group.id).delete()
-    new = m(group=group.id, user=user.id)
-    model.db.session.add(new)
-
-
 def get_device(id: str) -> Optional[model.Device]:
     return model.Device.query.get(id)
+
+
+def get_devices(active: bool) -> List[model.Device]:
+    return (
+        model.Device.query.filter(model.Device.active == active)
+        .order_by(model.Device.label)
+        .all()
+    )
+
+
+class DevicePerms(object):
+    def __init__(
+        self,
+        is_admin: bool,
+        is_dev_pi: bool,
+        can_edit: bool,
+        ud: Optional[model.UserDevice],
+    ):
+        self._admin = is_admin
+        self._dpi = is_dev_pi
+        self._edit = can_edit
+
+        self._tmpl = False
+        self._slot = False
+        self._tech = False
+        self._med = False
+        self._train = False
+
+        if ud is not None:
+            self._tmpl = ud.templates
+            self._slot = ud.slot
+            self._tech = ud.tech
+            self._med = ud.medical
+            self._train = ud.training
+
+    @property
+    def admin(self) -> bool:
+        return self._admin
+
+    @property
+    def dev_pi(self) -> bool:
+        return self._dpi
+
+    @property
+    def doa(self) -> bool:
+        """doa = dev pi or admin"""
+        return self.dev_pi or self.admin
+
+    @property
+    def edit(self) -> bool:
+        """edit = normal editing capabilities"""
+        return self._edit or self.edit_any
+
+    @property
+    def edit_any(self) -> bool:
+        """edit_any includes regular editing as well as special editing permissions"""
+        return self._slot or self.doa
+
+    @property
+    def template(self) -> bool:
+        return self._slot or self.doa
+
+    @property
+    def tech(self) -> bool:
+        return self._tech or self.doa
+
+    @property
+    def medical(self) -> bool:
+        return self._med or self.doa
+
+    @property
+    def training(self) -> bool:
+        return self._train or self.doa
+
+
+def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
+    if not user.active:
+        # read only access
+        return DevicePerms(False, False, False, None)
+
+    # is user an admin or the DEV PI
+    is_admin, is_dpi = False, False
+    M = model.Membership
+    q = M.query
+    q = q.filter(M.user == user.id)
+    q = q.filter(M.user_active)
+    q = q.filter(M.approved)
+    q = q.filter(
+        or_(
+            and_(M.group == "DEV", M.pi),  # pi of DEV group
+            M.group == "admin",  # any admin
+        )
+    )
+    for r in q.all():
+        if r.group == "DEV" and r.pi:
+            is_dpi = True
+        elif r.group == "admin":
+            is_admin = True
+
+    if is_admin or is_dpi:
+        # we don't need any further information, even if it exists, since we can do everything now
+        return DevicePerms(is_admin, is_dpi, True, None)
+
+    # see if we have regular edit access
+    q = model.db.session.execute(
+        """
+            select count(G.deptcode) from devicegroup G where scannercode = :device and exists (
+                select * from membership M where M."user" = :user and M.approved and M."group" = G.deptcode
+            )
+        """,
+        {
+            "user": user.id,
+            "device": device.id,
+        },
+    )
+    # member of at least one department associated with this device
+    can_edit = q.first() > 0
+
+    # grab any special permissions on this device
+    UD = model.UserDevice.query.get((user.id, device.id))
+
+    return DevicePerms(False, False, can_edit, UD)
+
+
+class DeviceEditForm(FlaskForm):
+    id = fields.StringField(
+        label="scannercode",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(
+                max=5, message="scannercode must be 5 characters or fewer"
+            ),
+        ],
+    )
+
+    label = fields.StringField(
+        label="label",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(max=25, message="label must be 25 characters or fewer"),
+        ],
+    )
+    description = fields.TextAreaField(label="description")
+    addr = fields.StringField(
+        "email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+    tech_addr = fields.StringField(
+        "technologist email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+    med_addr = fields.StringField(
+        "medical email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+    train_addr = fields.StringField(
+        "training email",
+        description="multiple email addresses may be separated by commas",
+        render_kw={"multiple": "multiple", "type": "email"},
+    )
+
+    active = fields.BooleanField(label="active", default=True)
+
+    def __init__(self, is_admin=False, create=False, *args, **kwargs):
+        if create and not is_admin:
+            raise Exception("internal error, illegal state")
+
+        super().__init__(*args, **kwargs)
+        if not create:
+            del self.id
+        if not is_admin:
+            del self.active
+
+    def set_errors_from_exception(self, ex: IntegrityError) -> None:
+        prefix, c = constraint_of(ex)
+        if prefix == "tlkpscanner":
+            if c == "pkey":
+                self.id.errors("this id is already in use by another device")
+            elif c == "scanner_key":
+                self.label.errors.append(
+                    "this label is already in use by another device"
+                )
+
+
+def update_device(is_admin: bool, device: model.Device, form: DeviceEditForm) -> bool:
+    device.label = form.label.data
+    device.description = form.description.data
+    device.addr = form.addr.data
+    device.tech_addr = form.tech_addr.data
+    device.med_addr = form.med_addr.data
+    device.train_addr = form.train_addr.data
+    if is_admin:
+        device.active = form.active.data
+    model.db.session.add(device)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return False
+    return True
+
+
+def create_device(form: DeviceEditForm) -> Optional[model.Device]:
+    device = model.Device()
+    device.id = form.id.data
+    device.label = form.label.data
+    device.description = form.description.data
+    device.addr = form.addr.data
+    device.tech_addr = form.tech_addr.data
+    device.med_addr = form.med_addr.data
+    device.train_addr = form.train_addr.data
+    device.active = form.active.data
+    model.db.session.add(device)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return None
+    return device
