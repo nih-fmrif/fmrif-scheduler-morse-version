@@ -235,8 +235,8 @@ def my_url() -> str:
 
 # arguably a bad name but always used as return to(route)
 # so it makes a lot of sense in context and is very concise
-def to(page: str, *args):
-    return redirect(url_for(page, *args))
+def to(page: str, **kwargs):
+    return redirect(url_for(page, **kwargs))
 
 
 Breadcrumb_links = Dict[str, List[Tuple[str, str]]]
