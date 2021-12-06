@@ -172,7 +172,7 @@ class JoinForm(FlaskForm):
     group = fields.StringField(
         label="department",
         validators=[validators.InputRequired()],
-        render_kw={"list": "departments"},
+        render_kw={"list": "departments", "autocomplete": "off"},
     )
 
     def __init__(self, departments, *args, **kwargs):
@@ -441,6 +441,7 @@ class GroupEditForm(FlaskForm):
                 max=10, message="deptcode must be 10 characters or fewer"
             ),
         ],
+        render_kw={"autocomplete": "off"},
     )
     label = fields.StringField(
         label="label, short",
@@ -450,6 +451,7 @@ class GroupEditForm(FlaskForm):
                 max=20, message="short label must be 20 characters or fewer"
             ),
         ],
+        render_kw={"autocomplete": "off"},
     )
     description = fields.StringField(
         label="label, long",
@@ -459,23 +461,25 @@ class GroupEditForm(FlaskForm):
                 max=75, message="long label must be 75 characters or fewer"
             ),
         ],
+        render_kw={"autocomplete": "off"},
     )
     addr = fields.StringField(
         label="email",
         description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
+        render_kw={"multiple": "multiple", "type": "email", "autocomplete": "off"},
     )
     link = fields.URLField(label="link")
     color = fields.StringField(label="legend color", widget=widgets.ColorInput())
     inst = fields.StringField(
         label="institute",
-        render_kw={"list": "institutes"},
+        render_kw={"list": "institutes", "autocomplete": "off"},
     )
     # pi is only used on the creation form
     pi = fields.StringField(
         label="pi",
         description="must be valid AD name of user in database",
         validators=[validators.InputRequired()],
+        render_kw={"autocomplete": "off"},
     )
     active = fields.BooleanField(label="active", default=True)
 
@@ -797,6 +801,7 @@ class DeviceEditForm(FlaskForm):
                 max=5, message="scannercode must be 5 characters or fewer"
             ),
         ],
+        render_kw={"autocomplete": "off"},
     )
 
     label = fields.StringField(
@@ -805,27 +810,28 @@ class DeviceEditForm(FlaskForm):
             validators.InputRequired(),
             validators.Length(max=25, message="label must be 25 characters or fewer"),
         ],
+        render_kw={"autocomplete": "off"},
     )
     description = fields.TextAreaField(label="description")
     addr = fields.StringField(
         "email",
         description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
+        render_kw={"multiple": "multiple", "type": "email", "autocomplete": "off"},
     )
     tech_addr = fields.StringField(
         "technologist email",
         description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
+        render_kw={"multiple": "multiple", "type": "email", "autocomplete": "off"},
     )
     med_addr = fields.StringField(
         "medical email",
         description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
+        render_kw={"multiple": "multiple", "type": "email", "autocomplete": "off"},
     )
     train_addr = fields.StringField(
         "training email",
         description="multiple email addresses may be separated by commas",
-        render_kw={"multiple": "multiple", "type": "email"},
+        render_kw={"multiple": "multiple", "type": "email", "autocomplete": "off"},
     )
 
     active = fields.BooleanField(label="active", default=True)
@@ -923,7 +929,9 @@ def get_device_groups_form(related: List[str], unrelated: List[str]):
         )
 
     class InactiveGroupForm(FlaskForm):
-        dept = fields.StringField(label="department", render_kw={"list": "departments"})
+        dept = fields.StringField(
+            label="department", render_kw={"list": "departments", "autocomplete": "off"}
+        )
         add = fields.SubmitField(label="add")
 
         def validate(self) -> bool:
