@@ -740,7 +740,7 @@ def devices():
     }
 
 
-@app.route("/device-add", methods=["POST", "GET"])
+@app.route("/device-add", methods=["GET", "POST"])
 @admin_only
 @render_to("device_edit")
 def device_add():
