@@ -305,7 +305,7 @@ def robots():
     return Response("User-agent: *\nDisallow: /", mimetype="text/plain")
 
 
-@app.route("/force-login/<token>", methods=["GET"])
+@app.route("/force-login/<token>")
 def force_login(token):
     user = logic.get_user_from_token(token)
     if user is None:
@@ -315,7 +315,7 @@ def force_login(token):
     return redirect("/")
 
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 @login_required
 @render_to("index")
 def home():
@@ -416,8 +416,8 @@ def join_form_tech():
     }
 
 
-@app.route("/join/approve/<token>", endpoint="join-group-approve", methods=["GET"])
-@app.route("/join/deny/<token>", endpoint="join-group-deny", methods=["GET"])
+@app.route("/join/approve/<token>", endpoint="join-group-approve")
+@app.route("/join/deny/<token>", endpoint="join-group-deny")
 @active_user_required
 def handle_join_group(token):
     req = logic.read_signed_message(token)
@@ -483,8 +483,8 @@ def groups_breadcrumb() -> Breadcrumb_links:
     return breadcrumb(("groups", url_for("groups")))
 
 
-@app.route("/groups", methods=["GET"])
-@app.route("/groups/inactive", endpoint="groups-inactive", methods=["GET"])
+@app.route("/groups")
+@app.route("/groups/inactive", endpoint="groups-inactive")
 @active_user_required
 @render_to("groups")
 def groups():
@@ -719,8 +719,8 @@ def devices_subpage_nav(is_admin: bool) -> Subpage_links:
     )
 
 
-@app.route("/devices", methods=["GET"])
-@app.route("/devices/inactive", endpoint="devices-inactive", methods=["GET"])
+@app.route("/devices")
+@app.route("/devices/inactive", endpoint="devices-inactive")
 @login_required
 @render_to("devices")
 def devices():
