@@ -974,3 +974,113 @@ def remove_group_from_device(group: str, device: str):
         # for pairing to not exit has succeeded
         return
     model.db.session.delete(dg)
+
+
+def get_dev_members_for_device(
+    device: model.Device,
+) -> Tuple[List[str], List[str]]:
+    # get all dev group users and whether they have special permissions on this device
+    q = model.db.session.execute(
+        """
+        select M."user", D.scannercode from membership M 
+        left join userdevice D on D.researchercode = M."user" and M."group" = 'DEV'
+        where M."group" = 'DEV' and M.approved and M.user_active and D.scannercode is null or D.scannercode = :device
+        order by 1
+        """,
+        {"device": device.id},
+    )
+    # bucket results and return
+    active, inactive = [], []
+    for user, dev in q.fetchall():
+        if dev == device.id:
+            active.append(user)
+        else:
+            inactive.append(user)
+
+    return active, inactive
+
+
+def get_dev_tech_status(user: model.User) -> Tuple[bool, bool]:
+    if not user.active:
+        return False, False
+
+    # always returns a pair of numbers each of which is 0 or 1
+    q = model.db.session.execute(
+        """
+        select count(M."user"), count(T.researchercode) from membership M
+        left join technologist T on M."user" = T.researchercode and M."group" = 'DEV'
+        where M."group" = 'DEV' and M.approved and M.user_active and M."user" = :user
+        """,
+        {"user": user.id},
+    )
+    dev, tech = q.first()
+    is_dev = bool(dev)
+    return is_dev, is_dev and bool(tech)
+
+
+def get_user_device_special_perms(
+    user: model.User, device: model.Device
+) -> Tuple[bool, model.UserDevice]:
+    ud = model.UserDevice.query.get((user.id, device.id))
+    if ud is None:
+        return True, model.UserDevice(user=user.id, device=device.id)
+    return False, ud
+
+
+class DeviceUserForm(FlaskForm):
+    templates = fields.BooleanField(label="use and apply templates")
+    slot = fields.BooleanField(label="edit any slot")
+    medical = fields.BooleanField(label="respond to medical requests")
+    training = fields.BooleanField(label="respond to training requests")
+    tech = fields.BooleanField(label="respond to technologist requests")
+
+    rm = fields.SubmitField(label="remove from device")
+    cru = fields.SubmitField(label="save")
+
+    def __init__(self, is_new: bool, is_tech: bool, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if not is_tech:
+            del self.tech
+
+        if is_new:
+            del self.rm
+            self.cru.label.text = "add"
+
+    def action(self):
+        if self.cru.data:
+            return "update"
+        elif self.rm and self.rm.data:
+            return "rm"
+        else:
+            return ""
+
+    def validate(self) -> bool:
+        if not FlaskForm.validate(self):
+            return False
+
+        action = self.action()
+        if action == "":
+            return False
+        elif action == "rm":
+            # state of options don't matter if we're removing the entry
+            return True
+
+        checked = any(
+            (self.templates.data, self.slot.data, self.medical.data, self.training.data)
+        )
+        if checked:
+            return True
+        # none of the static options have been checked,
+        # see if the conditional option has been
+        if self.tech and self.tech.data:
+            return True
+
+        # otherwise no options have been checked
+        self.form_errors.append("at least one permission must be assigned")
+        return False
+
+    def populate(self, ud: model.UserDevice):
+        self.populate_obj(ud)
+        if not self.tech:
+            ud.tech = False

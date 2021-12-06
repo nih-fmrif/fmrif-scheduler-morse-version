@@ -908,5 +908,61 @@ def device_users(the_device):
     if not can_edit:
         abort(403)
 
-    # TODO just a placeholder for now
-    pass
+    active, inactive = logic.get_dev_members_for_device(device)
+
+    return {
+        "title": f"manage DEV users of {device.label}",
+        "device": device,
+        "active": active,
+        "inactive": inactive,
+        **device_breadcrumb(device),
+        **device_subpage_nav(device, perms),
+    }
+
+
+@app.route("/device/<the_device>/users/<the_user>", methods=["GET", "POST"])
+@active_user_required
+@render_to("device_user")
+def device_user(the_device, the_user):
+    device = logic.get_device(the_device)
+    if device is None:
+        abort(404)
+
+    perms = logic.get_dev_perms(g.user, device)
+    can_edit = perms.admin or (perms.dev_pi and device.active)
+    if not can_edit:
+        abort(403)
+
+    dev_user = logic.get_user(the_user)
+    if dev_user is None or not dev_user.active:
+        abort(404)
+
+    dev, tech = logic.get_dev_tech_status(dev_user)
+    if not dev:
+        abort(404)
+
+    new, obj = logic.get_user_device_special_perms(dev_user, device)
+
+    form = logic.DeviceUserForm(new, tech, obj=obj)
+    if form.validate_on_submit():
+        action = form.action()
+        if action == "rm":
+            model.db.session.delete(obj)
+        else:
+            form.populate(obj)
+            model.db.session.add(obj)
+        model.db.session.commit()
+        return to("device_users", the_device=device.id)
+
+    title = f"manage {dev_user.id} permissions for {device.label}"
+    if new:
+        title = f"add {dev_user.id} permissions for {device.label}"
+    return {
+        "title": title,
+        "device": device,
+        "dev_user": dev_user,
+        "action": my_url(),
+        "form": form,
+        **device_breadcrumb(device),
+        **device_subpage_nav(device, perms),
+    }

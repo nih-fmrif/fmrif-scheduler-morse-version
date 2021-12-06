@@ -1,0 +1,23 @@
+{% extends "page.html" %}
+{% import "macros.html" as macros %}
+{% block title %}{{title}}{% endblock %}
+{% block body %}
+	{% if active %}
+		<h1>DEV users assigned special permissions on this device</h1>
+		<p>follow links to modify permissions or remove user from this device</p>
+		<ul>
+			{% for u in active %}
+				<li><a href="{{ url_for("device_user", the_device=device.id, the_user=u) }}">{{ u }}</a></li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+	{% if inactive %}
+		<h1>DEV users not assigned to this device</h1>
+		<p>follow links to add user to this device.</p>
+		<ul>
+			{% for u in inactive %}
+				<li><a href="{{ url_for("device_user", the_device=device.id, the_user=u) }}">{{ u }}</a></li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+{% endblock %}
