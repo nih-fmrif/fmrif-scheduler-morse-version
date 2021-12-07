@@ -483,19 +483,29 @@ class GroupEditForm(FlaskForm):
     )
     active = fields.BooleanField(label="active", default=True)
 
-    def __init__(self, institutes, is_admin=False, create=False, *args, **kwargs):
+    def __init__(
+        self, group_id, institutes, is_admin=False, create=False, *args, **kwargs
+    ):
         if create and not is_admin:
             raise Exception("internal error, illegal state")
         super().__init__(*args, **kwargs)
         self.institutes = institutes
+        special = group_id in ("admin", "DEV")
         if not is_admin:
             # only admins can change these
             del self.inst
+            del self.active
+        elif special:
+            # not even admin can deactivate special groups
             del self.active
         if not create:
             # only use these on creation form
             del self.pi
             del self.id
+        if special:
+            # color does not apply to special groups
+            del self.color
+            del self.inst
 
     def set_errors_from_exception(self, ex: IntegrityError) -> None:
         prefix, c = constraint_of(ex)
@@ -530,11 +540,15 @@ def update_group(is_admin: bool, group: model.Group, form: GroupEditForm) -> boo
     group.description = form.description.data
     group.addr = form.addr.data
     group.link = form.link.data
+    if form.color:  # not present on special groups
+        group.color = form.color.data
     if is_admin:
-        group.inst = form.inst.data
-        if group.inst == "":
-            group.inst = None
-        group.active = form.active.data
+        if form.inst:  # not present on special groups
+            group.inst = form.inst.data
+            if group.inst == "":
+                group.inst = None
+        if form.active:  # not present on special groups
+            group.active = form.active.data
     model.db.session.add(group)
     try:
         model.db.session.commit()
@@ -560,6 +574,7 @@ def create_group(form: GroupEditForm) -> bool:
     group.id = form.id.data
     group.label = form.label.data
     group.description = form.description.data
+    group.color = form.color.data
     group.addr = form.addr.data
     group.link = form.link.data
     group.inst = form.inst.data

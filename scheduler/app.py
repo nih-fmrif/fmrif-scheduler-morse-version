@@ -518,7 +518,7 @@ def groups():
 @render_to("group_edit")
 def group_add():
     institutes = logic.get_institutes_for_group_edit_form()
-    form = logic.GroupEditForm(institutes, is_admin=True, create=True)
+    form = logic.GroupEditForm("", institutes, is_admin=True, create=True)
 
     if form.validate_on_submit():
         if logic.create_group(form):
@@ -611,7 +611,7 @@ def group_edit(the_group):
     institutes = []
     if is_admin:
         institutes = logic.get_institutes_for_group_edit_form()
-    form = logic.GroupEditForm(institutes, is_admin=is_admin, obj=group)
+    form = logic.GroupEditForm(group.id, institutes, is_admin=is_admin, obj=group)
 
     if form.validate_on_submit():
         if logic.update_group(is_admin, group, form):
