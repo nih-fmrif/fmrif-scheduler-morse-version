@@ -109,3 +109,6 @@ input-set[is-required] label:after {
 	content: "*";
 	content: "*" / "";
 }
+a[aria-current] {
+	font-weight: bold;
+}
