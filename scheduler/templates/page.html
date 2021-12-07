@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block basehead %}
-	{% block head %}{% endblock %}
+	{% block head %}<script type=module src="{{ url_for("static", filename="script.js") }}"></script>{% endblock %}
 {% endblock %}
 {% block basebody %}
 	<nav aria-label="skip link">
