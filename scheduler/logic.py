@@ -938,11 +938,11 @@ def create_device(form: DeviceEditForm) -> Optional[model.Device]:
     return device
 
 
-def groups_of_device(device: model.Device) -> Tuple[List[str], List[str]]:
+def groups_of_device(device: model.Device) -> Tuple[List[str], List[Tuple[str, str]]]:
     # get all active departments and whether they're associated with device
     q = model.db.session.execute(
         """
-        select G.deptcode, D.scannercode from tlkpdept G left join devicegroup D using(deptcode)
+        select G.deptcode, G.dept, D.scannercode from tlkpdept G left join devicegroup D using(deptcode)
         where G.department and G.iscurrent and D.scannercode is null or D.scannercode = :device
         order by 1
         """,
@@ -950,11 +950,13 @@ def groups_of_device(device: model.Device) -> Tuple[List[str], List[str]]:
     )
     # bucket results and return
     related, unrelated = [], []
-    for dept, dev in q.fetchall():
+    for dept, lbl, dev in q.fetchall():
         if dev == device.id:
             related.append(dept)
         else:
-            unrelated.append(dept)
+            if lbl != dept:
+                lbl = f"{lbl} ({dept})"
+            unrelated.append((dept, lbl))
     return related, unrelated
 
 
@@ -990,8 +992,7 @@ def get_device_groups_form(related: List[str], unrelated: List[str]):
 
         def __init__(self, departments, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            # datalist builder expects each entry to be in (key, value) format
-            self.departments = zip(departments, departments)
+            self.departments = departments
 
         def action(self):
             if self.inactive:
