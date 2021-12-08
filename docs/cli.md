@@ -25,3 +25,7 @@ The url can only be used once and must be used within 24 hours or it will expire
 ## `deactivate-user` and `activate-user`
 
 These subcommands both take a user name as input. The `deactivate-user` subcommand marks a user as no longer active. The `activate-user` subcommand marks a user as active. Users who are not active are operationally removed from all groups and have no special access, however the memberships are still maintained and will be restored if they're marked active again.
+
+## `add-admin`
+
+This subcommand takes a user name as input and adds that user as an approved member of the admin group.

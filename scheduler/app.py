@@ -222,6 +222,23 @@ def activate_user(user):
     click.echo(f"{user} is now active")
 
 
+@app.cli.command("add-admin")
+@click.argument("user")
+def add_admin(user):
+    """add USER as an approved member of the admin group"""
+    u = logic.get_user(user)
+    if u is None:
+        click.echo(f"no such user {user}")
+        return
+    if not u.active:
+        click.echo("only active users may be added to admin group")
+    if logic.is_admin(u):
+        return  # nothing to do
+    logic.add_admin(u)
+    model.db.session.commit()
+    click.echo(f"{user} is now an admin")
+
+
 ## Route helpers
 
 

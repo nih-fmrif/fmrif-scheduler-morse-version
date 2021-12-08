@@ -214,6 +214,11 @@ def record_join_form(form: JoinForm, user: model.User, group: str) -> bool:
     return True
 
 
+def add_admin(user: model.User):
+    r = model.GroupMember(user=user.id, group="admin", approved=func.now())
+    model.db.session.add(r)
+
+
 def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
     g = model.Group.query.get(group)
     if g is None:
