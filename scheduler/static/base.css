@@ -112,3 +112,47 @@ input-set[is-required] label:after {
 a[aria-current] {
 	font-weight: bold;
 }
+
+.skip-link:not(:focus-within) {
+	opacity: 0;
+}
+
+.skip-link,
+.top-inner,
+.flash-messages,
+.subpage-nav-inner,
+.body {
+	margin: 0 1rem;
+}
+
+.top-inner {
+	display: flex;
+	flex-wrap: wrap;
+	flex-direction: row;
+	gap: 1rem;
+}
+.top,
+.subpage-nav {
+	padding-bottom: .25rem;
+	border-bottom: 1px solid currentColor;
+	margin-bottom: .75rem;
+}
+.login-info {
+	margin-left: auto;
+}
+.login-info p {
+	margin: 0;
+}
+.subpage-nav ul,
+.breadcrumb ul {
+	display: flex;
+	flex-wrap: wrap;
+	flex-direction: row;
+	gap: 1rem;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+#main:focus {
+	outline: 0;
+}

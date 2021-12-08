@@ -3,24 +3,27 @@
 	{% block head %}<script type=module src="{{ url_for("static", filename="script.js") }}"></script>{% endblock %}
 {% endblock %}
 {% block basebody %}
-	<nav aria-label="skip link">
+	<nav class=skip-link aria-label="skip link">
 		<a href="#main">skip to main content</a>
 	</nav>
-	<nav aria-label=breadcrumb>
-		<ul>
-			{% for (name, url) in breadcrumb %}
-				<li><a href="{{url}}"{% if request.path == url %} aria-current=page{% endif %}>{{name}}</a></li>
-			{% endfor %}
-		</ul>
-	</nav>
-	<section aria-label="login info">
-		<p>You are {% if user %}logged in as {{user.id}}{% else %}not logged in{% endif %}.</p>
-		{% if user and not user.active %}<p>Your account is inactive.</p>{% endif %}
-	</section>
-
+	<div class=top>
+		<div class=top-inner>
+			<nav class=breadcrumb aria-label=breadcrumb>
+				<ul>
+					{% for (name, url) in breadcrumb %}
+						<li><a href="{{url}}"{% if request.path == url %} aria-current=page{% endif %}>{{name}}</a></li>
+					{% endfor %}
+				</ul>
+			</nav>
+			<section class=login-info aria-label="login info">
+				<p>You are {% if user %}logged in as {{user.id}}{% else %}not logged in{% endif %}.</p>
+				{% if user and not user.active %}<p>Your account is inactive.</p>{% endif %}
+			</section>
+		</div>
+	</div>
 	{% with msgs = get_flashed_messages(with_categories=true) %}
 		{% if msgs %}
-			<section aria-label="status messages">
+			<section class=flash-messages aria-label="status messages">
 				<ul>
 					{% for cat, msg in msgs %}
 						<li class="msg-{{ cat }}"><sr-only>{{ cat }}:</sr-only> {{ msg }}</li>
@@ -31,15 +34,17 @@
 	{% endwith %}
 	<main id=main tabindex="-1">
 		{% if subpage_nav %}
-			<nav aria-labelledby="subpage-nav-title">
-				<span id="subpage-nav-title">{{ subpage_nav.title | safe }}</span>
-				<ul>
-					{% for link, href in subpage_nav.links %}
-						<li><a href="{{ href }}"{% if request.path == href %} aria-current=page{% endif %}>{{ link | safe}}</a></li>
-					{% endfor %}
-				</ul>
+			<nav class=subpage-nav aria-labelledby="subpage-nav-title">
+				<div class=subpage-nav-inner>
+					<span id="subpage-nav-title">{{ subpage_nav.title | safe }}</span>
+					<ul>
+						{% for link, href in subpage_nav.links %}
+							<li><a href="{{ href }}"{% if request.path == href %} aria-current=page{% endif %}>{{ link | safe}}</a></li>
+						{% endfor %}
+					</ul>
+				</div>
 			</nav>
 		{% endif %}
-		{% block body %}{% endblock %}
+		<div class=body>{% block body %}{% endblock %}</div>
 	</main>
 {% endblock %}
