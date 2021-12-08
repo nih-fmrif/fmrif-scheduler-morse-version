@@ -1,5 +1,5 @@
-{% macro datalist(id, entries) %}
-	<datalist id="{{ id }}">
+{% macro datalist(id, entries, errorMessage) %}
+	<datalist id="{{ id }}"{% if errorMessage %} data-error-message="{{ errorMessage }}"{% endif %}>
 		{% for entry in entries %}
 			<option value="{{ entry[0] }}">{{ entry[1] }}</option>
 		{% endfor %}

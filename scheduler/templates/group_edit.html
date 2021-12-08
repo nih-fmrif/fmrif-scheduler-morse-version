@@ -4,7 +4,7 @@
 {% block body %}
 	<form method=post action="{{ action }}">
 		{{ macros.form(form)}}
-		{{ macros.datalist("institutes", form.institutes) }}
+		{{ macros.datalist("institutes", form.institutes, "invalid institute") }}
 		<button type=submit>{{ submit }}</button>
 	</form>
 {% endblock %}
