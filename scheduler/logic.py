@@ -179,6 +179,11 @@ class JoinForm(FlaskForm):
         super().__init__(*args, **kwargs)
         self.departments = departments
 
+    def set_errors_from_exception(self, ex: IntegrityError) -> None:
+        prefix, c = constraint_of(ex)
+        if prefix == "groupmembers" and c == "deptcode_fkey":
+            self.group.errors.append("invalid department selected")
+
 
 def show_tech_join_form(user: model.User) -> bool:
     # return a row if user is in DEV unless they have already submitted the form
@@ -197,9 +202,16 @@ def show_tech_join_form(user: model.User) -> bool:
     return bool(q.first())
 
 
-def record_join_form(user: model.User, group: str) -> None:
+def record_join_form(form: JoinForm, user: model.User, group: str) -> bool:
     r = model.GroupMember(user=user.id, group=group)
     model.db.session.add(r)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return False
+    return True
 
 
 def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
@@ -976,6 +988,11 @@ def get_device_groups_form(related: List[str], unrelated: List[str]):
                         return "rm", d.label.text
             return "", ""
 
+        def set_errors_from_exception(self, ex: IntegrityError) -> None:
+            prefix, c = constraint_of(ex)
+            if prefix == "groupdevice" and c == "deptcode_fkey":
+                self.inactive.dept.errors.append("invalid department")
+
     form = Form(unrelated)
     if len(related) == 0:
         del form.active
@@ -983,6 +1000,26 @@ def get_device_groups_form(related: List[str], unrelated: List[str]):
         del form.inactive
 
     return form
+
+
+def process_device_groups_form(dev: str, form) -> Literal["okay", "fatal", "invalid"]:
+    act, dept = form.action()
+    if act == "add":
+        add_group_to_device(dept, dev)
+    elif act == "rm":
+        remove_group_from_device(dept, dev)
+    else:
+        return "fatal"
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        # can only fire if adding a pairing that already exists
+        # but that means the request is already fulfilled
+        # so we ignore the error
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return "invalid"
+    return "okay"
 
 
 def add_group_to_device(group: str, device: str):

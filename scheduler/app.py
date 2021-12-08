@@ -378,11 +378,10 @@ def join_form():
     if len(departments) == 0:
         no_departments = True
     if form.validate_on_submit():
-        logic.record_join_form(g.user, form.group.data)
-        model.db.session.commit()
-        logic.notify_group_pi_of_join_form(g.user, form.group.data)
-        flash("your membership request is being processed")
-        return to("home")
+        if logic.record_join_form(form, g.user, form.group.data):
+            logic.notify_group_pi_of_join_form(g.user, form.group.data)
+            flash("your membership request is being processed")
+            return to("home")
     return {
         "form": form,
         "action": my_url(),
@@ -871,19 +870,13 @@ def device_groups(the_device):
     form = logic.get_device_groups_form(related, unrelated)
 
     if form.validate_on_submit():
-        act, dept = form.action()
-        if act == "add":
-            logic.add_group_to_device(dept, device.id)
-        elif act == "rm":
-            logic.remove_group_from_device(dept, device.id)
-        try:
-            model.db.session.commit()
-        except sqlalchemy.exc.IntegrityError:
-            # can only fire if adding a pairing that already exists
-            # but that means the request is already fulfilled
-            # so we ignore the error
-            model.db.session.rollback()
-        return redirect(my_url())
+        res = logic.process_device_groups_form(device.id, form)
+        if res == "okay":
+            return redirect(my_url())
+        elif res == "fatal":
+            abort(400)
+        elif res == "invalid":
+            pass  # fall through and display error on form
 
     return {
         "title": f"manage departments of {device.label}",
