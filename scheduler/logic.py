@@ -88,7 +88,12 @@ def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
     """,
         {"user": user.id},
     )
-    return q.fetchall()
+    out = []
+    for id, label in q.fetchall():
+        if label != id:
+            label = f"{label} ({id})"
+        out.append((id, label))
+    return out
 
 
 def get_mailing_list_form(**kwargs):
