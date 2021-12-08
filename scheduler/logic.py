@@ -548,7 +548,12 @@ def get_institutes_for_group_edit_form() -> List[Tuple[str, str]]:
     q = m.query.filter(m.active)
     r = []
     for i in q.all():
-        r.append((i.id, i.label))
+        lbl = i.label
+        if lbl != i.id:
+            # if the label and id are distinct append the id to the end of the label
+            # to make it easier for code and users to disambiguate similar labels
+            lbl = f"{i.label} ({i.id})"
+        r.append((i.id, lbl))
     return r
 
 
