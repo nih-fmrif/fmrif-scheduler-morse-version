@@ -89,4 +89,25 @@ function enforce_datalists() {
 	}
 }
 
-enforce_datalists();
+function clear_server_errors_on_input() {
+	document.querySelectorAll("input[aria-describedby]").forEach(elm => {
+		//describedby may contain id of an error list
+		const ids = elm.getAttribute("aria-describedby").split(" ").filter(s => /-err$/.test(s));
+		if (ids.length != 1) {
+			return;
+		}
+		const list = document.getElementById(ids[0])
+		if (!list) {
+			console.warn(`${ids[0]} does not refer to error-list`);
+			return;
+		}
+		// if the input changes, remove the error list
+		elm.addEventListener("input", () => list.remove(), { "once": true });
+	});
+}
+
+function main() {
+	enforce_datalists();
+	clear_server_errors_on_input();
+}
+main();
