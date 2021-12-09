@@ -113,6 +113,10 @@ a[aria-current] {
 	font-weight: bold;
 }
 
+svg {
+	fill: currentColor;
+}
+
 body {
 	padding-bottom: 1.5rem;
 }
