@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "svg/icons.html" as icons %}
 {% block basehead %}
 	{% block head %}<script type=module src="{{ url_for("static", filename="script.js") }}"></script>{% endblock %}
 {% endblock %}
@@ -25,7 +26,16 @@
 			<section class=flash-messages aria-label="status messages">
 				<ul>
 					{% for cat, msg in msgs %}
-						<li class="msg-{{ cat }}"><sr-only>{{ cat }}:</sr-only> {{ msg }}</li>
+						<li class="msg-{{ cat }}">
+							{% if cat == "info" %}
+								{{ icons.smiley_face(cat) }}
+							{% elif cat == "warning" %}
+								{{ icons.neutral_face(cat) }}
+							{% elif cat == "error" %}
+								{{ icons.frowny_face(cat) }}
+							{% endif %}
+							{{ msg }}
+						</li>
 					{% endfor %}
 				</ul>
 			</section>

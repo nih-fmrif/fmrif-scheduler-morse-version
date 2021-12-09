@@ -168,6 +168,40 @@ body {
 	outline: 0;
 }
 
+.flash-messages {
+	margin: 1.5rem;
+}
+.flash-messages ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.flash-messages .msg-info {
+	--msg-fg: ;
+	--msg-bg: ;
+}
+.flash-messages .msg-warning {
+	--msg-fg: ;
+	--msg-bg: ;
+}
+.flash-messages .msg-error {
+	--msg-fg: ;
+	--msg-bg: ;
+}
+.flash-messages li {
+	color: var(--msg-fg);
+	background-color: var(--msg-bg);
+	border: .1875rem solid currentColor;
+	border-radius: .5rem;
+	padding: .5rem;
+	display: flex;
+	gap: .5rem;
+	align-items: center;
+}
+.flash-messages li:not(:last-child) {
+	margin-bottom: 1rem;
+}
+
 .index {
 	font-size: 200%;
 }
