@@ -55,7 +55,6 @@ function enforce_datalists() {
 		const canon = dl.canonical.get(input.value);
 		if (!canon) {
 			input.setCustomValidity(dl.errorMessage);
-			input.reportValidity();
 			return false;
 		}
 		input.value = canon;
@@ -70,21 +69,19 @@ function enforce_datalists() {
 				}
 
 				if (!validate_and_normalize(input)) {
+					input.reportValidity();
 					evt.preventDefault();
 				}
 			}
 		});
 	}
 
-	// on blur or form submit check [list] inputs against canonicalization (and valueMissing if required or is that handled?)
 	for (const input of inputs) {
-		input.addEventListener("blur", evt => {
-			validate_and_normalize(evt.target);
-		});
 		input.addEventListener("input", evt => {
 			// clear invalid flag whenever input is changed.
 			input.setCustomValidity('');
-			input.reportValidity();
+			// run validation
+			validate_and_normalize(evt.target);
 		});
 	}
 }
