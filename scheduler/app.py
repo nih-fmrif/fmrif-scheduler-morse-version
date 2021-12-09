@@ -844,6 +844,7 @@ def device_edit(the_device):
             return to("device", the_device=the_device)
 
     return {
+        "title": f"edit {device.label}",
         "device": device,
         "action": my_url(),
         "submit": "save",
