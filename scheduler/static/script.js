@@ -98,8 +98,13 @@ function clear_server_errors_on_input() {
 			console.warn(`${ids[0]} does not refer to error-list`);
 			return;
 		}
-		// if the input changes, remove the error list
-		elm.addEventListener("input", () => list.remove(), { "once": true });
+		// flag this as invalid client-side so invalid icon is shown
+		elm.setCustomValidity("errors from server side validation");
+		// if the input changes, set it valid and remove the error list
+		elm.addEventListener("input", () => {
+			elm.setCustomValidity("");
+			list.remove();
+		}, { "once": true });
 	});
 }
 
