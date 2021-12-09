@@ -61,9 +61,13 @@ sr-only {
 	width: 1px;
 }
 input-errors,
-input-error,
 input-description {
 	display: block;
+}
+input-error {
+	display: flex;
+	gap: .5em;
+	align-items: center;
 }
 input-set {
 	margin: .5rem .25rem;
@@ -98,16 +102,39 @@ input-errors {
 input-set label {
 	grid-area: label;
 }
-input-set input {
+input-widget {
 	grid-area: input;
 	max-width: 100%;
+}
+input-set .validation-icons {
+	grid-area: input;
 }
 input-description {
 	font-size: 95%;
 }
-input-set[is-required] label:after {
-	content: "*";
-	content: "*" / "";
+input-set[is-required] label svg {
+	font-size: 65%;
+	line-height: 0;
+	position: relative;
+	vertical-align: baseline;
+	top: -.3em;
+}
+input-widget {
+	display: flex;
+	gap: .25rem;
+}
+input-widget input:not([type=color]) {
+	flex-grow: 1;
+	align-self: center;
+}
+input-widget .validation-icons {
+	flex-shrink: 0;
+	align-self: center;
+}
+input:valid ~ .validation-icons>:first-child,
+input:invalid ~ .validation-icons>:last-child,
+input[type=color] ~ .validation-icons {
+	display: none;
 }
 a[aria-current] {
 	font-weight: bold;

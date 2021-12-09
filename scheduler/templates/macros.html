@@ -1,3 +1,5 @@
+{% import "svg/icons.html" as icons %}
+
 {% macro datalist(id, entries, errorMessage) %}
 	<datalist id="{{ id }}"{% if errorMessage %} data-error-message="{{ errorMessage }}"{% endif %}>
 		{% for entry in entries %}
@@ -29,16 +31,30 @@
 		{% set above = f.type == "TextAreaField" %}
 		<input-set{% if option %} is-option{% endif %}{% if "required" in f.flags %} is-required{% endif %}{% if above %} label-above{% endif %}>
 			{% if option %}
-				{{ field_render(f) }}
-				{{ f.label }}
+				<input-widget>{{ field_render(f) }}</input-widget>
+				{{ field_label(f) }}
 			{% else %}
-				{{ f.label }}
+				{{ field_label(f) }}
+				{% if f.type != "TextAreaField" %}<input-widget>{% endif %}
 				{{ field_render(f) }}
+				{% if f.type != "TextAreaField" %}
+						<div class=validation-icons>
+							{{ icons.exclaim() }}
+							{{ icons.check() }}
+						</div>
+					</input-widget>
+				{% endif %}
 			{% endif %}
 			{{ field_description(f) }}
 			{{ field_errors(f) }}
 		</input-set>
 	{% endif %}
+{% endmacro %}
+
+{% macro field_label(f) %}
+	<label for="{{ f.id }}">
+		<span>{{ f.label.text }}</span>{% if "required" in f.flags %}{{ icons.asterisk() }}{% endif %}
+	</label>
 {% endmacro %}
 
 {% macro field_render(f) %}
@@ -77,7 +93,7 @@
 	{% if errors %}
 		<input-errors{% if id %} id="{{id}}"{% endif %}>
 			{% for error in errors %}
-				<input-error><sr-only>Error: </sr-only>{{ error }}</input-error>
+				<input-error>{{ icons.exclaim_triangle("Error") }} <span>{{ error }}</span></input-error>
 			{% endfor %}
 		</input-errors>
 	{% endif %}
