@@ -490,7 +490,7 @@ def groups_subpage_nav(is_admin: bool) -> Subpage_links:
                 "inactive [groups]",
                 url_for("groups-inactive"),
             ),
-            (is_admin, "new group", url_for("group_add")),
+            (is_admin, "add group", url_for("group_add")),
         ],
     )
 
