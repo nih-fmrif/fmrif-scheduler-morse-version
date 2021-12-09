@@ -19,7 +19,7 @@
 	{% if f.type == "HiddenField" or f.type == "CSRFTokenField" or f.type == "SubmitField" %}
 		{{ f }}
 	{% elif f.type == "FormField" or f.type == "RadioField" %}
-		<fieldset>
+		<fieldset data-name="{{ f.name }}">
 			<legend>{{f.label.text}}</legend>
 			{{ form_errors(f) }}
 			{% for sf in f %}

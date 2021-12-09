@@ -235,3 +235,36 @@ body {
 .index li:not(:last-child) {
 	padding-bottom: .5em;
 }
+
+.device-groups-form fieldset[data-name=active] {
+	width: max-content;
+}
+.device-groups-form fieldset fieldset {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+	border: 0;
+}
+.device-groups-form fieldset fieldset:not(:last-of-type) {
+	border-bottom: 1px solid currentColor;
+}
+.device-groups-form fieldset fieldset legend {
+	display: contents;
+}
+.device-groups-form fieldset fieldset :is(input, button) {
+	margin-left: auto;
+	align-self: start;
+}
+.device-groups-form fieldset[data-name=inactive] {
+	display: flex;
+	gap: 1rem;
+	flex-wrap: wrap;
+	align-items: baseline;
+	max-width: 40rem;
+}
+.device-groups-form fieldset[data-name=inactive]>* {
+	flex-grow: 0;
+}
+.device-groups-form fieldset[data-name=inactive]>input-set {
+	flex-grow: 1;
+}
