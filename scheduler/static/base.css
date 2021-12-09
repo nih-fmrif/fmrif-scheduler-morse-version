@@ -113,6 +113,9 @@ a[aria-current] {
 	font-weight: bold;
 }
 
+body {
+	padding-bottom: 1.5rem;
+}
 .skip-link:not(:focus-within) {
 	opacity: 0;
 }
@@ -159,4 +162,11 @@ a[aria-current] {
 }
 #main:focus {
 	outline: 0;
+}
+
+.index {
+	font-size: 200%;
+}
+.index li:not(:last-child) {
+	padding-bottom: .5em;
 }
