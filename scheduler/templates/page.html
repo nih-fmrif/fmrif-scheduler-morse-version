@@ -16,8 +16,7 @@
 				</ul>
 			</nav>
 			<section class=login-info aria-label="login info">
-				<p>You are {% if user %}logged in as {{user.id}}{% else %}not logged in{% endif %}.</p>
-				{% if user and not user.active %}<p>Your account is inactive.</p>{% endif %}
+				<p>{% if user %}logged in as {{user.id}}{% if not user.active %} (inactive){% endif %}{% else %}not logged in{% endif %}</p>
 			</section>
 		</div>
 	</div>
