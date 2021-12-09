@@ -125,7 +125,8 @@ a[aria-current] {
 	margin: 0 1rem;
 }
 
-.top-inner {
+.top-inner,
+.subpage-nav-inner {
 	display: flex;
 	flex-wrap: wrap;
 	flex-direction: row;
@@ -136,6 +137,9 @@ a[aria-current] {
 	padding-bottom: .25rem;
 	border-bottom: 1px solid currentColor;
 	margin-bottom: .75rem;
+}
+.subpage-nav {
+	margin-top: -.25rem;
 }
 .login-info {
 	margin-left: auto;
