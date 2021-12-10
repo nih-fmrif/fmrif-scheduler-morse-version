@@ -1,3 +1,6 @@
+import A11yDialog from "./a11y-dialog/dialog.js";
+import { enableBodyScroll, disableBodyScroll } from "./scroll-lock/body-scroll-lock.js";
+
 function get_datalists() {
 	const elms = document.querySelectorAll("datalist");
 	const out = new Map();
@@ -108,7 +111,43 @@ function clear_server_errors_on_input() {
 	});
 }
 
-function main() {
+async function confirmDialog(titleText, message, opts = {}) {
+	return new Promise((resolve, _) => {
+		const con = document.getElementById('confirm-dialog-container');
+		const modal = con.querySelector(".dialog-box-container");
+		const title = con.querySelector("#dialog-title");
+		const body = con.querySelector(".dialog-content-inner");
+		const cancel = con.querySelector("button[name=cancel]");
+		const confirm = con.querySelector("button[name=confirm]");
+		title.innerText = titleText;
+		body.innerHTML = message;
+		if (opts.cancel) {
+			cancel.innerText = opts.cancel;
+		}
+		if (opts.confirm) {
+			confirm.innerText = opts.confirm;
+		}
+		const dialog = new A11yDialog(con);
+		dialog.on("show", () => {
+			// scroll lock and focus cancel button
+			disableBodyScroll(modal);
+			cancel.focus();
+		});
+		dialog.on("hide", (_, evt) => {
+			enableBodyScroll(modal);
+			// only true if confirm button was used
+			resolve(Boolean(evt.target && evt.target.name && evt.target.name == "confirm"))
+			// reset template
+			title.innerText = "";
+			body.innerHTML = "";
+			cancel.innerText = "cancel";
+			confirm.innerText = "confirm";
+		});
+		dialog.show();
+	});
+}
+
+async function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();
 }
