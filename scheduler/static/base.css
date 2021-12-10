@@ -144,6 +144,13 @@ svg {
 	fill: currentColor;
 }
 
+ul {
+	padding-left: 1em;
+}
+ul {
+	list-style-type: circle;
+}
+
 body {
 	padding-bottom: 1.5rem;
 }
@@ -187,7 +194,7 @@ body {
 	flex-wrap: wrap;
 	flex-direction: row;
 	gap: 1rem;
-	list-style: none;
+	list-style-type: none;
 	margin: 0;
 	padding: 0;
 }
