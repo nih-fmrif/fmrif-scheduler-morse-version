@@ -268,3 +268,7 @@ body {
 .device-groups-form fieldset[data-name=inactive]>input-set {
 	flex-grow: 1;
 }
+
+.list-with-description li p:first-of-type {
+	margin-top: 0;
+}

@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block body %}
-	<article aria-labelledby=list-lbl>
+	<article class=list-with-description aria-labelledby=list-lbl>
 		<span id=list-lbl>Group</span>
 		<ul>
 			{% for group in groups %}
