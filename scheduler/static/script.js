@@ -147,7 +147,7 @@ async function confirmDialog(titleText, message, opts = {}) {
 	});
 }
 
-async function main() {
+function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();
 }
