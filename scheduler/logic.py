@@ -645,10 +645,22 @@ def get_group_membership_form(group: model.Group, membership_data):
 
     class PrimarySubForm(FlaskForm):
         members = fields.SelectField(label="members", choices=choices, default=pi)
-        submit = fields.SubmitField(label="change")
+        submit = fields.SubmitField(
+            label="change",
+            render_kw={
+                "data_confirm_title": "Change PI",
+                "data_confirm_confirm": "Change",
+            },
+        )
 
     class ActiveMemberForm(FlaskForm):
-        remove = fields.SubmitField(label="remove")
+        remove = fields.SubmitField(
+            label="remove",
+            render_kw={
+                "data_confirm_title": "remove member",
+                "data_confirm_confirm": "Remove",
+            },
+        )
 
     class ActiveMembersForm(FlaskForm):
         pass
@@ -661,8 +673,20 @@ def get_group_membership_form(group: model.Group, membership_data):
         )
 
     class PendingMemberForm(FlaskForm):
-        approve = fields.SubmitField(label="approve")
-        deny = fields.SubmitField(label="deny")
+        approve = fields.SubmitField(
+            label="approve",
+            render_kw={
+                "data_confirm_title": "Approve membership",
+                "data_confirm_confirm": "Approve",
+            },
+        )
+        deny = fields.SubmitField(
+            label="deny",
+            render_kw={
+                "data_confirm_title": "Deny membership",
+                "data_confirm_confirm": "Deny",
+            },
+        )
 
     class PendingMembersForm(FlaskForm):
         pass
@@ -962,7 +986,13 @@ def groups_of_device(device: model.Device) -> Tuple[List[str], List[Tuple[str, s
 
 def get_device_groups_form(related: List[str], unrelated: List[str]):
     class ActiveGroupForm(FlaskForm):
-        remove = fields.SubmitField(label="remove")
+        remove = fields.SubmitField(
+            label="remove",
+            render_kw={
+                "data_confirm_title": "remove department",
+                "data_confirm_confirm": "remove",
+            },
+        )
 
     class ActiveGroupsForm(FlaskForm):
         pass
@@ -1110,7 +1140,13 @@ class DeviceUserForm(FlaskForm):
     training = fields.BooleanField(label="respond to training requests")
     tech = fields.BooleanField(label="respond to technologist requests")
 
-    rm = fields.SubmitField(label="remove from device")
+    rm = fields.SubmitField(
+        label="remove from device",
+        render_kw={
+            "data_confirm_title": "remove user",
+            "data_confirm_confirm": "remove",
+        },
+    )
     cru = fields.SubmitField(label="save")
 
     def __init__(self, is_new: bool, is_tech: bool, *args, **kwargs):

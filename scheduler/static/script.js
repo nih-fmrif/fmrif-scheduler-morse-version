@@ -147,8 +147,53 @@ async function confirmDialog(titleText, message, opts = {}) {
 	});
 }
 
+function setup_auto_confirms() {
+	// old safari lacks the tools to do this safely
+	// so it does not get this progressive enhancement
+	const test = document.createElement('form');
+	if (!('requestSubmit' in test)) {
+		return;
+	}
+
+	document.querySelectorAll("form[method=post]").forEach(form => {
+		form.addEventListener("submit", evt => {
+			const src = evt.submitter;
+			const ds = src.dataset;
+			// only show dialog if the corresponding html api used
+			if ('confirmTitle' in ds) {
+				// if this is set we've already shown the dialog,
+				// so proceed without interruption.
+				if (form.dataset.Fired == "true") {
+					delete form.dataset.Fired;
+					return;
+				}
+				form.dataset.Fired = true;
+				evt.preventDefault();
+
+				const msg = ds.confirmMsg ?? "Are you sure?";
+				const opts = {};
+				if (ds.confirmCancel) {
+					opts['cancel'] = ds.confirmCancel;
+				}
+				if (ds.confirmConfirm) {
+					opts['confirm'] = ds.confirmConfirm;
+				}
+
+				confirmDialog(ds.confirmTitle, msg, opts).then(confirmed => {
+					delete form.dataset.Fired;
+					if (!confirmed) {
+						return;
+					}
+					evt.target.requestSubmit(src);
+				});
+			}
+		});
+	});
+}
+
 function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();
+	setup_auto_confirms();
 }
 main();
