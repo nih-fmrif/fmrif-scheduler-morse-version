@@ -133,7 +133,8 @@ input-widget .validation-icons {
 }
 input:valid ~ .validation-icons>:first-child,
 input:invalid ~ .validation-icons>:last-child,
-input[type=color] ~ .validation-icons {
+input[type=color] ~ .validation-icons,
+select ~ .validation-icons {
 	display: none;
 }
 a[aria-current] {
