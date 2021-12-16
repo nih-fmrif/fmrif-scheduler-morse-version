@@ -2,7 +2,7 @@
 {% import "macros.html" as macros %}
 {% block title %}mailing lists{% endblock %}
 {% block body %}
-<form method=post action="{{ action }}">
+<form class=mailing-list-form method=post action="{{ action }}">
 	{{ macros.form(form)}}
 	<button type=submit>submit</button>
 </form>

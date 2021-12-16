@@ -371,6 +371,13 @@ body {
 	max-width: 50rem;
 }
 
+.mailing-list-form>input-set {
+	max-width: 40rem;
+}
+.mailing-list-form fieldset {
+	width: max-content;
+}
+
 .list-with-description li p:first-of-type {
 	margin-top: 0;
 }
