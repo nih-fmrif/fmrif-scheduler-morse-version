@@ -331,25 +331,27 @@ body {
 	padding-bottom: .5em;
 }
 
-.device-groups-form {
+.device-groups-form,
+.group-membership-form>fieldset {
 	width: max-content;
 }
-.device-groups-form  fieldset {
+:is(.device-groups-form, .group-membership-form>fieldset) fieldset {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 1rem;
 	border: 0;
 }
-.device-groups-form fieldset:not(:last-of-type) {
+:is(.device-groups-form, .group-membership-form>fieldset) fieldset:not(:last-of-type) {
 	border-bottom: 1px solid currentColor;
 }
-.device-groups-form fieldset legend {
+:is(.device-groups-form, .group-membership-form>fieldset) fieldset legend {
 	display: contents;
 }
-.device-groups-form fieldset :is(input, button) {
+:is(.device-groups-form, .group-membership-form>fieldset) fieldset :is(input, button) {
 	margin-left: auto;
 	align-self: start;
 }
+.group-membership-add-form,
 .device-groups-add-form {
 	display: flex;
 	gap: 1rem;
@@ -357,10 +359,10 @@ body {
 	align-items: baseline;
 	max-width: 40rem;
 }
-.device-groups-add-form>* {
+:is(.group-membership-add-form, .device-groups-add-form)>* {
 	flex-grow: 0;
 }
-.device-groups-add-form>input-set {
+:is(.group-membership-add-form, .device-groups-add-form)>input-set {
 	flex-grow: 1;
 }
 
