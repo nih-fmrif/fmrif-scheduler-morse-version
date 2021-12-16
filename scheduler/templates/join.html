@@ -5,7 +5,7 @@
 	{% if no_departments %}
 		<p>There are no departments for you to join</p>
 	{% else %}
-		<form method=post action="{{ action }}">
+		<form class=join-form method=post action="{{ action }}">
 			{{ macros.form(form)}}
 			{{ macros.datalist("departments", form.departments, "invalid department") }}
 			<p>Upon submission of this form, the primary investigator of the department will be emailed to confirm your membership.</p>

@@ -366,7 +366,8 @@ body {
 	flex-grow: 1;
 }
 
-.edit-form {
+.edit-form,
+.join-form input-set {
 	max-width: 50rem;
 }
 
