@@ -962,29 +962,43 @@ def create_device(form: DeviceEditForm) -> Optional[model.Device]:
     return device
 
 
-def groups_of_device(device: model.Device) -> Tuple[List[str], List[Tuple[str, str]]]:
-    # get all active departments and whether they're associated with device
+def groups_of_device(device: model.Device) -> List[Tuple[str, str]]:
     q = model.db.session.execute(
         """
-        select G.deptcode, G.dept, D.scannercode from tlkpdept G left join devicegroup D using(deptcode)
-        where G.department and G.iscurrent and D.scannercode is null or D.scannercode = :device
+        select G.deptcode, G.dept_short from tlkpdept G 
+        inner join devicegroup DG using(deptcode)
+        where G.department and G.iscurrent and DG.scannercode = :device
         order by 1
         """,
         {"device": device.id},
     )
-    # bucket results and return
-    related, unrelated = [], []
-    for dept, lbl, dev in q.fetchall():
-        if dev == device.id:
-            related.append(dept)
-        else:
-            if lbl != dept:
-                lbl = f"{lbl} ({dept})"
-            unrelated.append((dept, lbl))
-    return related, unrelated
+    out = []
+    for id, lbl in q.fetchall():
+        if id != lbl:
+            lbl += f" ({id})"
+        out.append((id, lbl))
+    return out
 
 
-def get_device_groups_form(related: List[str], unrelated: List[str]):
+def groups_not_of_device(device: model.Device) -> List[Tuple[str, str]]:
+    q = model.db.session.execute(
+        """
+        select G.deptcode, G.dept_short from tlkpdept G
+        where G.department and G.iscurrent and not exists (
+            select * from devicegroup DG where DG.deptcode = G.deptcode and DG.scannercode = :device
+        ) order by 1
+        """,
+        {"device": device.id},
+    )
+    out = []
+    for id, lbl in q.fetchall():
+        if id != lbl:
+            lbl += f" ({id})"
+        out.append((id, lbl))
+    return out
+
+
+def get_device_groups_form(related: List[Tuple[str, str]]):
     class ActiveGroupForm(FlaskForm):
         remove = fields.SubmitField(
             label="remove",
@@ -994,78 +1008,17 @@ def get_device_groups_form(related: List[str], unrelated: List[str]):
             },
         )
 
-    class ActiveGroupsForm(FlaskForm):
-        pass
-
-    for g in related:
-        setattr(
-            ActiveGroupsForm, f"group-{g}", fields.FormField(ActiveGroupForm, label=g)
-        )
-
-    class InactiveGroupForm(FlaskForm):
-        dept = fields.StringField(
-            label="department", render_kw={"list": "departments", "autocomplete": "off"}
-        )
-        add = fields.SubmitField(label="add")
-
-        def validate(self) -> bool:
-            if not FlaskForm.validate(self):
-                return False
-            if self.add.data and self.dept.data == "":
-                self.dept.errors.append("must select department to add")
-                return False
-            return True
-
     class Form(FlaskForm):
-        active = fields.FormField(ActiveGroupsForm, label="assigned departments")
-        inactive = fields.FormField(InactiveGroupForm, label="add department")
+        def which(self):
+            for elm in self:
+                current_app.logger.info(elm.name)
+                if elm.remove.data:
+                    return elm.name
 
-        def __init__(self, departments, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.departments = departments
+    for id, label in related:
+        setattr(Form, id, fields.FormField(ActiveGroupForm, label=label))
 
-        def action(self):
-            if self.inactive:
-                if self.inactive.add.data:
-                    return "add", self.inactive.dept.data
-            if self.active:
-                for d in self.active:
-                    if d.remove.data:
-                        return "rm", d.label.text
-            return "", ""
-
-        def set_errors_from_exception(self, ex: IntegrityError) -> None:
-            prefix, c = constraint_of(ex)
-            if prefix == "groupdevice" and c == "deptcode_fkey":
-                self.inactive.dept.errors.append("invalid department")
-
-    form = Form(unrelated)
-    if len(related) == 0:
-        del form.active
-    if len(unrelated) == 0:
-        del form.inactive
-
-    return form
-
-
-def process_device_groups_form(dev: str, form) -> Literal["okay", "fatal", "invalid"]:
-    act, dept = form.action()
-    if act == "add":
-        add_group_to_device(dept, dev)
-    elif act == "rm":
-        remove_group_from_device(dept, dev)
-    else:
-        return "fatal"
-    try:
-        model.db.session.commit()
-    except IntegrityError as ex:
-        # can only fire if adding a pairing that already exists
-        # but that means the request is already fulfilled
-        # so we ignore the error
-        form.set_errors_from_exception(ex)
-        model.db.session.rollback()
-        return "invalid"
-    return "okay"
+    return Form()
 
 
 def add_group_to_device(group: str, device: str):
@@ -1080,6 +1033,39 @@ def remove_group_from_device(group: str, device: str):
         # for pairing to not exit has succeeded
         return
     model.db.session.delete(dg)
+
+
+class AddGroupToDeviceForm(FlaskForm):
+    dept = fields.StringField(
+        label="department",
+        validators=[validators.InputRequired()],
+        render_kw={"list": "departments", "autocomplete": "off"},
+    )
+
+    def __init__(self, departments, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.departments = departments
+
+    def validate_dept(self, dept):
+        if any(dept.data == d for d in self.departments):
+            raise validators.ValidationError("invalid department selected")
+
+    def set_errors_from_exception(self, ex: IntegrityError) -> None:
+        prefix, c = constraint_of(ex)
+        if prefix == "groupdevice" and c == "deptcode_fkey":
+            self.inactive.dept.errors.append("invalid department")
+
+
+def process_add_group_to_device_form(dev: str, form) -> bool:
+    dept = form.dept.data
+    add_group_to_device(dept, dev)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return False
+    return True
 
 
 def get_dev_members_for_device(

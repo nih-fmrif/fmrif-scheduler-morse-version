@@ -310,36 +310,36 @@ body {
 	padding-bottom: .5em;
 }
 
-.device-groups-form fieldset[data-name=active] {
+.device-groups-form {
 	width: max-content;
 }
-.device-groups-form fieldset fieldset {
+.device-groups-form  fieldset {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 1rem;
 	border: 0;
 }
-.device-groups-form fieldset fieldset:not(:last-of-type) {
+.device-groups-form fieldset:not(:last-of-type) {
 	border-bottom: 1px solid currentColor;
 }
-.device-groups-form fieldset fieldset legend {
+.device-groups-form fieldset legend {
 	display: contents;
 }
-.device-groups-form fieldset fieldset :is(input, button) {
+.device-groups-form fieldset :is(input, button) {
 	margin-left: auto;
 	align-self: start;
 }
-.device-groups-form fieldset[data-name=inactive] {
+.device-groups-add-form {
 	display: flex;
 	gap: 1rem;
 	flex-wrap: wrap;
 	align-items: baseline;
 	max-width: 40rem;
 }
-.device-groups-form fieldset[data-name=inactive]>* {
+.device-groups-add-form>* {
 	flex-grow: 0;
 }
-.device-groups-form fieldset[data-name=inactive]>input-set {
+.device-groups-add-form>input-set {
 	flex-grow: 1;
 }
 

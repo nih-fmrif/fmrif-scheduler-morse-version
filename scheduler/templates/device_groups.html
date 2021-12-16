@@ -2,8 +2,11 @@
 {% import "macros.html" as macros %}
 {% block title %}{{title}}{% endblock %}
 {% block body %}
-	<form class="device-groups-form" method=post action="{{ action }}">
-		{{ macros.form(form)}}
-		{{ macros.datalist("departments", form.departments, "invalid department") }}
-	</form>
+	{% if none %}
+		{{ none }}
+	{% else %}
+		<form class="device-groups-form" method=post action="{{ action }}">
+			{{ macros.form(form)}}
+		</form>
+	{% endif %}
 {% endblock %}

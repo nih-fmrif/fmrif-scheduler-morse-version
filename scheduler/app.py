@@ -795,6 +795,7 @@ def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> Subpag
             (True, "schedule", url_for("device", the_device=id)),
             (can(perms.template), "templates", url_for("device_tmpl", the_device=id)),
             (edit, "groups", url_for("device_groups", the_device=id)),
+            (edit, "add group", url_for("device_groups_add", the_device=id)),
             (edit, "users", url_for("device_users", the_device=id)),
             (edit, "edit [{device.label}]", url_for("device_edit", the_device=id)),
         ],
@@ -884,21 +885,56 @@ def device_groups(the_device):
     if not can_edit:
         abort(403)
 
-    related, unrelated = logic.groups_of_device(device)
-    form = logic.get_device_groups_form(related, unrelated)
+    related = logic.groups_of_device(device)
+    none = ""
+    if len(related) == 0:
+        none = "no departments are assigned to this device"
+    form = logic.get_device_groups_form(related)
 
     if form.validate_on_submit():
-        res = logic.process_device_groups_form(device.id, form)
-        if res == "okay":
+        dept = form.which()
+        if dept != "":
+            logic.remove_group_from_device(dept, device.id)
+            model.db.session.commit()
             return redirect(my_url())
-        elif res == "fatal":
-            abort(400)
-        elif res == "invalid":
-            pass  # fall through and display error on form
 
     return {
         "title": f"manage departments of {device.label}",
         "device": device,
+        "none": none,
+        "action": my_url(),
+        "form": form,
+        **device_breadcrumb(device),
+        **device_subpage_nav(device, perms),
+    }
+
+
+@app.route("/device/<the_device>/groups/add", methods=["GET", "POST"])
+@active_user_required
+@render_to("device_groups_add")
+def device_groups_add(the_device):
+    device = logic.get_device(the_device)
+    if device is None:
+        abort(404)
+
+    perms = logic.get_dev_perms(g.user, device)
+    can_edit = perms.admin or (perms.dev_pi and device.active)
+    if not can_edit:
+        abort(403)
+
+    departments = logic.groups_not_of_device(device)
+    none = ""
+    if len(departments) == 0:
+        none = "all departments have been added"
+    form = logic.AddGroupToDeviceForm(departments)
+    if form.validate_on_submit():
+        if logic.process_add_group_to_device_form(device.id, form):
+            return to("device_groups", the_device=device.id)
+
+    return {
+        "title": f"add department to {device.label}",
+        "device": device,
+        "none": none,
         "action": my_url(),
         "form": form,
         **device_breadcrumb(device),
