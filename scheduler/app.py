@@ -567,11 +567,6 @@ def group_subpage_nav(group: model.Group, su: logic.Group_leader_kind) -> Subpag
             # view has further protections, but if you can see any of them you can see it
             (True, f"view [{group.label}]", url_for("group", the_group=group.id)),
             (
-                can_edit,
-                f"edit [{group.label}]",
-                url_for("group_edit", the_group=group.id),
-            ),
-            (
                 group.active and can_edit,
                 f"membership [for {group.label}]",
                 url_for("group_membership", the_group=group.id),
@@ -580,6 +575,11 @@ def group_subpage_nav(group: model.Group, su: logic.Group_leader_kind) -> Subpag
                 group.active and can_edit,
                 f"change PI [of {group.label}]",
                 url_for("group_pi", the_group=group.id),
+            ),
+            (
+                can_edit,
+                f"edit [{group.label}]",
+                url_for("group_edit", the_group=group.id),
             ),
         ],
     )
