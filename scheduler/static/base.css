@@ -73,6 +73,7 @@ input-set {
 	margin: .5rem .25rem;
 	display: grid;
 	gap: .25rem 1rem;
+	align-items: baseline;
 	grid-template: 
 		"label input"
 		". description"
@@ -92,6 +93,15 @@ input-set[label-above] {
 		"input"
 		"description"
 		"errors";
+}
+@media (max-width: 20em) {
+	input-set:not([is-option]) {
+		grid-template:
+		"label"
+		"input"
+		"description"
+		"errors";
+	}
 }
 input-description {
 	grid-area: description;
@@ -125,6 +135,7 @@ input-widget {
 }
 input-widget input:not([type=color]) {
 	flex-grow: 1;
+	flex-shrink: 1;
 	align-self: center;
 }
 input-widget .validation-icons {
@@ -137,6 +148,16 @@ input[type=color] ~ .validation-icons,
 select ~ .validation-icons {
 	display: none;
 }
+form-submit {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 1rem;
+}
+form>[type=submit] {
+	margin-top: .5rem;
+}
+
 a[aria-current] {
 	font-weight: bold;
 }
