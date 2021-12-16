@@ -27,7 +27,7 @@
 				<ul>
 					{% for cat, msg in msgs %}
 						<li class="msg-{{ cat }}">
-							{% if cat == "info" %}
+							{% if cat == "info" or cat == "message" %}
 								{{ icons.smiley_face(cat) }}
 							{% elif cat == "warning" %}
 								{{ icons.neutral_face(cat) }}
