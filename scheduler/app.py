@@ -256,6 +256,13 @@ def to(page: str, **kwargs):
     return redirect(url_for(page, **kwargs))
 
 
+# variant of to that goes to the current url
+# useful in forms that can be filled out more than once
+# redirecting to self prevents reloading the page from resubmitting the data
+def to_form():
+    return redirect(my_url())
+
+
 Breadcrumb_links = Dict[str, List[Tuple[str, str]]]
 
 
@@ -705,8 +712,7 @@ def group_membership(the_group):
                     outcome = "approved"
                 flash(f"{user.id} was {outcome}")
 
-        # redirect to self so that reloading the page doesn't resubmit the form
-        return redirect(my_url())
+        return to_form()
 
     return {
         "title": f"edit {group.label} membership",
@@ -948,7 +954,7 @@ def device_groups(the_device):
         if dept != "":
             logic.remove_group_from_device(dept, device.id)
             model.db.session.commit()
-            return redirect(my_url())
+            return to_form()
 
     return {
         "title": f"manage departments of {device.label}",
