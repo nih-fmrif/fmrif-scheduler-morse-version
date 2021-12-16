@@ -3,7 +3,7 @@
 {% block title %}{{title}}{% endblock %}
 {% block body %}
 	{% if no_entries %}
-		{{ no_entries }}
+		<p class=none>{{ no_entries }}</p>
 	{% else %}
 		<form method=post action="{{ action }}">
 			{{ macros.form(form)}}
