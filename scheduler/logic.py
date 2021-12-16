@@ -130,7 +130,11 @@ def get_mailing_list_form(**kwargs):
                 validators.InputRequired(message="an email address is required")
             ],
             label="email",
-            description="the NIH email address used for this list",
+            description="the NIH email address used for this list (must end in nih.gov)",
+            render_kw={
+                "pattern": ".*[@.]nih.gov",
+                "title": "an email address ending in nih.gov",
+            },
         )
         name = fields.StringField(
             validators=[validators.InputRequired(message="Your name is required")],
