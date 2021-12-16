@@ -98,14 +98,14 @@ def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
 
 def get_mailing_list_form(**kwargs):
     # create the dynamic part of the form from the app settings
-    class MailingListsSubform(FlaskForm):
+    class MailingListsSubform(Form):
         def all_checkboxes(self) -> Generator[Tuple[str, bool], None, None]:
             for elm in self:
                 if elm.type == "BooleanField":
                     yield (elm.label.text, elm.data)
 
         def validate(self) -> bool:
-            if not FlaskForm.validate(self):
+            if not Form.validate(self):
                 return False
 
             if not any(x[1] for x in self.all_checkboxes()):
@@ -1013,7 +1013,7 @@ def groups_not_of_device(device: model.Device) -> List[Tuple[str, str]]:
 
 
 def get_device_groups_form(related: List[Tuple[str, str]]):
-    class ActiveGroupForm(FlaskForm):
+    class ActiveGroupForm(Form):
         remove = fields.SubmitField(
             label="remove",
             render_kw={
@@ -1022,7 +1022,7 @@ def get_device_groups_form(related: List[Tuple[str, str]]):
             },
         )
 
-    class Form(FlaskForm):
+    class DeviceForm(FlaskForm):
         def which(self):
             for elm in self:
                 current_app.logger.info(elm.name)
@@ -1030,9 +1030,9 @@ def get_device_groups_form(related: List[Tuple[str, str]]):
                     return elm.name
 
     for id, label in related:
-        setattr(Form, id, fields.FormField(ActiveGroupForm, label=label))
+        setattr(DeviceForm, id, fields.FormField(ActiveGroupForm, label=label))
 
-    return Form()
+    return DeviceForm()
 
 
 def add_group_to_device(group: str, device: str):
