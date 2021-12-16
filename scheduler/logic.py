@@ -916,7 +916,7 @@ class DeviceEditForm(FlaskForm):
         prefix, c = constraint_of(ex)
         if prefix == "tlkpscanner":
             if c == "pkey":
-                self.id.errors("this id is already in use by another device")
+                self.id.errors.append("this id is already in use by another device")
             elif c == "scanner_key":
                 self.label.errors.append(
                     "this label is already in use by another device"
