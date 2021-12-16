@@ -1,0 +1,14 @@
+{% extends "page.html" %}
+{% import "macros.html" as macros %}
+{% block title %}{{title}}{% endblock %}
+{% block body %}
+	{% if no_entries %}
+		{{ no_entries }}
+	{% else %}
+		<form method=post action="{{ action }}">
+			{{ macros.form(form)}}
+			{{ macros.datalist("members", form.members, "invalid member") }}
+			<button type=submit data-confirm-title="Change PI" data-confirm-confirm="change PI">change</button>
+		</form>
+	{% endif %}
+{% endblock %}

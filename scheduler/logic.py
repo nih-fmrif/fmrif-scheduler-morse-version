@@ -10,7 +10,7 @@ from flask_wtf import FlaskForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import func
-from wtforms import fields, validators, widgets
+from wtforms import Form, fields, validators, widgets
 
 import message
 import model
@@ -625,35 +625,8 @@ def create_group(form: GroupEditForm) -> bool:
     return True
 
 
-def get_group_membership_form(group: model.Group, membership_data):
-    pi = None
-    active = []
-    pending = []
-    for m, is_pi, is_active in membership_data:
-        if is_pi and is_active:
-            pi = m
-        elif is_active:
-            active.append(m)
-        else:
-            pending.append(m)
-    active.sort()
-    pending.sort()
-
-    choices = active
-    if pi is not None:
-        choices = [pi] + active
-
-    class PrimarySubForm(FlaskForm):
-        members = fields.SelectField(label="members", choices=choices, default=pi)
-        submit = fields.SubmitField(
-            label="change",
-            render_kw={
-                "data_confirm_title": "Change PI",
-                "data_confirm_confirm": "Change",
-            },
-        )
-
-    class ActiveMemberForm(FlaskForm):
+def get_group_membership_form(group: model.Group, active, pending):
+    class ActiveMemberForm(Form):
         remove = fields.SubmitField(
             label="remove",
             render_kw={
@@ -662,7 +635,7 @@ def get_group_membership_form(group: model.Group, membership_data):
             },
         )
 
-    class ActiveMembersForm(FlaskForm):
+    class ActiveMembersForm(Form):
         pass
 
     for m in active:
@@ -672,7 +645,7 @@ def get_group_membership_form(group: model.Group, membership_data):
             fields.FormField(ActiveMemberForm, label=m),
         )
 
-    class PendingMemberForm(FlaskForm):
+    class PendingMemberForm(Form):
         approve = fields.SubmitField(
             label="approve",
             render_kw={
@@ -688,7 +661,7 @@ def get_group_membership_form(group: model.Group, membership_data):
             },
         )
 
-    class PendingMembersForm(FlaskForm):
+    class PendingMembersForm(Form):
         pass
 
     for m in pending:
@@ -699,15 +672,11 @@ def get_group_membership_form(group: model.Group, membership_data):
         )
 
     class MembershipForm(FlaskForm):
-        pi = fields.FormField(PrimarySubForm, label="change primary investigator")
         members = fields.FormField(ActiveMembersForm, label="active members")
         pending = fields.FormField(PendingMembersForm, label="pending members")
 
         def action(self):
             # only one action is possible at a time so grab the first hit and bail
-            if self.pi and self.pi.submit.data:
-                return "pi", self.pi.members.data
-
             if self.members:
                 for m in self.members:
                     if m.remove.data:
@@ -724,12 +693,53 @@ def get_group_membership_form(group: model.Group, membership_data):
 
     form = MembershipForm()
     if len(active) == 0:
-        del form.pi  # can't change pi if no other options
         del form.members
     if len(pending) == 0:
         del form.pending
 
     return form
+
+
+class GroupPIForm(FlaskForm):
+    pi = fields.StringField(
+        label="pi",
+        validators=[validators.InputRequired()],
+        render_kw={"list": "members", "autocomplete": "off"},
+    )
+
+    def __init__(self, members, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.members = zip(members, members)
+
+    def validate_pi(self, pi):
+        if any(pi == m[0] for m in self.members):
+            raise validators.ValidationError("invalid member selected")
+
+    def set_errors_from_exception(self, ex: IntegrityError) -> None:
+        prefix, c = constraint_of(ex)
+        if prefix != "primarygroupmember":
+            return
+        if c == "researchercode_fkey":
+            self.pi.errors.append("invalid member selected")
+        elif c == "groupmembers_key":
+            self.pi.errors.append("user must be member of group")
+
+
+def process_group_pi_form(
+    group: model.Group, form: GroupPIForm
+) -> Optional[model.User]:
+    u = get_user(form.pi.data)
+    if u is None:
+        return None
+
+    change_pi_of_group(group, u)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        model.db.session.rollback()
+        form.set_errors_from_exception(ex)
+        return None
+    return u
 
 
 def get_device(id: str) -> Optional[model.Device]:

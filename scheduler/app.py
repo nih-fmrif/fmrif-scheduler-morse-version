@@ -569,6 +569,11 @@ def group_subpage_nav(group: model.Group, su: logic.Group_leader_kind) -> Subpag
                 f"membership [for {group.label}]",
                 url_for("group_membership", the_group=group.id),
             ),
+            (
+                group.active and can_edit,
+                f"change PI [of {group.label}]",
+                url_for("group_pi", the_group=group.id),
+            ),
         ],
     )
 
@@ -664,12 +669,17 @@ def group_membership(the_group):
         abort(403)
 
     members = logic.get_members_of_group(group, all=True)
+    active, pending = [], []
+    for m, is_pi, is_active in members:
+        if is_active and not is_pi:
+            active.append(m)
+        elif not is_active:
+            pending.append(m)
 
-    form = logic.get_group_membership_form(group, members)
+    form = logic.get_group_membership_form(group, active, pending)
 
     no_entries = ""
-    # sum evals to 0 if no members or only member is pi
-    if sum(1 for m, pi, active in members if not (pi and active)) == 0:
+    if len(active) + len(pending) == 0:
         no_entries = "there is no membership data that can be updated for this group"
 
     if form.validate_on_submit():
@@ -694,20 +704,62 @@ def group_membership(the_group):
                 if approved:
                     outcome = "approved"
                 flash(f"{user.id} was {outcome}")
-        elif action == "pi":
-            logic.change_pi_of_group(group, user)
-            model.db.session.commit()
-            flash(f"{user.id} is now PI")
-            if "admin" not in su:
-                # if we were the PI but are not now we no longer have access to this page
-                # but we're still a member of the group
-                return to("group", the_group=group.id)
 
         # redirect to self so that reloading the page doesn't resubmit the form
         return redirect(my_url())
 
     return {
         "title": f"edit {group.label} membership",
+        "action": my_url(),
+        "form": form,
+        "no_entries": no_entries,
+        **group_subpage_nav(group, su),
+        **group_breadcrumb(group),
+    }
+
+
+@app.route("/group/<the_group>/pi", methods=["GET", "POST"])
+@active_user_required
+@render_to("group_pi")
+def group_pi(the_group):
+    group = logic.get_group(the_group)
+    if group is None:
+        abort(404)
+
+    # cannot work with membership of inactive group, even if admin
+    if not group.active:
+        abort(403)
+
+    su = logic.get_group_leader_kind(g.user, group)
+
+    if not ("group_pi" in su or "admin" in su):
+        abort(403)
+
+    all_members = logic.get_members_of_group(group)
+    not_pi = []
+    for name, is_pi, _ in all_members:
+        if not is_pi:
+            not_pi.append(name)
+
+    no_entries = ""
+    if len(not_pi) == 0:
+        no_entries = "no candidates for PI"
+
+    form = logic.GroupPIForm(not_pi)
+    if form.validate_on_submit():
+        u = logic.process_group_pi_form(group, form)
+        if u is not None:
+            flash(f"{u.id} is now PI")
+            # this is an important enough change to log
+            app.logger.info(f"{g.user.id} changed pi of {group.id} to {u.id}")
+            if "admin" not in su:
+                # if we were the PI but are not now we no longer have access to this page
+                # but we're still a member of the group
+                return to("group", the_group=group.id)
+            return to("group_membership", the_group=group.id)
+
+    return {
+        "title": f"change PI of {group.label}",
         "action": my_url(),
         "form": form,
         "no_entries": no_entries,
