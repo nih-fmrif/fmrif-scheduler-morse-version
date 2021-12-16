@@ -180,8 +180,8 @@ function setup_auto_confirms() {
 				}
 
 				confirmDialog(ds.confirmTitle, msg, opts).then(confirmed => {
-					delete form.dataset.Fired;
 					if (!confirmed) {
+						delete form.dataset.Fired;
 						return;
 					}
 					evt.target.requestSubmit(src);
