@@ -2,7 +2,7 @@
 {% import "macros.html" as macros %}
 {% block title %}{{title}}{% endblock %}
 {% block body %}
-	<form method=post action="{{ action }}">
+	<form class="device-edit edit-form" method=post action="{{ action }}">
 		{{ macros.form(form)}}
 		<button type=submit>{{ submit }}</button>
 	</form>
