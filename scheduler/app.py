@@ -1158,3 +1158,59 @@ def device_tmpl_add(the_device):
         **template_breadcrumb(device),
         **template_subpage_nav(device),
     }
+
+
+def template_single_subpage_nav(
+    device: model.Device, tmpl: model.Template
+) -> Subpage_links:
+    entry = lambda lbl, url: (
+        True,
+        lbl,
+        url_for(f"device_tmpl_{url}_edit", the_device=device.id, the_template=tmpl.id),
+    )
+    return subpage_nav(
+        "edit template",
+        [
+            entry("schedule", "schedule"),
+            entry("metadata", "metadata"),
+        ],
+    )
+
+
+@app.route(
+    "/device/<the_device>/templates/edit/<the_template>", methods=["GET", "POST"]
+)
+@active_user_required
+@render_to("templates")
+def device_tmpl_schedule_edit(the_device, the_template):
+    device, _ = check_device_tmpl_perms(the_device)
+    tmpl = logic.get_template(device, the_template)
+    if tmpl is None:
+        abort(404)
+
+    # TODO edit template schedule
+    return {
+        "title": f"edit template schedule {device.label}/{tmpl.label}",
+        **template_breadcrumb(device, tmpl),
+        **template_single_subpage_nav(device, tmpl),
+    }
+
+
+@app.route(
+    "/device/<the_device>/templates/edit-metadata/<the_template>",
+    methods=["GET", "POST"],
+)
+@active_user_required
+@render_to("templates")
+def device_tmpl_metadata_edit(the_device, the_template):
+    device, _ = check_device_tmpl_perms(the_device)
+    tmpl = logic.get_template(device, the_template)
+    if tmpl is None:
+        abort(404)
+
+    # TODO edit template metadata
+    return {
+        "title": f"edit template {device.label}/{tmpl.label}",
+        **template_breadcrumb(device, tmpl),
+        **template_single_subpage_nav(device, tmpl),
+    }

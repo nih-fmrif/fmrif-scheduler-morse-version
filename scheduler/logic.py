@@ -1196,3 +1196,9 @@ class DeviceUserForm(FlaskForm):
         self.populate_obj(ud)
         if not self.tech:
             ud.tech = False
+
+
+def get_template(
+    for_device: model.Device, template_id: str
+) -> Optional[model.Template]:
+    return model.Template.query.get((template_id, for_device.id))
