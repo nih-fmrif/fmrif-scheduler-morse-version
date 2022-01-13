@@ -1,6 +1,6 @@
 import ipaddress
 from functools import wraps
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import click
 import sqlalchemy
@@ -913,10 +913,7 @@ def device_edit(the_device):
     }
 
 
-@app.route("/device/<the_device>/templates")
-@active_user_required
-@render_to("template")
-def device_tmpl(the_device):
+def check_device_tmpl_perms(the_device):
     device = logic.get_device(the_device)
     if device is None:
         abort(404)
@@ -926,8 +923,21 @@ def device_tmpl(the_device):
     if not can_edit:
         abort(403)
 
-    # TODO just a placeholder for now
-    pass
+    return device, perms
+
+
+@app.route("/device/<the_device>/templates", methods=["GET", "POST"])
+@active_user_required
+@render_to("templates")
+def device_tmpl(the_device):
+    device, _ = check_device_tmpl_perms(the_device)
+
+    # TODO build template application interface
+    return {
+        "title": f"apply templates to {device.label}",
+        **template_breadcrumb(device),
+        **template_subpage_nav(device),
+    }
 
 
 @app.route("/device/<the_device>/groups", methods=["GET", "POST"])
@@ -1070,4 +1080,81 @@ def device_user(the_device, the_user):
         "form": form,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
+    }
+
+
+def template_breadcrumb(
+    device: model.Device, tmpl: Optional[model.Template] = None
+) -> Breadcrumb_links:
+    out = [
+        ("devices", url_for("devices")),
+        (device.label, url_for("device", the_device=device.id)),
+        ("templates", url_for("device_tmpl", the_device=device.id)),
+    ]
+    if tmpl is not None:
+        out.append(
+            (
+                f"edit {tmpl.label}",
+                url_for(
+                    "device_tmpl_schedule_edit",
+                    the_device=device.id,
+                    the_template=tmpl.id,
+                ),
+            )
+        )
+    return breadcrumb(*out)
+
+
+def template_subpage_nav(device: model.Device) -> Subpage_links:
+    url = lambda name: url_for(f"device_tmpl{name}", the_device=device.id)
+    return subpage_nav(
+        "templates",
+        [
+            (True, "apply", url("")),
+            (True, "active", url("_list")),
+            (True, "inactive", url("_archive")),
+            (True, "add template", url("_add")),
+        ],
+    )
+
+
+@app.route("/device/<the_device>/templates/list")
+@active_user_required
+@render_to("templates")
+def device_tmpl_list(the_device):
+    device, _ = check_device_tmpl_perms(the_device)
+
+    # TODO list active templates
+    return {
+        "title": f"templates of {device.label}",
+        **template_breadcrumb(device),
+        **template_subpage_nav(device),
+    }
+
+
+@app.route("/device/<the_device>/templates/archive")
+@active_user_required
+@render_to("templates")
+def device_tmpl_archive(the_device):
+    device, _ = check_device_tmpl_perms(the_device)
+
+    # TODO list inactive templates
+    return {
+        "title": f"archived templates of {device.label}",
+        **template_breadcrumb(device),
+        **template_subpage_nav(device),
+    }
+
+
+@app.route("/device/<the_device>/templates/add", methods=["GET", "POST"])
+@active_user_required
+@render_to("templates")
+def device_tmpl_add(the_device):
+    device, _ = check_device_tmpl_perms(the_device)
+
+    # TODO add new template form
+    return {
+        "title": f"add template to {device.label}",
+        **template_breadcrumb(device),
+        **template_subpage_nav(device),
     }
