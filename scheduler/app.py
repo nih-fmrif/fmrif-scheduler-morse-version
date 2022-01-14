@@ -1150,13 +1150,30 @@ def device_tmpl_archive(the_device):
 
 @app.route("/device/<the_device>/templates/add", methods=["GET", "POST"])
 @active_user_required
-@render_to("templates")
+@render_to("templates_metadata_edit")
 def device_tmpl_add(the_device):
     device, _ = check_device_tmpl_perms(the_device)
 
-    # TODO add new template form
+    templates = [
+        (t.id, f"{t.label} ({t.id})")
+        for t in logic.templates_of_device(device, archived=False)
+    ]
+    form = logic.TemplateMetadataForm(device, templates, create=True)
+    if form.validate_on_submit():
+        ok, id = logic.create_template(form, device)
+        if ok:
+            return to(
+                "device_tmpl_schedule_edit",
+                the_device=form.device.id,
+                the_template=id,
+            )
+
     return {
         "title": f"add template to {device.label}",
+        "device": device,
+        "form": form,
+        "action": my_url(),
+        "submit": "create",
         **template_breadcrumb(device),
         **template_subpage_nav(device),
     }
@@ -1203,16 +1220,29 @@ def device_tmpl_schedule_edit(the_device, the_template):
     methods=["GET", "POST"],
 )
 @active_user_required
-@render_to("templates")
+@render_to("templates_metadata_edit")
 def device_tmpl_metadata_edit(the_device, the_template):
     device, _ = check_device_tmpl_perms(the_device)
     tmpl = logic.get_template(device, the_template)
     if tmpl is None:
         abort(404)
 
-    # TODO edit template metadata
+    form = logic.TemplateMetadataForm(device, [], create=False, obj=tmpl)
+    if form.validate_on_submit():
+        if logic.process_update_template_metadata(form, tmpl):
+            return to(
+                "device_tmpl_schedule_edit",
+                the_device=form.device.id,
+                the_template=tmpl.id,
+            )
+
     return {
         "title": f"edit template {device.label}/{tmpl.label}",
+        "device": device,
+        "template": tmpl,
+        "form": form,
+        "action": my_url(),
+        "submit": "save",
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }

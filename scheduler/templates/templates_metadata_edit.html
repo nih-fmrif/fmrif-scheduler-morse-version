@@ -1,0 +1,10 @@
+{% extends "page.html" %}
+{% import "macros.html" as macros %}
+{% block title %}{{ title }}{% endblock %}
+{% block body %}
+	<form class="tmpl-edit edit-form" method=post action="{{ action }}">
+		{{ macros.form(form)}}
+		{{ macros.datalist("templates", form.templates, "invalid template") }}
+		<button type=submit>{{ submit }}</button>
+	</form>
+{% endblock %}

@@ -1214,3 +1214,94 @@ def templates_of_device(
         .order_by(M.label)
     )
     return q.all()
+
+
+class TemplateMetadataForm(FlaskForm):
+    clone_from = fields.StringField(
+        label="clone",
+        description="prepopulate new template with schedule of an existing template (optional)",
+        validators=[validators.Length(min=0, max=1)],
+        render_kw={"autocomplete": "off", "list": "templates"},
+    )
+    id = fields.StringField(
+        label="template code",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(max=1, message="templatecode must be 1 character long"),
+        ],
+        render_kw={"autocomplete": "off"},
+    )
+    label = fields.StringField(
+        label="label",
+        validators=[
+            validators.InputRequired(),
+            validators.Length(max=25, message="label must be 25 characters or fewer"),
+        ],
+        render_kw={"autocomplete": "off"},
+    )
+    description = fields.TextAreaField(
+        label="description",
+    )
+    hidden = fields.BooleanField(label="archived", default=False)
+
+    def __init__(self, device, templates, create=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.device = device
+        self.templates = templates
+        if not create:
+            del self.id
+            del self.clone_from
+
+    def validate_clone_from(self, clone) -> None:
+        if not clone.data:
+            return
+        if not any(clone.data == id for (id, _) in self.templates):
+            raise validators.ValidationError("invalid template")
+
+    def set_errors_from_exception(self, ex: IntegrityError) -> None:
+        prefix, c = constraint_of(ex)
+        if prefix != "tbltemplates":
+            return
+        if c == "pkey":
+            self.id.errors.append(
+                "this id is already in use by another template on this device"
+            )
+        elif c == "scannercode_fkey":
+            self.errors.append("form was created improperly, no device to reference")
+
+
+def process_update_template_metadata(
+    form: TemplateMetadataForm, tmpl: model.Template
+) -> bool:
+    form.populate_obj(tmpl)
+    model.db.session.add(tmpl)
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return False
+    return True
+
+
+def create_template(
+    form: TemplateMetadataForm, for_device: model.Device
+) -> Tuple[bool, str]:
+    tmpl = model.Template()
+    form.populate_obj(tmpl)
+    tmpl.device = for_device.id
+
+    model.db.session.add(tmpl)
+    # TODO clone or create new template entries
+    if form.clone_from.data:
+        clone_from = form.clone_from.data
+    else:
+        pass
+
+    try:
+        model.db.session.commit()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return (False, "")
+    return (True, tmpl.id)
