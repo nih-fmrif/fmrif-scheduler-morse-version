@@ -2,12 +2,15 @@
 {% block title %}{{ title }}{% endblock %}
 {% block body %}
 	{% if templates %}
-		<ul>
+		<ul class=list-with-description>
 			{% for t in templates %}
-				<li><a href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}">{{ t.label }} ({{ t.id }})</li>
+				<li>
+					<a href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}">{{ t.label }} ({{ t.id }})</a>
+					{% if t.description %}<p>{{ t.description }}</p>{% endif %}
+				</li>
 			{% endfor %}
 		</ul>
 	{% else %}
-		<p>no templates</p>
+		<p class=none>no templates</p>
 	{% endif %}
 {% endblock %}
