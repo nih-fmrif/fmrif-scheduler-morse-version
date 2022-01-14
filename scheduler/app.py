@@ -1120,13 +1120,14 @@ def template_subpage_nav(device: model.Device) -> Subpage_links:
 
 @app.route("/device/<the_device>/templates/list")
 @active_user_required
-@render_to("templates")
+@render_to("templates_list")
 def device_tmpl_list(the_device):
     device, _ = check_device_tmpl_perms(the_device)
-
-    # TODO list active templates
+    templates = logic.templates_of_device(device, archived=False)
     return {
         "title": f"templates of {device.label}",
+        "device": device,
+        "templates": templates,
         **template_breadcrumb(device),
         **template_subpage_nav(device),
     }
@@ -1134,13 +1135,14 @@ def device_tmpl_list(the_device):
 
 @app.route("/device/<the_device>/templates/archive")
 @active_user_required
-@render_to("templates")
+@render_to("templates_list")
 def device_tmpl_archive(the_device):
     device, _ = check_device_tmpl_perms(the_device)
-
-    # TODO list inactive templates
+    templates = logic.templates_of_device(device, archived=True)
     return {
         "title": f"archived templates of {device.label}",
+        "device": device,
+        "templates": templates,
         **template_breadcrumb(device),
         **template_subpage_nav(device),
     }

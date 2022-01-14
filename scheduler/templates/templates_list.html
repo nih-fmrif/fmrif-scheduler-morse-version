@@ -1,0 +1,13 @@
+{% extends "page.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block body %}
+	{% if templates %}
+		<ul>
+			{% for t in templates %}
+				<li><a href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}">{{ t.label }} ({{ t.id }})</li>
+			{% endfor %}
+		</ul>
+	{% else %}
+		<p>no templates</p>
+	{% endif %}
+{% endblock %}

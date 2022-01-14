@@ -1202,3 +1202,15 @@ def get_template(
     for_device: model.Device, template_id: str
 ) -> Optional[model.Template]:
     return model.Template.query.get((template_id, for_device.id))
+
+
+def templates_of_device(
+    device: model.Device, archived: bool = False
+) -> List[model.Template]:
+    M = model.Template
+    q = (
+        M.query.filter(M.device == device.id)
+        .filter(M.hidden == archived)
+        .order_by(M.label)
+    )
+    return q.all()
