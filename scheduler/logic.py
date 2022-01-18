@@ -1292,11 +1292,36 @@ def create_template(
     tmpl.device = for_device.id
 
     model.db.session.add(tmpl)
-    # TODO clone or create new template entries
+    model.db.session.flush()  # need tmpl inserted for next step
+
     if form.clone_from.data:
-        clone_from = form.clone_from.data
+        model.db.session.execute(
+            """
+            insert into tbltemplate(scannercode, templatecode, dow, hour, deptcode, researchercode, instcode)
+                select :scannercode, :templatecode, dow, hour, deptcode, researchercode, instcode
+                    from tbltemplate where (scannercode, templatecode) = (:scannercode, :orig_templatecode)
+            """,
+            {
+                "scannercode": tmpl.device,
+                "templatecode": tmpl.id,
+                "orig_templatecode": form.clone_from.data,
+            },
+        )
     else:
-        pass
+        model.db.session.execute(
+            """
+            insert into tbltemplate(scannercode, templatecode, dow, hour)
+                select :scannercode, :templatecode, dow, hour
+                    from
+                        generate_series(0, 6) as dow
+                    cross join
+                        generate_series(0, 23) as hour;
+            """,
+            {
+                "scannercode": tmpl.device,
+                "templatecode": tmpl.id,
+            },
+        )
 
     try:
         model.db.session.commit()
