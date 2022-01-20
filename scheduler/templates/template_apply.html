@@ -1,0 +1,10 @@
+{% extends "page.html" %}
+{% import "macros.html" as macros %}
+{% block title %}{{title}}{% endblock %}
+{% block body %}
+{% if warn %}<p class=note>{{ warn }}</p>{% endif %}
+	<form class="template-apply" method=post action="{{ action }}">
+		{{ macros.form(form)}}
+		<button type=submit data-confirm-title="Apply templates" data-confirm-confirm="apply templates">apply</button>
+	</form>
+{% endblock %}

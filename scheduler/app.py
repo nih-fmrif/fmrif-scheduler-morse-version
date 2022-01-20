@@ -928,13 +928,31 @@ def check_device_tmpl_perms(the_device):
 
 @app.route("/device/<the_device>/templates", methods=["GET", "POST"])
 @active_user_required
-@render_to("templates")
+@render_to("template_apply")
 def device_tmpl(the_device):
     device, _ = check_device_tmpl_perms(the_device)
 
-    # TODO build template application interface
+    templates = logic.templates_of_device(device, archived=False)
+    codes = [t.id for t in templates]
+    start = logic.get_start_day_of(device)
+    chg_by = f"user {g.user.id}"
+    warn = ""
+    if start is None:
+        start = logic.next_sunday()
+        warn = f"no templates have been published to {device.label} before so the start date will be {start}"
+
+    form = logic.TemplateApplyForm(codes)
+    if form.validate_on_submit():
+        logic.process_template_apply(form, device, start, chg_by)
+        flash("templates applied")
+        return to("device", the_device=device.id)
+
     return {
         "title": f"apply templates to {device.label}",
+        "action": my_url(),
+        "form": form,
+        "warn": warn,
+        "templates": templates,
         **template_breadcrumb(device),
         **template_subpage_nav(device),
     }

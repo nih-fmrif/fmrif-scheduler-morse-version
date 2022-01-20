@@ -1330,3 +1330,84 @@ def create_template(
         model.db.session.rollback()
         return (False, "")
     return (True, tmpl.id)
+
+
+def get_start_day_of(device: model.Device) -> Optional[datetime.date]:
+    M = model.ScheduleEntry
+    d = model.db.session.query(func.max(M.date)).filter(M.device == device.id).scalar()
+    if d is not None:
+        d += datetime.timedelta(days=1)
+    return d
+
+
+def next_sunday() -> datetime.date:
+    d = datetime.date.today()
+    w = d.isoweekday()
+    # subtract w days from date, taking it back to the last sunday,
+    # and then add 1 week taking it to the next sunday
+    # if this is sunday, there is no change
+    d += datetime.timedelta(days=-w, weeks=1)
+    return d
+
+
+class TemplateApplyForm(FlaskForm):
+    templates = fields.StringField(
+        label="templates",
+        validators=[validators.InputRequired()],
+        render_kw={"autocomplete": "off"},
+    )
+
+    def __init__(self, valid_template_codes: List[str], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.valid_template_codes = set(valid_template_codes)
+
+    def validate_templates(self, templates) -> None:
+        if not (set(templates.data) <= self.valid_template_codes):
+            raise validators.ValidationError("invalid template code(s)")
+
+
+def process_template_apply(
+    form: TemplateApplyForm, device: model.Device, start: datetime.date, chg_by: str
+):
+    model.db.session.execute(
+        """
+        insert into tblsched(
+            scannercode,
+            templateid,
+            scheddate,
+            scheddow,
+            schedhour,
+            deptcode,
+            orig_deptcode,
+            researchercode,
+            chg_by,
+            orig_instcode)
+        select
+            scannercode,
+            templateid,
+            -- add dow+(1 week for each template after the first) days to the start date
+            :start_date + dow::integer + dow_offset as scheddate,
+            dow scheddow,
+            hour schedhour,
+            deptcode,
+            deptcode orig_deptcode,
+            researchercode,
+            :chg_by as chg_by,
+            instcode orig_instcode
+        from
+            (
+                -- assign each template 7*n for n=0, 1, 2, ..., len(templates)-1
+                select 7*(row_number() over () - 1)::integer as dow_offset, * 
+                from unnest(:templates) as tc
+            ) vars
+        inner join
+            tbltemplate tmpl on (scannercode, templatecode) = (:device, tc)
+        """,
+        {
+            "templates": list(form.templates.data),
+            "device": device.id,
+            "start_date": start,
+            "chg_by": chg_by,
+        },
+    )
+    model.db.session.commit()
