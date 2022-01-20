@@ -3,12 +3,10 @@ from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union
 
 import click
-import sqlalchemy
 from flask import Flask, abort, g, redirect, request, session
 from flask.helpers import flash, url_for
 from flask.templating import render_template
 from flask.wrappers import Response
-from flask_mail import Mail
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
