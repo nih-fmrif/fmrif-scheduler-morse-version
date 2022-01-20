@@ -352,7 +352,8 @@ body {
 	align-self: start;
 }
 .group-membership-add-form,
-.device-groups-add-form {
+.device-groups-add-form,
+.template-apply {
 	display: flex;
 	gap: 1rem;
 	flex-wrap: wrap;
@@ -380,4 +381,39 @@ body {
 
 .list-with-description li p:first-of-type {
 	margin-top: 0;
+}
+
+p.note {
+	font-size: 125%;
+}
+p.note svg {
+	display: inline-block;
+	vertical-align: text-bottom;
+	margin-right: .25rem;
+}
+
+.apply-helper {
+	display: grid;
+}
+.apply-helper>* {
+	grid-area: 1 / 1;
+}
+.apply-helper .apply-helper-js {
+	display: block;
+	visibility: hidden;
+}
+.apply-helper.js-loaded .apply-helper-no-js {
+	visibility: hidden;
+}
+.apply-helper.js-loaded .apply-helper-js {
+	visibility: visible;
+}
+
+.apply-helper-no-js ul {
+	margin-top: 0;
+}
+
+.apply-helper-js button {
+	display: block;
+	margin-bottom: 1rem;
 }

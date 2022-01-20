@@ -1353,6 +1353,7 @@ def next_sunday() -> datetime.date:
 class TemplateApplyForm(FlaskForm):
     templates = fields.StringField(
         label="templates",
+        description="ordered list of template codes to add to the schedule",
         validators=[validators.InputRequired()],
         render_kw={"autocomplete": "off"},
     )

@@ -939,7 +939,10 @@ def device_tmpl(the_device):
     warn = ""
     if start is None:
         start = logic.next_sunday()
-        warn = f"no templates have been published to {device.label} before so the start date will be {start}"
+        warn = f"no templates have been published to {device.label} before, so the start date will be {start}"
+    no_templates = ""
+    if len(templates) == 0:
+        no_templates = f"no templates have been created for { device.label } yet"
 
     form = logic.TemplateApplyForm(codes)
     if form.validate_on_submit():
@@ -953,6 +956,7 @@ def device_tmpl(the_device):
         "form": form,
         "warn": warn,
         "templates": templates,
+        "no_templates": no_templates,
         **template_breadcrumb(device),
         **template_subpage_nav(device),
     }

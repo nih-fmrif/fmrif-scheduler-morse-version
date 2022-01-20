@@ -1,10 +1,44 @@
 {% extends "page.html" %}
 {% import "macros.html" as macros %}
+{% import "svg/icons.html" as icons %}
 {% block title %}{{title}}{% endblock %}
 {% block body %}
-{% if warn %}<p class=note>{{ warn }}</p>{% endif %}
-	<form class="template-apply" method=post action="{{ action }}">
-		{{ macros.form(form)}}
-		<button type=submit data-confirm-title="Apply templates" data-confirm-confirm="apply templates">apply</button>
-	</form>
+	{% if warn %}<p class=note>{{ icons.info() }}{{ warn }}</p>{% endif %}
+	{% if templates %}
+		<div class=apply-helper>
+			<div class=apply-helper-no-js>
+				<span>available templates</span>
+				<ul>
+					{% for t in templates %}
+						<li><strong>{{ t.id }}</strong>: {{ t.label}}</li>
+					{% endfor %}
+				</li>
+			</div>
+			<div class=apply-helper-js hidden>
+				<span>click buttons below to add to list of templates to apply</span>
+				<div>
+					{% for t in templates %}
+						<button type=button data-tc="{{ t.id }}"><sr-only>add </sr-only><strong>{{ t.id }}</strong>: {{ t.label}}</button>
+					{% endfor %}
+				</div>
+			</div>
+		</div>
+
+		<form class="template-apply" method=post action="{{ action }}">
+			{{ macros.form(form)}}
+			<button type=submit data-confirm-title="Apply templates" data-confirm-confirm="apply templates">apply</button>
+		</form>
+
+		<script type=module async>
+			const con = document.querySelector(".apply-helper");
+			const templates = document.querySelector("#templates");
+			con.addEventListener("click", e => {
+				e.preventDefault();
+				templates.value += e.target.dataset.tc;
+			});
+			con.classList.add("js-loaded");
+		</script>
+	{% else %}
+		<p class=note>{{ icons.info()}} {{ no_templates }}</p>
+	{% endif %}
 {% endblock %}
