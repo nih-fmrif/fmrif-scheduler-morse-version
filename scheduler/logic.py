@@ -1412,3 +1412,61 @@ def process_template_apply(
         },
     )
     model.db.session.commit()
+
+
+def schedule_for(
+    device: model.Device, start: datetime.date, end: datetime.date
+) -> List[model.ScheduleEntry]:
+    M = model.ScheduleEntry
+    q = M.query.filter(M.device == device.id)
+    q = q.filter(M.date.between(start, end))
+    q.order_by(M.date, M.hour)
+    return q.all()
+
+
+def device_schedule_extreme_dates(
+    device: model.Device,
+) -> Tuple[Optional[datetime.date], Optional[datetime.date]]:
+    """return the first and last scheduled day for device
+    or (None, None) for a device that has never had entries scheduled"""
+    M = model.ScheduleEntry
+    return (
+        model.db.session.query(func.min(M.date), func.max(M.date))
+        .filter(M.device == device.id)
+        .first()
+    )
+
+
+def date_or_today(date: Optional[datetime.date]) -> datetime.date:
+    if date is None:
+        return datetime.date.today()
+    return date
+
+
+def fmt_date(date: Optional[datetime.date]) -> str:
+    if date is None:
+        return ""
+    return date.strftime("%Y-%m-%d")
+
+
+def parse_date(s: str) -> Optional[datetime.date]:
+    """parses a string in YYYY-MM-DD format, returning None on failure"""
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def parse_days(days: str) -> Optional[int]:
+    """parses a reasonable number of days (1-31) or returns None"""
+    try:
+        n = int(days)
+        if not (0 < n < 32):
+            return None
+        return n
+    except ValueError:
+        return None
+
+
+def end_date(date: datetime.date, days: int) -> datetime.date:
+    return date + datetime.timedelta(days=days)

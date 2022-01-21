@@ -871,10 +871,58 @@ def device(the_device):
     if not (device.active or perms.admin):
         abort(403)
 
-    # TODO display schedule
+    # get the date, defaulting to today
+    date = None
+    the_date = request.args.get("start")
+    if the_date is not None:
+        date = logic.parse_date(the_date)
+        if date is None:
+            abort(400, f"invalid start: {the_date} (must be YYYY-MM-DD date)")
+    date = logic.date_or_today(date)
+
+    # get the number of days to show, defaulting to 7
+    days = 7
+    the_days = request.args.get("days")
+    if the_days is not None:
+        days = logic.parse_days(the_days)
+        if days is None:
+            abort(400, f"invalid days: {the_days} (must be in 1-31)")
+
+    # find the end date of the window to show
+    end_date = logic.end_date(date, days)
+
+    entries = logic.schedule_for(device, date, end_date)
+    # TODO build forms for entries
+
+    min, max = logic.device_schedule_extreme_dates(device)
+
+    fmt_start_date = logic.fmt_date(date)
+    fmt_end_date = logic.fmt_date(end_date)
+    fmt_min = ""
+    fmt_max = ""
+    if min is not None:
+        fmt_min = logic.fmt_date(min)
+        fmt_max = logic.fmt_date(max)
+
+    no_entries = ""
+    never_entries = ""
+    if len(entries) == 0:
+        if min is None:
+            never_entries = "this device has not yet had any entries scheduled on it"
+        else:
+            no_entries = f"no entries scheduled for {fmt_start_date}. All entries are between {fmt_min} and {fmt_max}"
+
     return {
         "device": device,
         "perms": perms,
+        "start_date": fmt_start_date,
+        "end_date": fmt_end_date,
+        "days": days,
+        "entries": entries,
+        "min": fmt_min,
+        "max": fmt_max,
+        "never_entries": never_entries,
+        "no_entries": no_entries,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
@@ -946,7 +994,7 @@ def device_tmpl(the_device):
     if form.validate_on_submit():
         logic.process_template_apply(form, device, start, chg_by)
         flash("templates applied")
-        return to("device", the_device=device.id)
+        return to("device", the_device=device.id, start=start)
 
     return {
         "title": f"apply templates to {device.label}",

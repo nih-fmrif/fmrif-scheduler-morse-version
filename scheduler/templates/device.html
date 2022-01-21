@@ -1,5 +1,23 @@
 {% extends "page.html" %}
 {% block title %}{{ device.label }}{% endblock %}
 {% block body %}
-	TODO
+	{% if never_entries %}
+		<p class=note>{{ icons.info() }} {{ never_entries }}</p>
+	{% else %}
+		<nav aria-labelledby=jump-hdr>
+			<form>
+				<span id=jump-hdr>jump to</span>
+				<input name=start aria-label="start date" type=text autocomplete=off pattern="[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}" value="{{ start_date }}" required>
+				<span aria-hidden=true>and show</span>
+				<input name=days aria-label="show number of days" type=number value="{{ days }}" step=1 min=1 max=31 required>
+				<span aria-hidden=true>days</span>
+				<button type=submit>go</button>
+			</form>
+		</nav>
+		{% if no_entries %}
+			<p class=note>{{ icons.info() }} {{ no_entries }}</p>
+		{% else %}
+			TODO show entries for {{days}}: {{ start_date }} to {{ end_date}}
+		{% endif %}
+	{% endif %}
 {% endblock %}
