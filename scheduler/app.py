@@ -1276,8 +1276,10 @@ def device_tmpl_schedule_edit(the_device, the_template):
         abort(404)
 
     # TODO edit template schedule
+    entries = logic.get_template_entries(device, tmpl)
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
+        "entries": entries,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }

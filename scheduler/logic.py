@@ -1332,6 +1332,17 @@ def create_template(
     return (True, tmpl.id)
 
 
+def get_template_entries(
+    device: model.Device, template: model.Template
+) -> List[model.TemplateEntry]:
+    M = model.TemplateEntry
+    q = M.query
+    q = q.filter(M.device == device.id)
+    q = q.filter(M.template == template.id)
+    q = q.order_by(M.dow, M.hour)
+    return q.all()
+
+
 def get_start_day_of(device: model.Device) -> Optional[datetime.date]:
     M = model.ScheduleEntry
     d = model.db.session.query(func.max(M.date)).filter(M.device == device.id).scalar()
