@@ -1481,3 +1481,20 @@ def parse_days(days: str) -> Optional[int]:
 
 def end_date(date: datetime.date, days: int) -> datetime.date:
     return date + datetime.timedelta(days=days)
+
+
+def get_device_from_schedid(eid) -> Optional[model.Device]:
+    M = model.ScheduleEntry
+    entry = M.query.filter(M.id == eid).first()
+    if entry is None:
+        return None
+    return get_device(entry.device)
+
+
+def get_sched_log_entry(eid: int):
+    r = model.SchedLogEntry.query.get(eid)
+
+    if r is None:
+        return None
+
+    return r.entries

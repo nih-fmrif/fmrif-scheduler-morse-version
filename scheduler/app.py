@@ -3,7 +3,7 @@ from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union
 
 import click
-from flask import Flask, abort, g, redirect, request, session
+from flask import Flask, abort, g, jsonify, redirect, request, session
 from flask.helpers import flash, url_for
 from flask.templating import render_template
 from flask.wrappers import Response
@@ -926,6 +926,24 @@ def device(the_device):
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
+
+
+@app.route("/json/v1/log/<eid>")
+def entry_log(eid):
+    if g.user is None:
+        abort(403)
+
+    device = logic.get_device_from_schedid(eid)
+    if device is None:
+        abort(404)
+
+    perms = logic.get_dev_perms(g.user, device)
+    if not (device.active or perms.admin):
+        abort(403)
+
+    r = logic.get_sched_log_entry(eid)
+
+    return jsonify(r)
 
 
 @app.route("/device/<the_device>/edit", methods=["GET", "POST"])
