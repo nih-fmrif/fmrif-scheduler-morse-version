@@ -912,6 +912,8 @@ def device(the_device):
         else:
             no_entries = f"no entries scheduled for {fmt_start_date}. All entries are between {fmt_min} and {fmt_max}"
 
+    support = logic.support_request_datalists(device)
+
     return {
         "device": device,
         "perms": perms,
@@ -923,6 +925,7 @@ def device(the_device):
         "max": fmt_max,
         "never_entries": never_entries,
         "no_entries": no_entries,
+        "support": support,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }

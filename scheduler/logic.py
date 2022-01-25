@@ -1,7 +1,7 @@
 import datetime
 import re
 import secrets
-from typing import Any, Generator, List, Literal, Optional, Set, Tuple, cast
+from typing import Any, Generator, List, Literal, NamedTuple, Optional, Set, Tuple, cast
 
 import itsdangerous
 from flask import current_app
@@ -1500,3 +1500,38 @@ def get_sched_log_entry(eid: int):
         return None
 
     return r.entries
+
+
+class SupportRequestDatalists(NamedTuple):
+    tech: Datalist
+    medical: Datalist
+    training: Datalist
+
+
+def support_request_datalists(device: model.Device) -> SupportRequestDatalists:
+    q = model.db.session.execute(
+        """
+            select r.researchercode, r.name, ud.tech, ud.medical, ud.training
+            from userdevice ud
+            inner join tlkpresearcher r using(researchercode)
+            where r.active
+            and ud.scannercode=:device
+            and (ud.tech or ud.medical or ud.training)
+            order by 2
+        """,
+        {
+            "device": device.id,
+        },
+    )
+
+    tech, med, train = [], [], []
+    for id, name, is_tech, is_med, is_train in q.fetchall():
+        p = (id, f"{name} ({id})")
+        if is_tech:
+            tech.append(p)
+        if is_med:
+            med.append(p)
+        if is_train:
+            train.append(p)
+
+    return SupportRequestDatalists(tech, med, train)
