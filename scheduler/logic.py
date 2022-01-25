@@ -1025,7 +1025,6 @@ def get_device_groups_form(related: List[Tuple[str, str]]):
     class DeviceForm(FlaskForm):
         def which(self):
             for elm in self:
-                current_app.logger.info(elm.name)
                 if elm.remove.data:
                     return elm.name
 
