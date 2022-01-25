@@ -77,7 +77,10 @@ def notify_dev_pi_of_tech_join_form(user: model.User) -> None:
     )
 
 
-def get_departments_for_join_form(user: model.User) -> List[Tuple[str, str]]:
+Datalist = List[Tuple[str, str]]
+
+
+def get_departments_for_join_form(user: model.User) -> Datalist:
     # get all active departments (and DEV group) that user is NOT a current or pending member of.
     q = model.db.session.execute(
         """
@@ -552,7 +555,7 @@ class GroupEditForm(FlaskForm):
                 self.inst.errors.append("invalid institute selected")
 
 
-def get_institutes_datalist() -> List[Tuple[str, str]]:
+def get_institutes_datalist() -> Datalist:
     m = model.Inst
     q = m.query.filter(m.active)
     r = []
@@ -976,7 +979,7 @@ def create_device(form: DeviceEditForm) -> Optional[model.Device]:
     return device
 
 
-def groups_of_device(device: model.Device) -> List[Tuple[str, str]]:
+def groups_of_device(device: model.Device) -> Datalist:
     q = model.db.session.execute(
         """
         select G.deptcode, G.dept_short from tlkpdept G 
@@ -994,7 +997,7 @@ def groups_of_device(device: model.Device) -> List[Tuple[str, str]]:
     return out
 
 
-def groups_not_of_device(device: model.Device) -> List[Tuple[str, str]]:
+def groups_not_of_device(device: model.Device) -> Datalist:
     q = model.db.session.execute(
         """
         select G.deptcode, G.dept_short from tlkpdept G
@@ -1012,7 +1015,7 @@ def groups_not_of_device(device: model.Device) -> List[Tuple[str, str]]:
     return out
 
 
-def get_device_groups_form(related: List[Tuple[str, str]]):
+def get_device_groups_form(related: Datalist):
     class ActiveGroupForm(Form):
         remove = fields.SubmitField(
             label="remove",
