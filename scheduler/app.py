@@ -538,7 +538,7 @@ def groups():
 @admin_only
 @render_to("group_edit")
 def group_add():
-    institutes = logic.get_institutes_for_group_edit_form()
+    institutes = logic.get_institutes_datalist()
     form = logic.GroupEditForm("", institutes, is_admin=True, create=True)
 
     if form.validate_on_submit():
@@ -636,7 +636,7 @@ def group_edit(the_group):
 
     institutes = []
     if is_admin:
-        institutes = logic.get_institutes_for_group_edit_form()
+        institutes = logic.get_institutes_datalist()
     form = logic.GroupEditForm(group.id, institutes, is_admin=is_admin, obj=group)
 
     if form.validate_on_submit():
@@ -1295,9 +1295,11 @@ def device_tmpl_schedule_edit(the_device, the_template):
 
     # TODO edit template schedule
     entries = logic.get_template_entries(device, tmpl)
+    institutes = logic.get_institutes_datalist()
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
         "entries": entries,
+        "institutes": institutes,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }

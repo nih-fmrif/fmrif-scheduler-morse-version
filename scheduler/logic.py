@@ -552,7 +552,7 @@ class GroupEditForm(FlaskForm):
                 self.inst.errors.append("invalid institute selected")
 
 
-def get_institutes_for_group_edit_form() -> List[Tuple[str, str]]:
+def get_institutes_datalist() -> List[Tuple[str, str]]:
     m = model.Inst
     q = m.query.filter(m.active)
     r = []
