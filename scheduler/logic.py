@@ -1612,3 +1612,23 @@ def member_datalists_by_group_for(
         p = (id, user_datalist_entry(id, name))
         datalists[dept].append(p)
     return datalists
+
+
+def device_colors(device: model.Device) -> Dict[str, str]:
+    # it's okay if this grabs more than apply since it's only used internally
+    q = model.db.session.execute(
+        """
+            select d.deptcode, d.color
+            from tlkpdept d
+            inner join devicegroup dg using(deptcode)
+            where dg.scannercode = :device
+        """,
+        {
+            "device": device.id,
+        },
+    )
+    out = {}
+    for k, v in q.fetchall():
+        out[k] = v
+    return out
+
