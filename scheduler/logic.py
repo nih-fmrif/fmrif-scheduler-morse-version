@@ -1485,6 +1485,12 @@ def end_date(date: datetime.date, days: int) -> datetime.date:
     return date + datetime.timedelta(days=days)
 
 
+def user_datalist_entry(id: str, name: str) -> str:
+    if name == "" or id == name:
+        return id
+    return f"{name} ({id})"
+
+
 def get_device_from_schedid(eid) -> Optional[model.Device]:
     M = model.ScheduleEntry
     entry = M.query.filter(M.id == eid).first()
@@ -1526,7 +1532,7 @@ def support_request_datalists(device: model.Device) -> SupportRequestDatalists:
 
     tech, med, train = [], [], []
     for id, name, is_tech, is_med, is_train in q.fetchall():
-        p = (id, f"{name} ({id})")
+        p = (id, user_datalist_entry(id, name))
         if is_tech:
             tech.append(p)
         if is_med:
