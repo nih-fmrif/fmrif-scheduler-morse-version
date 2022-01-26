@@ -1,7 +1,19 @@
 import datetime
 import re
 import secrets
-from typing import Any, Generator, List, Literal, NamedTuple, Optional, Set, Tuple, cast
+from collections import defaultdict
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    List,
+    Literal,
+    NamedTuple,
+    Optional,
+    Set,
+    Tuple,
+    cast,
+)
 
 import itsdangerous
 from flask import current_app
@@ -1541,3 +1553,62 @@ def support_request_datalists(device: model.Device) -> SupportRequestDatalists:
             train.append(p)
 
     return SupportRequestDatalists(tech, med, train)
+
+
+def all_member_datalists_by_group(device: model.Device) -> Dict[str, Datalist]:
+    """for each department of device get a datalist of its members"""
+    q = model.db.session.execute(
+        """
+            select dg.deptcode, gm.researchercode, r.name
+            from devicegroup dg
+            inner join tlkpdept dept on dept.deptcode = dg.deptcode
+            inner join groupmembers gm on gm.deptcode = dg.deptcode
+            inner join tlkpresearcher r on gm.researchercode = r.researchercode
+            where dg.scannercode = :device
+            and gm.approved is not null
+            and dept.department and dept.iscurrent
+            order by 1, 3
+        """,
+        {
+            "device": device.id,
+        },
+    )
+    datalists = defaultdict(list)
+    for dept, id, name in q.fetchall():
+        p = (id, user_datalist_entry(id, name))
+        datalists[dept].append(p)
+    return datalists
+
+
+def member_datalists_by_group_for(
+    device: model.Device, user: model.User
+) -> Dict[str, Datalist]:
+    """for each department of device that user is a member of, get a datalist of its members"""
+    q = model.db.session.execute(
+        """
+            with users_departments as (
+                    select d.deptcode
+                    from tlkpdept d
+                    inner join groupmembers gm using(deptcode)
+                    where d.department and d.iscurrent
+                    and gm.approved is not null
+                    and gm.researchercode = 'vinai'
+                )
+            select dg.deptcode, gm.researchercode, r.name
+            from devicegroup dg
+            inner join users_departments dept on dept.deptcode = dg.deptcode
+            inner join groupmembers gm on gm.deptcode = dg.deptcode
+            inner join tlkpresearcher r on gm.researchercode = r.researchercode
+            where dg.scannercode = 'f'
+            and gm.approved is not null
+            order by 1, 3
+        """,
+        {
+            "device": device.id,
+        },
+    )
+    datalists = defaultdict(list)
+    for dept, id, name in q.fetchall():
+        p = (id, user_datalist_entry(id, name))
+        datalists[dept].append(p)
+    return datalists

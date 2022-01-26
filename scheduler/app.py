@@ -912,7 +912,19 @@ def device(the_device):
         else:
             no_entries = f"no entries scheduled for {fmt_start_date}. All entries are between {fmt_min} and {fmt_max}"
 
+    # need to determine if user can edit this
+    support = logic.SupportRequestDatalists([], [], [])
+    members_of_groups = {}
+
+    # load any data user may need to edit
+    if device.active and perms.edit:
     support = logic.support_request_datalists(device)
+
+        # load all relevant group-member datalists
+        if perms.edit_any:
+            members_of_groups = logic.all_member_datalists_by_group(device)
+        else:
+            members_of_groups = logic.member_datalists_by_group_for(device, g.user)
 
     return {
         "device": device,
@@ -926,6 +938,7 @@ def device(the_device):
         "never_entries": never_entries,
         "no_entries": no_entries,
         "support": support,
+        "members_of_groups": members_of_groups,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
@@ -1299,10 +1312,12 @@ def device_tmpl_schedule_edit(the_device, the_template):
     # TODO edit template schedule
     entries = logic.get_template_entries(device, tmpl)
     institutes = logic.get_institutes_datalist()
+    members_of_groups = logic.all_member_datalists_by_group(device)
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
         "entries": entries,
         "institutes": institutes,
+        "members_of_groups": members_of_groups,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }
