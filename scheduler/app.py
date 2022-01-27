@@ -915,6 +915,7 @@ def device(the_device):
     # need to determine if user can edit this
     support = logic.SupportRequestDatalists([], [], [])
     members_of_groups = {}
+    groups = []
 
     # load any data user may need to edit
     if device.active and perms.edit:
@@ -923,8 +924,10 @@ def device(the_device):
         # load all relevant group-member datalists
         if perms.edit_any:
             members_of_groups = logic.all_member_datalists_by_group(device)
+            groups = logic.all_groups_of_device(device)
         else:
             members_of_groups = logic.member_datalists_by_group_for(device, g.user)
+            groups = logic.groups_of_device_for(device, g.user)
 
     return {
         "device": device,
@@ -939,6 +942,7 @@ def device(the_device):
         "no_entries": no_entries,
         "support": support,
         "members_of_groups": members_of_groups,
+        "groups": groups,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
@@ -1313,10 +1317,12 @@ def device_tmpl_schedule_edit(the_device, the_template):
     entries = logic.get_template_entries(device, tmpl)
     institutes = logic.get_institutes_datalist()
     members_of_groups = logic.all_member_datalists_by_group(device)
+    groups = logic.all_groups_of_device(device)
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
         "entries": entries,
         "institutes": institutes,
+        "groups": groups,
         "members_of_groups": members_of_groups,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),

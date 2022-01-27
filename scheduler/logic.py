@@ -1633,3 +1633,60 @@ def device_colors(device: model.Device) -> Dict[str, str]:
         out[k] = v
     return out
 
+
+def all_groups_of_device(device: model.Device) -> Datalist:
+    q = model.db.session.execute(
+        """
+            select g.deptcode, g.dept_short
+            from devicegroup dg
+            inner join tlkpdept g using(deptcode)
+            where dg.scannercode = :device
+            and g.department and g.iscurrent
+            union
+            select deptcode, dept_short
+            from tlkpdept
+            where deptcode in ('training', 'maint')
+        """,
+        {
+            "device": device.id,
+        },
+    )
+    out = []
+    for id, name in q.fetchall():
+        if name != id:
+            name = f"{name} ({id})"
+        out.append((id, name))
+    return out
+
+
+def groups_of_device_for(device: model.Device, user: model.User) -> Datalist:
+    q = model.db.session.execute(
+        """
+            with users_departments as (
+                select d.deptcode
+                from tlkpdept d
+                inner join groupmembers gm using(deptcode)
+                where d.department and d.iscurrent
+                and gm.approved is not null
+                and gm.researchercode = :user
+            )
+            select g.deptcode, g.dept_short
+            from devicegroup dg
+            inner join users_departments g using(deptcode)
+            where dg.scannercode = :device
+            union
+            select deptcode, dept_short
+            from tlkpdept
+            where deptcode in ('training', 'maint')
+        """,
+        {
+            "device": device.id,
+            "user": user.id,
+        },
+    )
+    out = []
+    for id, name in q.fetchall():
+        if name != id:
+            name = f"{name} ({id})"
+        out.append((id, name))
+    return out
