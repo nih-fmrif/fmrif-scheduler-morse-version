@@ -1592,19 +1592,20 @@ def member_datalists_by_group_for(
                     inner join groupmembers gm using(deptcode)
                     where d.department and d.iscurrent
                     and gm.approved is not null
-                    and gm.researchercode = 'vinai'
+                    and gm.researchercode = :user
                 )
             select dg.deptcode, gm.researchercode, r.name
             from devicegroup dg
             inner join users_departments dept on dept.deptcode = dg.deptcode
             inner join groupmembers gm on gm.deptcode = dg.deptcode
             inner join tlkpresearcher r on gm.researchercode = r.researchercode
-            where dg.scannercode = 'f'
+            where dg.scannercode = :device
             and gm.approved is not null
             order by 1, 3
         """,
         {
             "device": device.id,
+            "user": user.id,
         },
     )
     datalists = defaultdict(list)
