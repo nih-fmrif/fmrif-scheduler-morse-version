@@ -904,6 +904,12 @@ def device(the_device):
         fmt_min = logic.fmt_date(min)
         fmt_max = logic.fmt_date(max)
 
+    # compute which hours to hide by default
+    off_hours = logic.off_hours()
+    logic.strike_used_off_hours(off_hours, entries)
+    off_hour_runs = logic.group_off_hours_into_runs(off_hours)
+    off_hour_intervals = logic.convert_off_hour_runs_into_intervals(off_hour_runs)
+
     no_entries = ""
     never_entries = ""
     if len(entries) == 0:
@@ -943,6 +949,7 @@ def device(the_device):
         "support": support,
         "members_of_groups": members_of_groups,
         "groups": groups,
+        "off_hour_intervals": off_hour_intervals,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }

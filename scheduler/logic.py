@@ -1690,3 +1690,63 @@ def groups_of_device_for(device: model.Device, user: model.User) -> Datalist:
             name = f"{name} ({id})"
         out.append((id, name))
     return out
+
+
+def off_hours() -> Set[int]:
+    """return set of standard off hours"""
+    s = set(range(0, 8))
+    s.add(22)
+    s.add(23)
+    return s
+
+
+def strike_used_off_hours(
+    off_hours: Set[int], entries: List[model.ScheduleEntry]
+) -> None:
+    """remove any off_hours that are used by any entry in entries"""
+    for entry in entries:
+        # if there's a set entry in off_hours, that hour is no longer an off hour
+        if entry.hour in off_hours and any(
+            x is not None for x in (entry._group, entry._user, entry.orig_group)
+        ):
+            off_hours.remove(entry.hour)
+            if len(off_hours) == 0:
+                break
+
+
+def group_off_hours_into_runs(off_hours: Set[int]) -> List[List[int]]:
+    # sort off hours
+    hours = list(sorted(off_hours))
+    # add a sentinel to the end
+    hours += [99]
+
+    # walk over [(h[0], h[1]), (h[1], h[2]), ..., (h[n-1], h[n]), (h[n], 99)]
+    # and split it into lists of consecutive hours, eg [[0], [2,3], [5,7], [9,9]]
+    acc, cur = [], []
+    for h, next in zip(hours, hours[1:]):
+        cur.append(h)
+        if next == 99:
+            # at the end nothing more to do
+            acc.append(cur)
+            break
+        if next - h != 1:
+            # nonconsecutive entries, push cur and reset
+            acc.append(cur)
+            cur = []
+
+    return acc
+
+
+def convert_off_hour_runs_into_intervals(
+    runs: List[List[int]],
+) -> List[Tuple[int, int]]:
+    # convert the list of lists into a more compact interval notation
+    intervals = []
+    for L in runs:
+        if len(L) == 1:
+            # write singletons [x] as (x, x)
+            intervals.append((L[0], L[0]))
+        else:
+            # otherwise make a pair of first and last entry in run
+            intervals.append((L[0], L[-1]))
+    return intervals
