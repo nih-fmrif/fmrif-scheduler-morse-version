@@ -126,7 +126,7 @@ class TemplateEntry(Model):
     dow: int = db.Column("dow", db.Integer(), nullable=False)
     hour: int = db.Column("hour", db.Integer(), nullable=False)
 
-    dept: Optional[str] = db.Column(
+    group: Optional[str] = db.Column(
         "deptcode", db.String(10), db.ForeignKey("tlkpdept.deptcode"), nullable=True
     )
     user: Optional[str] = db.Column(
