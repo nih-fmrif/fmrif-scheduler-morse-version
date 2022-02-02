@@ -1446,7 +1446,7 @@ def schedule_for(
     q = M.query.filter(M.device == device.id)
     q = q.filter(M.date.between(start, end))
     q = q.order_by(M.hour, M.date)
-    return q.all()  # TODO eager-loading way too much data
+    return q.all()
 
 
 def group_schedule_entries(
@@ -1734,7 +1734,7 @@ def strike_used_off_hours(
     for entry in entries:
         # if there's a set entry in off_hours, that hour is no longer an off hour
         if entry.hour in off_hours and any(
-            x is not None for x in (entry._group, entry._user, entry.orig_group)
+            x is not None for x in (entry.group, entry.user, entry.orig_group)
         ):
             off_hours.remove(entry.hour)
             if len(off_hours) == 0:

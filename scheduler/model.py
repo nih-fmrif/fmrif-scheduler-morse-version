@@ -217,10 +217,10 @@ class ScheduleEntry(Model):
     dow: int = db.Column("scheddow", db.Integer(), nullable=False)
     hour: int = db.Column("schedhour", db.Integer(), nullable=False)
 
-    _group: Optional[str] = db.Column(
+    group: Optional[str] = db.Column(
         "deptcode", db.String(10), db.ForeignKey("tlkpdept.deptcode"), nullable=False
     )
-    _user: Optional[str] = db.Column(
+    user: Optional[str] = db.Column(
         "researchercode",
         db.String(20),
         db.ForeignKey("tlkpresearcher.researchercode"),
@@ -247,19 +247,6 @@ class ScheduleEntry(Model):
         server_default=db.FetchedValue(),
         server_onupdate=db.FetchedValue(),
         nullable=False,
-    )
-
-    group = db.relationship(
-        "Group",
-        lazy="joined",
-        uselist=False,
-        primaryjoin="ScheduleEntry._group == Group.id",
-    )
-    user = db.relationship(
-        "User",
-        lazy="joined",
-        uselist=False,
-        primaryjoin="ScheduleEntry._user == User.id",
     )
 
     requests = db.relationship(
