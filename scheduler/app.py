@@ -918,6 +918,8 @@ def device(the_device):
         else:
             no_entries = f"no entries scheduled for {fmt_start_date}. All entries are between {fmt_min} and {fmt_max}"
 
+    colors = logic.all_group_colors()
+
     # need to determine if user can edit this
     support = logic.SupportRequestDatalists([], [], [])
     members_of_groups = {}
@@ -952,6 +954,7 @@ def device(the_device):
         "members_of_groups": members_of_groups,
         "groups": groups,
         "off_hour_intervals": off_hour_intervals,
+        "colors": colors,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
@@ -1328,12 +1331,14 @@ def device_tmpl_schedule_edit(the_device, the_template):
     members_of_groups = logic.all_member_datalists_by_group(device)
     groups = logic.all_groups_of_device(device)
     grouped_entries = logic.group_template_entries(entries)
+    colors = logic.all_group_colors()
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
         "entries": grouped_entries,
         "institutes": institutes,
         "groups": groups,
         "members_of_groups": members_of_groups,
+        "colors": colors,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }
