@@ -17,7 +17,25 @@
 		{% if no_entries %}
 			<p class=note>{{ icons.info() }} {{ no_entries }}</p>
 		{% else %}
-			TODO show entries for {{days}}: {{ start_date }} to {{ end_date}}
+			<table>
+				<caption>{{ title }}</caption>
+				<thead>
+					<tr>
+						<td></td>
+						{% for h in top_row %}
+							<th>{{ h }}</th>
+						{% endfor %}
+					</tr>
+				</thead>
+				<tbody>
+					{% for xs in entries %}
+						<tr><th scope=col>{{ loop.index }}</th>
+						{% for x in xs %}
+							<td>{{x.dow}}/{{x.hour}}</td>
+						{% endfor %}
+					{% endfor %}
+				</tbody>
+			</table>
 		{% endif %}
 	{% endif %}
 {% endblock %}

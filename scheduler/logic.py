@@ -1353,7 +1353,7 @@ def get_template_entries(
     q = M.query
     q = q.filter(M.device == device.id)
     q = q.filter(M.template == template.id)
-    q = q.order_by(M.dow, M.hour)
+    q = q.order_by(M.hour, M.dow)
     return q.all()
 
 
@@ -1445,8 +1445,35 @@ def schedule_for(
     M = model.ScheduleEntry
     q = M.query.filter(M.device == device.id)
     q = q.filter(M.date.between(start, end))
-    q.order_by(M.date, M.hour)
-    return q.all()
+    q = q.order_by(M.hour, M.date)
+    return q.all()  # TODO eager-loading way too much data
+
+
+def group_schedule_entries(
+    entries: List[model.ScheduleEntry],
+) -> Tuple[List[str], List[List[model.ScheduleEntry]]]:
+    days = set()
+    hdr = []
+    out: List[List[model.ScheduleEntry]] = []
+    for _ in range(24):
+        out.append([])
+    for entry in entries:
+        if entry.date not in days:
+            days.add(entry.date)
+            hdr.append(fmt_date(entry.date))
+        out[entry.hour].append(entry)
+    return hdr, out
+
+
+def group_template_entries(
+    entries: List[model.TemplateEntry],
+) -> List[List[model.TemplateEntry]]:
+    out: List[List[model.TemplateEntry]] = []
+    for _ in range(24):
+        out.append([])
+    for entry in entries:
+        out[entry.hour].append(entry)
+    return out
 
 
 def device_schedule_extreme_dates(

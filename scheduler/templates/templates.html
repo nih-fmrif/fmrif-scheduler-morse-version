@@ -1,5 +1,27 @@
 {% extends "page.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block body %}
-	TODO
+	<table>
+		<caption>{{ title }}</caption>
+		<thead>
+			<tr>
+				<td></td>
+				<th>Sun</th>
+				<th>Mon</th>
+				<th>Tue</th>
+				<th>Wed</th>
+				<th>Thu</th>
+				<th>Fri</th>
+				<th>Sat</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for xs in entries %}
+				<tr><th scope=col>{{ loop.index }}</th>
+				{% for x in xs %}
+					<td>{{x.dow}}/{{x.hour}}</td>
+				{% endfor %}
+			{% endfor %}
+		</tbody>
+	</table>
 {% endblock %}

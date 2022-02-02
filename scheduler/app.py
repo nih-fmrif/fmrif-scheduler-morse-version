@@ -935,13 +935,15 @@ def device(the_device):
             members_of_groups = logic.member_datalists_by_group_for(device, g.user)
             groups = logic.groups_of_device_for(device, g.user)
 
+    top_row, grouped_entries = logic.group_schedule_entries(entries)
     return {
         "device": device,
         "perms": perms,
         "start_date": fmt_start_date,
         "end_date": fmt_end_date,
         "days": days,
-        "entries": entries,
+        "top_row": top_row,
+        "entries": grouped_entries,
         "min": fmt_min,
         "max": fmt_max,
         "never_entries": never_entries,
@@ -1325,9 +1327,10 @@ def device_tmpl_schedule_edit(the_device, the_template):
     institutes = logic.get_institutes_datalist()
     members_of_groups = logic.all_member_datalists_by_group(device)
     groups = logic.all_groups_of_device(device)
+    grouped_entries = logic.group_template_entries(entries)
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
-        "entries": entries,
+        "entries": grouped_entries,
         "institutes": institutes,
         "groups": groups,
         "members_of_groups": members_of_groups,
