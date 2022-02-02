@@ -1642,18 +1642,14 @@ def member_datalists_by_group_for(
     return datalists
 
 
-def device_colors(device: model.Device) -> Dict[str, str]:
+def all_group_colors() -> Dict[str, str]:
     # it's okay if this grabs more than apply since it's only used internally
+    # and an old entry may reference a group that's no longer valid
     q = model.db.session.execute(
         """
             select d.deptcode, d.color
             from tlkpdept d
-            inner join devicegroup dg using(deptcode)
-            where dg.scannercode = :device
         """,
-        {
-            "device": device.id,
-        },
     )
     out = {}
     for k, v in q.fetchall():
