@@ -1,4 +1,5 @@
 {% extends "page.html" %}
+{% import "svg/icons.html" as icons %}
 {% import "macros.html" as macros %}
 {% block title %}{{ device.label }}{% endblock %}
 {% block body %}
@@ -46,6 +47,15 @@
 										</entry-editor>
 									</entry-cell>
 									{{ macros.edit_icons("entry") }}
+									<div class=time-use-icon>
+										{% if x.used is none %}
+											{{ icons.square_empty() }}
+										{% elif x.used %}
+											{{ icons.square_used("time used") }}
+										{% else %}
+											{{ icons.square_unused("time unused") }}
+										{% endif %}
+									</div>
 								</td>
 							{% endfor %}
 						{% endfor %}
