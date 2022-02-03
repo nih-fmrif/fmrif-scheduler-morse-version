@@ -112,6 +112,9 @@ input-errors {
 input-set label {
 	grid-area: label;
 }
+input-set[shrink] label {
+	font-size: .875rem;
+}
 input-widget {
 	grid-area: input;
 	max-width: 100%;
@@ -141,6 +144,17 @@ input-widget input:not([type=color]) {
 input-widget .validation-icons {
 	flex-shrink: 0;
 	align-self: center;
+}
+input:disabled {
+	border-color: transparent;
+	background-color: transparent;
+	color: inherit;
+}
+input:disabled ~ .validation-icons>:last-child {
+	display: none;
+}
+input:disabled ~ .validation-icons {
+	visibility: hidden;
 }
 input:valid ~ .validation-icons>:first-child,
 input:invalid ~ .validation-icons>:last-child,

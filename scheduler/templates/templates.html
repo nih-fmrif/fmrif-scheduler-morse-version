@@ -1,27 +1,44 @@
 {% extends "page.html" %}
+{% import "macros.html" as macros %}
 {% block title %}{{ title }}{% endblock %}
 {% block body %}
-	<table>
-		<caption>{{ title }}</caption>
-		<thead>
-			<tr>
-				<td></td>
-				<th>Sun</th>
-				<th>Mon</th>
-				<th>Tue</th>
-				<th>Wed</th>
-				<th>Thu</th>
-				<th>Fri</th>
-				<th>Sat</th>
-			</tr>
-		</thead>
-		<tbody>
-			{% for xs in entries %}
-				<tr><th scope=col>{{ loop.index }}</th>
-				{% for x in xs %}
-					<td>{{x.dow}}/{{x.hour}}</td>
+	<form>
+		{{ macros.datalist("institutes", institutes, "invalid institute") }}
+		{{ macros.datalist("groups", groups, "invalid group") }}
+		{% for k, v in members_of_groups.items() %}
+			{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
+		{% endfor %}
+		<table>
+			<caption>{{ title }}</caption>
+			<thead>
+				<tr>
+					<td></td>
+					<th>Sun</th>
+					<th>Mon</th>
+					<th>Tue</th>
+					<th>Wed</th>
+					<th>Thu</th>
+					<th>Fri</th>
+					<th>Sat</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for xs in entries %}
+					<tr><th scope=col>{{ loop.index-1 }}</th>
+					{% for x in xs %}
+						<td>
+							<entry-cell data-id="{{ x.id }}">
+								{{ macros.entry_legend(colors[x.group] if x.group) }}
+								<entry-editor>
+									{{ macros.entry_text("ins-" ~ x.id, "institute", "institutes", x.inst) }}
+									{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
+									{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
+								</entry-editor>
+							</entry-cell>
+						</td>
+					{% endfor %}
 				{% endfor %}
-			{% endfor %}
-		</tbody>
-	</table>
+			</tbody>
+		</table>
+	</form>
 {% endblock %}

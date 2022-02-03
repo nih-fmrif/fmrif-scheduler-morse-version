@@ -38,10 +38,7 @@
 				{% if f.type != "TextAreaField" %}<input-widget>{% endif %}
 				{{ field_render(f) }}
 				{% if f.type != "TextAreaField" %}
-						<div class=validation-icons>
-							{{ icons.exclaim() }}
-							{{ icons.check() }}
-						</div>
+						{{ validation_icons() }}
 					</input-widget>
 				{% endif %}
 			{% endif %}
@@ -49,6 +46,13 @@
 			{{ field_errors(f) }}
 		</input-set>
 	{% endif %}
+{% endmacro %}
+
+{% macro validation_icons() %}
+	<div class=validation-icons>
+		{{ icons.exclaim() }}
+		{{ icons.check() }}
+	</div>
 {% endmacro %}
 
 {% macro field_label(f) %}
@@ -97,4 +101,18 @@
 			{% endfor %}
 		</input-errors>
 	{% endif %}
+{% endmacro %}
+
+{% macro entry_legend(color) %}
+	<entry-legend style="--swatch: {{ color or "transparent" }}"></entry-legend>
+{% endmacro %}
+
+{% macro entry_text(id, lbl, list, value) %}
+	<input-set label-above shrink>
+	<label for="{{ id }}">{{ lbl }}</label>
+	<input-widget>
+		<input id="{{ id }}" disabled autocomplete=off {% if list %}list="{{ list }}"{% endif %} value="{{ value or ""}}">
+		{{ validation_icons() }}
+	</input-widget>
+	</input-set>
 {% endmacro %}

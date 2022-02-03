@@ -1,4 +1,5 @@
 {% extends "page.html" %}
+{% import "macros.html" as macros %}
 {% block title %}{{ device.label }}{% endblock %}
 {% block body %}
 	{% if never_entries %}
@@ -17,25 +18,39 @@
 		{% if no_entries %}
 			<p class=note>{{ icons.info() }} {{ no_entries }}</p>
 		{% else %}
-			<table>
-				<caption>schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}</caption>
-				<thead>
-					<tr>
-						<td></td>
-						{% for h in top_row %}
-							<th>{{ h }}</th>
+			{{ macros.datalist("groups", groups, "invalid group") }}
+			{% for k, v in members_of_groups.items() %}
+				{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
+			{% endfor %}
+			<form>
+				<table>
+					<caption>schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}</caption>
+					<thead>
+						<tr>
+							<td></td>
+							{% for h in top_row %}
+								<th>{{ h }}</th>
+							{% endfor %}
+						</tr>
+					</thead>
+					<tbody>
+						{% for xs in entries %}
+							<tr><th scope=col>{{ loop.index-1 }}</th>
+							{% for x in xs %}
+								<td>
+									<entry-cell data-id="{{ x.id }}">
+										{{ macros.entry_legend(colors[x.group] if x.group) }}
+										<entry-editor>
+											{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
+											{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
+										</entry-editor>
+									</entry-cell>
+								</td>
+							{% endfor %}
 						{% endfor %}
-					</tr>
-				</thead>
-				<tbody>
-					{% for xs in entries %}
-						<tr><th scope=col>{{ loop.index }}</th>
-						{% for x in xs %}
-							<td>{{x.dow}}/{{x.hour}}</td>
-						{% endfor %}
-					{% endfor %}
-				</tbody>
-			</table>
+					</tbody>
+				</table>
+			</form>
 		{% endif %}
 	{% endif %}
 {% endblock %}
