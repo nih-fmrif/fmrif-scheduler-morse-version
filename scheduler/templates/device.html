@@ -45,6 +45,9 @@
 											{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
 											{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
 										</entry-editor>
+										<button type=button aria-has-popup="true" data-for="{{ x.id }}">
+											{{ icons.book() }}<sr-only>view activity</sr-only> log
+										</button>
 									</entry-cell>
 									{{ macros.edit_icons("entry") }}
 									<div class=time-use-icon>
@@ -95,6 +98,17 @@
 								<div>
 									<dt>{{ icons.square_used("square with check") }}</dt>
 									<dd>time recorded as used</dd>
+								</div>
+							</dl>
+						</dd>
+					</div>
+					<div>
+						<dt>buttons</dt>
+						<dd>
+							<dl>
+								<div>
+									<dt>{{ icons.book("book") }}</dt>
+									<dd>view activity log</dd>
 								</div>
 							</dl>
 						</dd>
