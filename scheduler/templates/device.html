@@ -48,17 +48,19 @@
 										<button type=button aria-has-popup="true" data-for="{{ x.id }}">
 											{{ icons.book() }}<sr-only>view activity</sr-only> log
 										</button>
+										<entry-status>
+											<div class=time-use-icon>
+												{% if x.used is none %}
+													{{ icons.square_empty() }}
+												{% elif x.used %}
+													{{ icons.square_used("time used") }}
+												{% else %}
+													{{ icons.square_unused("time unused") }}
+												{% endif %}
+											</div>
+											{{ macros.edit_icons("entry") }}
+										</entry-status>
 									</entry-cell>
-									{{ macros.edit_icons("entry") }}
-									<div class=time-use-icon>
-										{% if x.used is none %}
-											{{ icons.square_empty() }}
-										{% elif x.used %}
-											{{ icons.square_used("time used") }}
-										{% else %}
-											{{ icons.square_unused("time unused") }}
-										{% endif %}
-									</div>
 								</td>
 							{% endfor %}
 						{% endfor %}

@@ -478,3 +478,11 @@ figure.legend {
 .legend dl dl dd {
 	margin: 0;
 }
+entry-status {
+	font-size: .875rem;
+	display: flex;
+	gap: 1rem;
+}
+entry-status .edit-icons {
+	margin-left: auto;
+}
