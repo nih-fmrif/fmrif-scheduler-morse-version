@@ -9,7 +9,7 @@
 			{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 		{% endfor %}
 		<table>
-			<caption>{{ title }}</caption>
+			<caption>{{ title }}{{ macros.edit_icons("template") }}</caption>
 			<thead>
 				<tr>
 					<td></td>
@@ -34,6 +34,7 @@
 									{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
 									{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
 								</entry-editor>
+								{{ macros.edit_icons("entry") }}
 							</entry-cell>
 						</td>
 					{% endfor %}

@@ -55,6 +55,13 @@
 	</div>
 {% endmacro %}
 
+{% macro edit_icons(typ) %}
+	<div class=edit-icons>
+		{{ icons.pencil("edits to " ~ typ) }}
+		{{ icons.exclaim_triangle("error in " ~ typ) }}
+	</div>
+{% endmacro %}
+
 {% macro field_label(f) %}
 	<label for="{{ f.id }}">
 		<span>{{ f.label.text }}</span>{% if "required" in f.flags %}{{ icons.asterisk() }}{% endif %}

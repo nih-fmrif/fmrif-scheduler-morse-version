@@ -24,7 +24,7 @@
 			{% endfor %}
 			<form>
 				<table>
-					<caption>schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}</caption>
+					<caption>schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{ macros.edit_icons("schedule") }}</caption>
 					<thead>
 						<tr>
 							<td></td>
@@ -45,6 +45,7 @@
 											{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
 										</entry-editor>
 									</entry-cell>
+									{{ macros.edit_icons("entry") }}
 								</td>
 							{% endfor %}
 						{% endfor %}
