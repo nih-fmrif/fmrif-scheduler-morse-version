@@ -130,7 +130,10 @@ class TemplateEntry(Model):
         "deptcode", db.String(10), db.ForeignKey("tlkpdept.deptcode"), nullable=True
     )
     user: Optional[str] = db.Column(
-        "researchercode", db.String(20), db.ForeignKey("tlkpresearcher.researchercode")
+        "researchercode",
+        db.String(20),
+        db.ForeignKey("tlkpresearcher.researchercode"),
+        nullable=True,
     )
     inst: Optional[str] = db.Column(
         "instcode", db.String(5), db.ForeignKey("tlkpinst.instcode"), nullable=True
