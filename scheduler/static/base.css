@@ -431,3 +431,50 @@ p.note svg {
 	display: block;
 	margin-bottom: 1rem;
 }
+
+figure.legend {
+	margin: 1.5rem;
+	border: 1px solid currentColor;
+	padding: .5rem;
+	width: max-content;
+	max-width: 100%;
+}
+.legend figcaption {
+	text-align: center;
+	font-weight: bold;
+	font-size: 1.1rem;
+}
+.legend svg {
+	display: inline-block;
+	vertical-align: text-bottom;
+}
+.legend div {
+	margin-top: .6rem;
+}
+.legend>dl>div:first-of-type {
+	margin-top: 0;
+}
+.legend dl {
+	margin: 0;
+}
+.legend dt {
+	font-weight: bold;
+}
+.legend dl dd {
+	margin-left: .2rem;
+}
+.legend dl dl {
+	border-left: 1px solid currentColor;
+	padding-left: .4rem;
+}
+.legend dl dl div {
+	display: flex;
+	gap: .5rem;
+	margin-top: .25rem;
+}
+.legend dl dl dt {
+	flex-grow: 0;
+}
+.legend dl dl dd {
+	margin: 0;
+}

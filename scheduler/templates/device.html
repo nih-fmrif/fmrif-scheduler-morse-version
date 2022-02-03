@@ -62,6 +62,45 @@
 					</tbody>
 				</table>
 			</form>
+			<figure class=legend>
+				<figcaption>legend</figcaption>
+				<dl>
+					<div>
+						<dt>state icons</dt>
+						<dd>
+							<dl>
+								<div>
+									<dt>{{ icons.pencil("pencil") }}</dt>
+									<dd>unsaved changes</dd>
+								</div>
+								<div>
+									<dt>{{ icons.exclaim_triangle("exclamation point in triangle")}}</dt>
+									<dd>errors are present</dd>
+								</div>
+							</dl>
+						</dd>
+					</div>
+					<div>
+						<dt>time recorded icons</dt>
+						<dd>
+							<dl>
+								<div>
+									<dt>{{ icons.square_empty("square with question mark") }}</dt>
+									<dd>time not yet recorded</dd>
+								</div>
+								<div>
+									<dt>{{ icons.square_unused("square with x") }}</dt>
+									<dd>time recorded as unused</dd>
+								</div>
+								<div>
+									<dt>{{ icons.square_used("square with check") }}</dt>
+									<dd>time recorded as used</dd>
+								</div>
+							</dl>
+						</dd>
+					</div>
+				</dl>
+			</figure>
 		{% endif %}
 	{% endif %}
 {% endblock %}
