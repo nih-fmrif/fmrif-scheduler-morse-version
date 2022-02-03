@@ -20,6 +20,9 @@
 			<p class=note>{{ icons.info() }} {{ no_entries }}</p>
 		{% else %}
 			{{ macros.datalist("groups", groups, "invalid group") }}
+			{{ macros.datalist("tech", support.tech, "invalid technologist") }}
+			{{ macros.datalist("med", support.medical, "invalid medical support member") }}
+			{{ macros.datalist("train", support.train, "invalid training support member") }}
 			{% for k, v in members_of_groups.items() %}
 				{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 			{% endfor %}
