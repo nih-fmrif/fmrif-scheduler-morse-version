@@ -48,6 +48,34 @@
 											{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
 											{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
 										</entry-editor>
+										<entry-support>
+											{# bucket support requests #}
+											{% set sr = namespace() %}
+											{% for r in x.requests %}
+												{% if r.supportkind == 1 %}
+													{% set sr.medical = r %}
+												{% elif r.supportkind == 2 %}
+													{% set sr.train = r %}
+												{% elif r.supportkind == 3 %}
+													{% set sr.tech = r %}
+												{% endif %}
+											{% endfor %}
+											{% if support.tech or sr.tech %}
+												<fieldset>
+													<legend>technologist</legend>
+												</fieldset>
+											{% endif %}
+											{% if support.train or sr.train %}
+												<fieldset>
+													<legend>training</legend>
+												</fieldset>
+											{% endif %}
+											{% if support.medical or sr.medical %}
+												<fieldset>
+													<legend>medical</legend>
+												</fieldset>
+											{% endif %}
+										</entry-support>
 										<button type=button aria-has-popup="true" data-for="{{ x.id }}">
 											{{ icons.book() }}<sr-only>view activity</sr-only> log
 										</button>
