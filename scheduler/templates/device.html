@@ -60,19 +60,60 @@
 													{% set sr.tech = r %}
 												{% endif %}
 											{% endfor %}
+											{# macros for some repeated elements #}
+											{% macro requested(id, checked) %}
+												<input-set is-option>
+													<input-widget>
+														<input id="{{ id }}" type=checkbox data-orig={% if checked %}"true" checked{% else %}"false"{% endif %}>
+													</input-widget>
+													<label for="{{ id }}">requested</label>
+												</input-set>
+											{% endmacro %}
+											{% macro handler(id, list, val) %}
+												<input-set label-above shrink>
+													<label for="{{ id }}">handler</label>
+													<input-widget>
+														<input id="{{ id }}"
+															{% if list %}list="{{ list }}"{% endif %}
+															data-orig="{{ val }}"
+															value="{{ val }}"
+														autocomplete=off>
+														{{ macros.validation_icons() }}
+													</input-widget>
+												</input-set>
+											{% endmacro %}
+											{% macro tech_kind(id, lbl, checked) %}
+												<input-set is-option>
+													<input-widget>
+														<input id="{{ id }}" type=radio {% if checked %}checked{% endif %}>
+													</input-widget>
+													<label for="{{ id }}">{{ lbl }}</label>
+												</input-set>
+											{% endmacro %}
 											{% if support.tech or sr.tech %}
-												<fieldset>
+												<fieldset data-sr=tech disabled>
 													<legend>technologist</legend>
+													{{ requested("tech-requested-" ~ x.id, sr.tech) }}
+													<fieldset data-orig="{{ sr.note }}">
+														<legend>kind</legend>
+														{{ tech_kind("tech-cover-" ~ x.id, "cover", sr.note == "cover") }}
+														{{ tech_kind("tech-support-" ~ x.id, "support", sr.note == "support") }}
+													</fieldset>
+													{{ handler("tech-handler-" ~ x.id, support.tech, sr.fulfilled_by) }}
 												</fieldset>
 											{% endif %}
 											{% if support.train or sr.train %}
-												<fieldset>
+												<fieldset data-sr=train disabled>
 													<legend>training</legend>
+													{{ requested("train-requested-" ~ x.id, sr.tech) }}
+													{{ handler("train-handler-" ~ x.id, support.tech, sr.fulfilled_by) }}
 												</fieldset>
 											{% endif %}
 											{% if support.medical or sr.medical %}
-												<fieldset>
-													<legend>medical</legend>
+												<fieldset data-sr=med disabled>
+													<legend>medical coverage</legend>
+													{{ requested("med-requested-" ~ x.id, sr.tech) }}
+													{{ handler("med-handler-" ~ x.id, support.tech, sr.fulfilled_by) }}
 												</fieldset>
 											{% endif %}
 										</entry-support>
