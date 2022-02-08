@@ -486,3 +486,7 @@ entry-status {
 entry-status .edit-icons {
 	margin-left: auto;
 }
+:where(entry-editor, entry-support) input-set:not([is-option]) input {
+	width: 6rem;
+	min-width: 4rem;
+}
