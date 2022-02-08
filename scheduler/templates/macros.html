@@ -118,7 +118,7 @@
 	<input-set label-above shrink>
 	<label for="{{ id }}">{{ lbl }}</label>
 	<input-widget>
-		<input id="{{ id }}" disabled autocomplete=off {% if list %}list="{{ list }}"{% endif %} value="{{ value or ""}}">
+		<input id="{{ id }}" disabled autocomplete=off {% if list %}list="{{ list }}"{% endif %} data-orig="{{ value or "" }}" value="{{ value or ""}}">
 		{{ validation_icons() }}
 	</input-widget>
 	</input-set>

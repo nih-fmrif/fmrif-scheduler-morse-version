@@ -28,7 +28,7 @@
 			{% endfor %}
 			<form>
 				<table>
-					<caption>schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{ macros.edit_icons("schedule") }}</caption>
+					<caption data-changed="false" data-error="false">schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{ macros.edit_icons("schedule") }}</caption>
 					<thead>
 						<tr>
 							<td></td>
@@ -39,10 +39,10 @@
 					</thead>
 					<tbody>
 						{% for xs in entries %}
-							<tr><th scope=col>{{ loop.index-1 }}</th>
+							<tr data-hour="{{ loop.index-1 }}"><th scope=col>{{ loop.index-1 }}</th>
 							{% for x in xs %}
 								<td>
-									<entry-cell data-id="{{ x.id }}">
+									<entry-cell data-id="{{ x.id }}" data-hour="{{ x.hour }}" data-date="{{ x.date }}" data-changed="false" data-error="false">
 										{{ macros.entry_legend(colors[x.group] if x.group) }}
 										<entry-editor>
 											{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
