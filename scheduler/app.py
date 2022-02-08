@@ -938,6 +938,8 @@ def device(the_device):
             groups = logic.groups_of_device_for(device, g.user)
 
     top_row, grouped_entries = logic.group_schedule_entries(entries)
+
+    hours = logic.fmt_hours()
     return {
         "device": device,
         "perms": perms,
@@ -955,6 +957,7 @@ def device(the_device):
         "groups": groups,
         "off_hour_intervals": off_hour_intervals,
         "colors": colors,
+        "hours": hours,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
@@ -1332,6 +1335,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
     groups = logic.all_groups_of_device(device)
     grouped_entries = logic.group_template_entries(entries)
     colors = logic.all_group_colors()
+    hours = logic.fmt_hours()
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
         "entries": grouped_entries,
@@ -1339,6 +1343,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
         "groups": groups,
         "members_of_groups": members_of_groups,
         "colors": colors,
+        "hours": hours,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }

@@ -1773,3 +1773,22 @@ def convert_off_hour_runs_into_intervals(
             # otherwise make a pair of first and last entry in run
             intervals.append((L[0], L[-1]))
     return intervals
+
+
+def fmt_hours() -> Dict[int, str]:
+    out = {}
+    for i in range(24):
+        s = ""
+        if i == 0:
+            s = "Mid."
+        elif i == 12:
+            s = "Noon"
+        else:
+            m = "a"
+            t = i
+            if i > 12:
+                t -= 12
+                m = "p"
+            s = f"{t}{m}m"
+        out[i] = s
+    return out
