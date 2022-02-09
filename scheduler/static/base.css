@@ -490,3 +490,19 @@ entry-status .edit-icons {
 	width: 6rem;
 	min-width: 4rem;
 }
+.schedule-editor .expando button,
+.schedule-editor.js-expando .expando .no-js {
+	display: none;
+}
+.schedule-editor.js-expando .expando button {
+	display: revert;
+}
+.expando button[aria-expanded="true"] svg:first-of-type,
+.expando button[aria-expanded="false"] svg:nth-of-type(2) {
+	display: none;
+}
+.expando button[aria-expanded="false"] svg:first-of-type,
+.expando button[aria-expanded="true"] svg:nth-of-type(2) {
+	display: inline-block;
+	margin-bottom: -2px;
+}

@@ -51,6 +51,7 @@
 										{% endset %}
 										<button
 											type=button
+											hidden
 											data-expands='[{% for item in items %}"row-{{ item }}"{% if not loop.last %},{% endif %}{% endfor %}]'
 											aria-expanded=false>
 											<span class=icons>{{ icons.add() }}{{ icons.close() }}</span>

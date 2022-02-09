@@ -191,9 +191,55 @@ function setup_auto_confirms() {
 	});
 }
 
+function to_bool(s) {
+	if (s == "true") {
+		return true;
+	} else if (s == "false") {
+		return false;
+	}
+	return undefined;
+}
+
+function from_bool(b) {
+	if (b) {
+		return "true";
+	}
+	return "false";
+}
+
+function wire_editor_expando() {
+	const editor = document.querySelector(".schedule-editor");
+	if (!editor) {
+		return;
+	}
+	editor.addEventListener("click", evt => {
+		// make sure we have an expando button
+		const t = evt.target;
+		if (t.tagName != "BUTTON" || !('expands' in t.dataset)) {
+			return;
+		}
+		// parse expands, make sure it's a valid list of rows, and load the referenced nodes
+		const controls = document.querySelectorAll(
+			JSON.parse(t.dataset['expands']).filter(i => /^row-\d+/.test).map(s => '#' + s).join(',')
+		);
+		// get the next state
+		const expanded = !to_bool(t.getAttribute("aria-expanded"));
+		// toggle the off hour rows
+		for (const c of controls) {
+			c.hidden = !expanded;
+		}
+		// update the button state
+		t.setAttribute("aria-expanded", from_bool(expanded));
+	});
+	// show buttons and enable expando styles
+	editor.querySelectorAll(".expando button").forEach(e => e.hidden = false);
+	editor.classList.add("js-expando");
+}
+
 function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();
 	setup_auto_confirms();
+	wire_editor_expando();
 }
 main();
