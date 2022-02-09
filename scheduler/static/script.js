@@ -207,6 +207,14 @@ function from_bool(b) {
 	return "false";
 }
 
+function json_or(s, v) {
+	try {
+		return JSON.parse(s);
+	} catch (SyntaxError) {
+		return v;
+	}
+}
+
 function wire_editor_expando() {
 	const editor = document.querySelector(".schedule-editor");
 	if (!editor) {
@@ -220,7 +228,7 @@ function wire_editor_expando() {
 		}
 		// parse expands, make sure it's a valid list of rows, and load the referenced nodes
 		const controls = document.querySelectorAll(
-			JSON.parse(t.dataset['expands']).filter(i => /^row-\d+/.test).map(s => '#' + s).join(',')
+			json_or(t.dataset['expands'], []).filter(i => /^row-\d+/.test).map(s => '#' + s).join(',')
 		);
 		// get the next state
 		const expanded = !to_bool(t.getAttribute("aria-expanded"));
