@@ -24,7 +24,8 @@
 			</thead>
 			<tbody>
 				{% for xs in entries %}
-					<tr data-hour="{{ loop.index-1 }}"><th scope=col>{{ hours[loop.index-1] }}</th>
+					{% set h = loop.index-1 %}
+					<tr id="row-{{ h }}" data-hour="{{ h }}"><th scope=col>{{ hours[h] }}</th>
 					{% for x in xs %}
 						<td>
 							<entry-cell data-id="{{ x.id }}" data-hour="{{ x.hour }}" data-date="{{ x.dow }}" data-changed="false" data-error="false">
