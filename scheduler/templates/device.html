@@ -26,7 +26,7 @@
 			{% for k, v in members_of_groups.items() %}
 				{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 			{% endfor %}
-			<form>
+			<form class="editor schedule-editor">
 				<table>
 					<caption data-changed="false" data-error="false">schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{ macros.edit_icons("schedule") }}</caption>
 					<thead>

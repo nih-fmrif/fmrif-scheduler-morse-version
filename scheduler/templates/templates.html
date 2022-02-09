@@ -2,7 +2,7 @@
 {% import "macros.html" as macros %}
 {% block title %}{{ title }}{% endblock %}
 {% block body %}
-	<form>
+	<form class="editor template-editor">
 		{{ macros.datalist("institutes", institutes, "invalid institute") }}
 		{{ macros.datalist("groups", groups, "invalid group") }}
 		{% for k, v in members_of_groups.items() %}
