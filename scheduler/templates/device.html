@@ -38,10 +38,29 @@
 						</tr>
 					</thead>
 					<tbody>
-						<tr class=test colspan="{{top_row|length}}"><td>x</td></tr>
 						{% for xs in entries %}
 							{% set h = loop.index-1 %}
-							<tr id="row-{{ h }}" data-hour="{{ h }}"><th scope=col>{{ hours[h] }}</th>
+							{% if h in off_hour_map %}
+								{% set items = off_hour_map[h] %}
+								<tr class=expando>
+									<td>
+									</td>
+									<td colspan="{{ top_row|length }}">
+										{% set label %}
+											{{ items|length }} empty row{% if items|length > 1 %}s{% endif %}
+										{% endset %}
+										<button
+											type=button
+											data-expands='[{% for item in items %}"row-{{ item }}"{% if not loop.last %},{% endif %}{% endfor %}]'
+											aria-expanded=false>
+											<span class=icons>{{ icons.add() }}{{ icons.close() }}</span>
+											{{ label }}
+										</button>
+										<span class=no-js>&nbsp;{{ label }}</span>
+									</td>
+								</td></tr>
+							{% endif %}
+							<tr id="row-{{ h }}" data-hour="{{ h }}" {% if h in off_hours %}hidden{% endif %}><th scope=row>{{ hours[h] }}</th>
 							{% for x in xs %}
 								<td>
 									<entry-cell

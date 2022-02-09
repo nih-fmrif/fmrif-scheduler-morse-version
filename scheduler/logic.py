@@ -1750,29 +1750,23 @@ def group_off_hours_into_runs(off_hours: Set[int]) -> List[List[int]]:
         cur.append(h)
         if next == 99:
             # at the end nothing more to do
+            cur.sort()
             acc.append(cur)
             break
         if next - h != 1:
             # nonconsecutive entries, push cur and reset
+            cur.sort()
             acc.append(cur)
             cur = []
 
     return acc
 
 
-def convert_off_hour_runs_into_intervals(
-    runs: List[List[int]],
-) -> List[Tuple[int, int]]:
-    # convert the list of lists into a more compact interval notation
-    intervals = []
-    for L in runs:
-        if len(L) == 1:
-            # write singletons [x] as (x, x)
-            intervals.append((L[0], L[0]))
-        else:
-            # otherwise make a pair of first and last entry in run
-            intervals.append((L[0], L[-1]))
-    return intervals
+def convert_off_hour_runs_into_map(runs: List[List[int]]) -> Dict[int, List[int]]:
+    out = {}
+    for xs in runs:
+        out[xs[0]] = xs
+    return out
 
 
 def fmt_hours() -> Dict[int, str]:

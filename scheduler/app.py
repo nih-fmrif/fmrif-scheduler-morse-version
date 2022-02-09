@@ -908,7 +908,7 @@ def device(the_device):
     off_hours = logic.off_hours()
     logic.strike_used_off_hours(off_hours, entries)
     off_hour_runs = logic.group_off_hours_into_runs(off_hours)
-    off_hour_intervals = logic.convert_off_hour_runs_into_intervals(off_hour_runs)
+    off_hour_map = logic.convert_off_hour_runs_into_map(off_hour_runs)
 
     no_entries = ""
     never_entries = ""
@@ -956,7 +956,8 @@ def device(the_device):
         "support": support,
         "members_of_groups": members_of_groups,
         "groups": groups,
-        "off_hour_intervals": off_hour_intervals,
+        "off_hours": off_hours,
+        "off_hour_map": off_hour_map,
         "colors": colors,
         "hours": hours,
         "cur_date": cur_date,
