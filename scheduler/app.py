@@ -940,6 +940,7 @@ def device(the_device):
     top_row, grouped_entries = logic.group_schedule_entries(entries)
 
     hours = logic.fmt_hours()
+    cur_date, cur_hour = logic.db_now()
     return {
         "device": device,
         "perms": perms,
@@ -958,6 +959,8 @@ def device(the_device):
         "off_hour_intervals": off_hour_intervals,
         "colors": colors,
         "hours": hours,
+        "cur_date": cur_date,
+        "cur_hour": cur_hour,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }

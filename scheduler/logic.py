@@ -1792,3 +1792,11 @@ def fmt_hours() -> Dict[int, str]:
             s = f"{t}{m}m"
         out[i] = s
     return out
+
+
+def db_now() -> Tuple[datetime.date, int]:
+    "get current day and hour from transaction"
+    q = model.db.session.execute(
+        "select current_date, extract(hour from current_timestamp) as hour"
+    )
+    return q.first()

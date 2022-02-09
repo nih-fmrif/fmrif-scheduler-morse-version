@@ -42,7 +42,11 @@
 							<tr data-hour="{{ loop.index-1 }}"><th scope=col>{{ hours[loop.index-1] }}</th>
 							{% for x in xs %}
 								<td>
-									<entry-cell data-id="{{ x.id }}" data-hour="{{ x.hour }}" data-date="{{ x.date }}" data-changed="false" data-error="false">
+									<entry-cell
+										data-id="{{ x.id }}"
+										data-hour="{{ x.hour }}" data-date="{{ x.date }}"
+										data-old="{% if x.date < cur_date or (x.date == cur_date and x.hour <= cur_hour) %}true{% else %}false{% endif %}"
+										data-changed="false" data-error="false">
 										{{ macros.entry_legend(colors[x.group] if x.group) }}
 										<entry-editor>
 											{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
