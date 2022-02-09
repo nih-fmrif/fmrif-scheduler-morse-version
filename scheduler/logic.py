@@ -1723,15 +1723,24 @@ def off_hours() -> Set[int]:
     return s
 
 
+def _used(entry: model.ScheduleEntry) -> bool:
+    if entry.user is not None:
+        return True
+    for g in (entry.group, entry.orig_group):
+        if g is not None:
+            # historical records that need to be treated as null
+            if g not in ("", "DEV"):
+                return True
+    return False
+
+
 def strike_used_off_hours(
     off_hours: Set[int], entries: List[model.ScheduleEntry]
 ) -> None:
     """remove any off_hours that are used by any entry in entries"""
     for entry in entries:
         # if there's a set entry in off_hours, that hour is no longer an off hour
-        if entry.hour in off_hours and any(
-            x is not None for x in (entry.group, entry.user, entry.orig_group)
-        ):
+        if entry.hour in off_hours and _used(entry):
             off_hours.remove(entry.hour)
             if len(off_hours) == 0:
                 break
