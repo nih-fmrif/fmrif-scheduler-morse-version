@@ -244,6 +244,8 @@ function wire_editor_expando() {
 	editor.classList.add("js-expando");
 }
 
+const base = json_or(document.querySelector("#app-root").innerText, "/");
+
 function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();

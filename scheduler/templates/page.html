@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% import "svg/icons.html" as icons %}
 {% block basehead %}
-	{% block head %}<script type=module src="{{ url_for("static", filename="script.js") }}"></script>{% endblock %}
+	{% block head %}
+		<script id=app-root type="application/json">{{ config.APPLICATION_ROOT }}</script>
+		<script type=module src="{{ url_for("static", filename="script.js") }}"></script>
+	{% endblock %}
 {% endblock %}
 {% block basebody %}
 	<nav class=skip-link aria-label="skip link">
