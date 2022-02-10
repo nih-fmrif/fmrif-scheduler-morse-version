@@ -257,10 +257,147 @@ function wire_editor_expando() {
 
 const base = json_or(document.querySelector("#app-root").innerText, "/");
 
+async function loadLog(id, signal) {
+	try {
+		const resp = await fetch(`${base}json/v1/log/${id}`, { signal });
+		if (!resp.ok) {
+			return [null, `error: api returned with error code ${resp.status}`];
+		}
+		const data = await resp.json();
+		return [data, null];
+	} catch (err) {
+		if (err instanceof AbortError) {
+			return [null, null];
+		} else if (err instanceof SyntaxError) {
+			return [null, "error: invalid json returned from api"];
+		} else {
+			return [null, `error: ${e.message}`];
+		}
+	}
+}
+
+const time_formatter = new Intl.DateTimeFormat('en-US', {
+	year: 'numeric',
+	month: 'short',
+	day: 'numeric',
+	hour: 'numeric',
+	minute: 'numeric',
+	second: 'numeric',
+});
+
+// used to sort values in fmt_log
+const _fmt_log_order = {
+	'group': 0,
+	'researcher': 1,
+	'used': 2,
+	'filed_by': 3,
+	'note': 4,
+	'fulfilled_by': 5,
+	'approved': 6,
+};
+
+function _fmt_log_entry(k, v) {
+	if (v == null) {
+		return '<i>nothing</i>';
+	}
+	switch (k) {
+		case 'used':
+			v = v ? 'used' : 'unused';
+			break;
+		case 'approved':
+			v = v ? 'approved' : 'unapproved';
+			break;
+	}
+	return `<b>${v}</b>`;
+}
+
+function fmt_log(entries) {
+	if (entries.length == 0) {
+		return "no changes have been logged";
+	}
+	const acc = ['<ul>'];
+	for (const entry of entries) {
+		const by = entry.by ? `<b>${entry.by}</b>` : "<i>unknown</i>";
+		const ts = time_formatter.format(new Date(entry.modified));
+		const values = Object.entries(entry.values);
+
+		acc.push(`<li> on ${ts}, ${by} changed `);
+		if (entry.kind == 'main') {
+			acc.push('the entry:<ul>');
+		} else {
+			acc.push('the ${kind} request:<ul>');
+		}
+
+		// sort values by key according to _fmt_log_order.
+		values.sort((a, b) => _fmt_log_order[a[0]] - _fmt_log_order[b[0]]);
+
+		for (let [k, [Old, New]] of values) {
+			const label = k.replace(/_/, ' ');
+			const fOld = _fmt_log_entry(k, Old);
+			const fNew = _fmt_log_entry(k, New);
+			acc.push(`<li>set ${label} from ${fOld} to ${fNew}</li>`);
+		}
+		acc.push('</ul></li>')
+	}
+	acc.push('</ul>');
+	return acc.join('');
+}
+
+function logDialog(titleText, id) {
+	const con = document.getElementById('log-dialog-container');
+	const modal = con.querySelector(".dialog-box-container");
+	const title = con.querySelector("#log-dialog-title");
+	const body = con.querySelector(".dialog-content-inner");
+	title.innerText = titleText;
+	const dialog = new A11yDialog(con);
+	const abort = new AbortController();
+	dialog.on("show", async () => {
+		// scroll lock and focus cancel button
+		disableBodyScroll(modal);
+
+		const [data, err] = await loadLog(id, abort.signal);
+		if (err != null) {
+			body.innerText = err;
+			return;
+		}
+		body.innerHTML = fmt_log(data);
+	});
+	dialog.on("hide", (_, evt) => {
+		// reset scroll lock, zero template, and cancel http requests
+		enableBodyScroll(modal);
+		title.innerText = "";
+		body.innerHTML = "";
+		abort.abort();
+	});
+	dialog.show();
+}
+
+function wire_log_buttons() {
+	const editor = document.querySelector(".schedule-editor");
+	if (!editor) {
+		return;
+	}
+	editor.addEventListener("click", evt => {
+		const t = closestButtonWith(evt.target, 'for');
+		if (t == null) {
+			return;
+		}
+		const id = t.dataset["for"];
+		if (!/\d+/.test(id)) {
+			console.warn(["invalid data-for on log button", t]);
+			return;
+		}
+		logDialog("history", id);
+	});
+	editor.querySelectorAll("entry-cell button[data-for]").forEach(e => e.hidden = false);
+	editor.classList.add('js-log-buttons');
+}
+
 function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();
 	setup_auto_confirms();
 	wire_editor_expando();
+	wire_log_buttons();
 }
 main();

@@ -525,3 +525,8 @@ entry-cell[data-changed=false] .edit-icons svg:first-child,
 entry-cell[data-error=false] .edit-icons svg:last-child {
 	visibility: hidden;
 }
+
+entry-cell button[data-for][hidden] {
+	display: inline-block;
+	visibility: hidden;
+}
