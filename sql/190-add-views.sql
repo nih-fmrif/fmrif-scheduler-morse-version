@@ -77,7 +77,7 @@ combined_entries as (
 	select * from support_entries
 ),
 filtered_and_sorted_entries as (
-	select schedid, json_build_object('modified', modified, 'kind', kind, 'values', values) entries from combined_entries where length(values::text) > 2 order by modified
+	select schedid, json_build_object('modified', modified, 'kind', kind, 'by', chg_by, 'values', values) entries from combined_entries where length(values::text) > 2 order by modified
 )
 select schedid, json_agg(entries) entries from filtered_and_sorted_entries
 group by schedid;
