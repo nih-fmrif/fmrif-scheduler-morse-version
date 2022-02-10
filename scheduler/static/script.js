@@ -207,6 +207,17 @@ function from_bool(b) {
 	return "false";
 }
 
+function closestButtonWith(target, tag) {
+	target = target.closest("button");
+	if (target == null) {
+		return false;
+	}
+	if (tag in target.dataset) {
+		return target;
+	}
+	return null;
+}
+
 function json_or(s, v) {
 	try {
 		return JSON.parse(s);
@@ -222,8 +233,8 @@ function wire_editor_expando() {
 	}
 	editor.addEventListener("click", evt => {
 		// make sure we have an expando button
-		const t = evt.target;
-		if (t.tagName != "BUTTON" || !('expands' in t.dataset)) {
+		const t = closestButtonWith(evt.target, 'expands');
+		if (t == null) {
 			return;
 		}
 		// parse expands, make sure it's a valid list of rows, and load the referenced nodes
