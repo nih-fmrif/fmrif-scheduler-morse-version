@@ -210,7 +210,7 @@ function from_bool(b) {
 function closestButtonWith(target, tag) {
 	target = target.closest("button");
 	if (target == null) {
-		return false;
+		return null;
 	}
 	if (tag in target.dataset) {
 		return target;
