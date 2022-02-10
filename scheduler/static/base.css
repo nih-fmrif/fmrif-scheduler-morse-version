@@ -310,11 +310,11 @@ body {
 		"body body"
 		"form form";
 }
-#dialog-title {
+.dialog-title {
 	grid-area: title;
 	margin: 0;
 }
-#dialog-title+button {
+.dialog-title+button {
 	grid-area: close;
 	font-size: 2rem;
 	align-self: start;
