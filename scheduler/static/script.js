@@ -227,32 +227,25 @@ function json_or(s, v) {
 }
 
 function wire_editor_expando() {
-	const editor = document.querySelector(".schedule-editor");
-	if (!editor) {
+	const expando = document.querySelector("#expando");
+	if (!expando) {
 		return;
 	}
-	editor.addEventListener("click", evt => {
-		// make sure we have an expando button
-		const t = closestButtonWith(evt.target, 'expands');
-		if (t == null) {
-			return;
-		}
+	expando.addEventListener("click", evt => {
 		// parse expands, make sure it's a valid list of rows, and load the referenced nodes
 		const controls = document.querySelectorAll(
-			json_or(t.dataset['expands'], []).filter(i => /^row-\d+/.test).map(s => '#' + s).join(',')
+			json_or(expando.dataset['expands'], []).filter(i => /^\d+$/.test).map(s => '#row-' + s).join(',')
 		);
 		// get the next state
-		const expanded = !to_bool(t.getAttribute("aria-expanded"));
+		const expanded = !to_bool(expando.getAttribute("aria-expanded"));
 		// toggle the off hour rows
 		for (const c of controls) {
 			c.hidden = !expanded;
 		}
 		// update the button state
-		t.setAttribute("aria-expanded", from_bool(expanded));
+		expando.setAttribute("aria-expanded", from_bool(expanded));
 	});
-	// show buttons and enable expando styles
-	editor.querySelectorAll(".expando button").forEach(e => e.hidden = false);
-	editor.classList.add("js-expando");
+	expando.hidden = false;
 }
 
 const base = json_or(document.querySelector("#app-root").innerText, "/");

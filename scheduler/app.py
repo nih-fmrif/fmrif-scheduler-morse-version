@@ -956,7 +956,7 @@ def device(the_device):
         "support": support,
         "members_of_groups": members_of_groups,
         "groups": groups,
-        "off_hours": off_hours,
+        "off_hours": list(off_hours),
         "off_hour_map": off_hour_map,
         "colors": colors,
         "hours": hours,
