@@ -33,9 +33,9 @@
 						{{ off_hours|length }} empty row{% if off_hours|length > 1 %}s{% endif %}
 					</button>
 				{% endif %}
-				<div>
-					<table>
-						<caption data-changed="false" data-error="false">schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{ macros.edit_icons("schedule") }}</caption>
+				<div id=caption data-changed="false" data-error="false">schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{ macros.edit_icons("schedule") }}</div>
+				<div id="scroll-container" aria-labelledby=caption tabindex=0>
+					<table aria-labelledby=caption>
 						<thead>
 							<tr>
 								<td></td>

@@ -8,9 +8,9 @@
 	{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 	{% endfor %}
 	<form class="editor template-editor">
-		<div>
-			<table>
-				<caption data-changed="false" data-error="false">{{ title }}{{ macros.edit_icons("template") }}</caption>
+		<div id=caption data-changed="false" data-error="false">{{ title }}{{ macros.edit_icons("template") }}</div>
+		<div id="scroll-container" aria-labelledby=caption tabindex=0>
+			<table aria-labelledby=caption>
 				<thead>
 					<tr>
 						<td></td>
