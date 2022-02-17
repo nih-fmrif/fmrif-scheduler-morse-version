@@ -386,11 +386,394 @@ function wire_log_buttons() {
 	editor.classList.add('js-log-buttons');
 }
 
+class Grid {
+	constructor(container, table, cells) {
+		this.container = container;
+		this.table = table;
+		this.cells = cells;
+		this.setRow(this.firstVisibleRow());
+		this.setCol(0);
+		this.setOpen(false);
+	}
+	row() {
+		return parseInt(this.table.dataset.row, 10);
+	}
+	col() {
+		return parseInt(this.table.dataset.col, 10);
+	}
+	setRow(r) {
+		this.table.dataset.row = r;
+	}
+	setCol(c) {
+		this.table.dataset.col = c;
+	}
+	pos() {
+		return [this.row(), this.col()];
+	}
+	isOpen() {
+		return to_bool(this.table.dataset.open);
+	}
+	setOpen(v) {
+		this.table.dataset.open = from_bool(v);
+	}
+	selectedCell() {
+		return this.cells[this.row()][this.col()];
+	}
+	rowHidden(r) {
+		// tr hidden when off hours and not toggled open.
+		return this.cells[r][0].parentElement.hidden;
+	}
+	maxRow() {
+		return this.cells.length - 1;
+	}
+	maxCol() {
+		return this.cells[0].length - 1;
+	}
+	firstVisibleRow() {
+		let n = 0;
+		while (this.rowHidden(n)) {
+			n++;
+		}
+		return n;
+	}
+	lastVisibleRow() {
+		let n = this.maxRow();
+		while (this.rowHidden(n)) {
+			n--;
+		}
+		return n;
+	}
+	rowStart() {
+		return this.focus(this.row(), 0);
+	}
+	rowEnd() {
+		return this.focus(this.row(), this.maxCol());
+	}
+	colStart() {
+		return this.focus(this.firstVisibleRow(), this.col());
+	}
+	colEnd() {
+		return this.focus(this.lastVisibleRow(), this.col());
+	}
+	first() {
+		return this.focus(this.firstVisibleRow(), 0);
+	}
+	last() {
+		return this.focus(this.lastVisibleRow(), this.maxCol());
+	}
+	left() {
+		let [row, col] = this.pos();
+		col--;
+		if (col < 0) {
+			return false;
+		}
+		return this.focus(row, col);
+	}
+	right() {
+		let [row, col] = this.pos();
+		col++;
+		if (col > this.maxCol()) {
+			return false;
+		}
+		return this.focus(row, col);
+	}
+	up() {
+		let [row, col] = this.pos();
+		row--;
+		if (row < 0) {
+			return false;
+		}
+		while (this.rowHidden(row)) {
+			row--;
+			if (row < 0) {
+				return false;
+			}
+		}
+		return this.focus(row, col);
+	}
+	down() {
+		let [row, col] = this.pos();
+		const maxRow = this.maxRow();
+		row++;
+		if (row > maxRow) {
+			return false;
+		}
+		while (this.rowHidden(row)) {
+			row++;
+			if (row > maxRow) {
+				return false;
+			}
+		}
+		return this.focus(row, col);
+	}
+	select(row, col) {
+		// out of bounds, ignore
+		if (row < 0 || col < 0 || row > this.maxRow() || col > this.maxCol()) {
+			return false;
+		}
+		// if we're trying to select a hidden row,
+		// arbitrarily select the first row that is not hidden.
+		if (this.rowHidden(row)) {
+			row = this.firstVisibleRow();
+		}
+		this.setRow(row);
+		this.setCol(col);
+		return true;
+	}
+	focus(row, col, force = false) {
+		if (!this.select(row, col)) {
+			return false;
+		}
+
+		// skip if the cell already contains the cursor
+		// unless force is specified which we use to handle ESC key
+		const cell = this.selectedCell();
+		if (!force && cell.matches(":focus-within")) {
+			return false;
+		}
+
+		this.setOpen(false);
+		cell.focus({
+			preventScroll: true,
+		});
+		this.scrollIntoView(row, col);
+		return true;
+	}
+	scrollIntoView(row, col) {
+		if (!this.select(row, col)) {
+			return;
+		}
+		this.selectedCell().scrollIntoView({
+			"block": "center",
+			"inline": "center",
+		});
+		// the first row and/or col does not take the table headings into account
+		// so we detect these cases and issue a correction
+		const firstCol = col == 0;
+		const firstRow = row == this.firstVisibleRow();
+		if (firstCol || firstRow) {
+			const opts = {};
+			if (firstCol) {
+				opts.left = 0;
+			}
+			if (firstRow) {
+				opts.top = 0;
+			}
+			this.container.scroll(opts);
+		}
+	}
+}
+
+// focusables_around returns the focusable items immediately before and after elm.
+// it is only designed to work on the editor pages.
+function focusables_around(elm) {
+	// note that this works because querySelectorAll returns elements in document order
+	// and we know that there is always at least one focusable before and after elm
+	let before = null;
+	for (const f of document.querySelectorAll("a,button,input")) {
+		switch (elm.compareDocumentPosition(f)) {
+			case Node.DOCUMENT_POSITION_PRECEDING:
+				// the last time we set this will be the focusable directly before elm
+				before = f;
+				break;
+			case Node.DOCUMENT_POSITION_FOLLOWING:
+				return [before, f];
+		}
+	}
+}
+
+// edge_focusables returns the first and last focusable elements of a gridcell.
+// if there is only one it returns it twice. There cannot be zero.
+function edge_focusables(elm) {
+	const fs = elm.querySelectorAll(":is(input, button):not(:disabled)");
+	return [fs[0], fs[fs.length - 1]];
+}
+
+function editor_grid() {
+	const container = document.querySelector(".editor #scroll-container");
+	const editor = container.querySelector(':scope>table');
+	if (editor == null) {
+		return;
+	}
+
+	// create matrix indexing cells by (row, col)
+	// and add extra attributes while we're in there
+	const cells = [];
+	editor.querySelectorAll('tbody tr').forEach(row => {
+		const i = cells.push([]) - 1;
+		row.querySelectorAll('td').forEach(col => {
+			const j = cells[i].push(col) - 1;
+			col.setAttribute("tabindex", "-1");
+			col.setAttribute("role", "gridcell");
+			col.dataset.row = i;
+			col.dataset.col = j;
+		});
+	});
+
+	const grid = new Grid(container, editor, cells);
+
+	// we use these when handling tab from within the grid
+	const [focusableBefore, focusableAfter] = focusables_around(container);
+
+	// move focus to selected item in grid in the next microtask
+	const focusContainer = evt => {
+		container.scrollIntoView();
+		setTimeout(() => {
+			grid.focus(...grid.pos());
+		}, 0);
+	};
+
+	container.addEventListener("focus", focusContainer);
+
+	// set a trap so shift+tab from earlier in container doesn't end up in a grid cell.
+	// (we always skip over it going the other direction)
+	const focusTrap = document.querySelector("#focus-trap");
+	focusTrap.setAttribute("tabindex", "0");
+	focusTrap.addEventListener("focus", focusContainer);
+
+	// if focus moves inside the grid,
+	// make sure we update the selected cell in case it has changed
+	const focusFixer = evt => {
+		let t = evt.target;
+
+		const setsInternalFocus = t.matches(":is(input, button, label):not(:disabled)");
+
+		// if we're not a cell, see if we're in a cell
+		if (!t.matches("td")) {
+			t = t.closest("td");
+		}
+		if (t == null) {
+			return;
+		}
+
+		const ds = t.dataset;
+		grid.select(ds.row, ds.col);
+
+		// mark grid open if we're focusing an input element
+		if (setsInternalFocus && evt.type == "focusin") {
+			grid.setOpen(true);
+			grid.scrollIntoView(ds.row, ds.col);
+		}
+	};
+	editor.addEventListener("focusin", focusFixer);
+	editor.addEventListener("focusout", focusFixer);
+
+	// if we click inside the grid without changing focus,
+	// focus the correct cell
+	editor.addEventListener("click", evt => {
+		const t = evt.target;
+		if (t.matches("td")) {
+			grid.focus(t.dataset.row, t.dataset.col);
+			evt.preventDefault();
+		}
+	});
+
+	container.addEventListener("keydown", evt => {
+		if (evt.isComposing || evt.keyCode == 229) {
+			return;
+		}
+		switch (evt.key) {
+			case "Left":
+			case "ArrowLeft":
+				grid.left();
+				break;
+
+			case "Right":
+			case "ArrowRight":
+				grid.right();
+				break;
+
+			case "Up":
+			case "ArrowUp":
+				grid.up();
+				break;
+
+			case "Down":
+			case "ArrowDown":
+				grid.down();
+				break;
+
+			case "Home":
+				if (evt.ctrlKey) {
+					grid.first();
+				} else {
+					grid.rowStart();
+				}
+				break;
+
+			case "End":
+				if (evt.ctrlKey) {
+					grid.last();
+				} else {
+					grid.rowEnd();
+				}
+				break;
+
+			case "PageDown":
+				grid.colEnd();
+				break;
+
+			case "PageUp":
+				grid.colStart();
+				break;
+
+			case "Enter":
+				grid.setOpen(true);
+				// focus first focusable in cell (always at least one)
+				grid.selectedCell().querySelector(":is(input, button):not(:disabled)").focus();
+				break;
+
+			case "Esc":
+			case "Escape":
+				grid.focus(...grid.pos(), true)
+				break;
+
+			case "Tab":
+				// if we're in a cell, only need to worry about focus exiting the cell
+				if (grid.isOpen()) {
+					const t = evt.target;
+					const [first, last] = edge_focusables(grid.selectedCell());
+					let leaving = false;
+					console.log(evt.shiftKey, first, last);
+					if (evt.shiftKey) {
+						// shift+tab on first element
+						leaving = first == t;
+					} else {
+						// tab on last element
+						leaving = last == t;
+					}
+					if (leaving) {
+						grid.focus(...grid.pos(), true);
+						evt.preventDefault();
+					}
+					// avoid prevent default after switch in this case
+					// to allow focus to propagate normally within the cell
+					return;
+				}
+
+				// if we're not in a cell, send us to the focusable before or after the grid.
+				if (evt.shiftKey) {
+					focusableBefore.focus();
+				} else {
+					focusableAfter.focus();
+				}
+				break;
+
+			default:
+				return
+		}
+		evt.preventDefault();
+	});
+	editor.setAttribute("role", "grid");
+	container.classList.add("js-grid");
+}
+
 function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();
 	setup_auto_confirms();
 	wire_editor_expando();
+	editor_grid();
 	wire_log_buttons();
 }
 main();

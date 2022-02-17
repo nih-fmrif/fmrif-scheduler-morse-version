@@ -521,3 +521,26 @@ entry-cell button[data-for][hidden] {
 	display: inline-block;
 	visibility: hidden;
 }
+
+@media screen {
+	.editor #scroll-container {
+		overflow: auto;
+		touch-action: manipulation;
+		max-height: 95vh;
+		width: max-content;
+		max-width: 100%;
+	}
+
+	.editor :is(tbody th, thead) {
+		background-color: white; /* hardcoded color */
+		position: sticky;
+	}
+	.editor thead {
+		z-index: 2;
+		top: 0;
+	}
+	.editor tbody th {
+		z-index: 1;
+		left: 0;
+	}
+}
