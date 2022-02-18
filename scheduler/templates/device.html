@@ -94,10 +94,10 @@
 														</input-widget>
 													</input-set>
 												{% endmacro %}
-												{% macro tech_kind(id, lbl, checked) %}
+												{% macro tech_kind(id, kind, lbl, checked) %}
 													<input-set is-option>
 														<input-widget>
-															<input id="{{ id }}" type=radio {% if checked %}checked{% endif %}>
+															<input id="{{ "tech-" ~ kind ~ "-" ~id }}" name="kind-{{ id }}" type=radio {% if checked %}checked{% endif %}>
 														</input-widget>
 														<label for="{{ id }}">{{ lbl }}</label>
 													</input-set>
@@ -108,8 +108,8 @@
 														{{ requested("tech-requested-" ~ x.id, sr.tech) }}
 														<fieldset data-orig="{{ sr.note }}">
 															<legend>kind</legend>
-															{{ tech_kind("tech-cover-" ~ x.id, "cover", sr.note == "cover") }}
-															{{ tech_kind("tech-support-" ~ x.id, "support", sr.note == "support") }}
+															{{ tech_kind(x.id, "cover", "cover", sr.note == "cover") }}
+															{{ tech_kind(x.id, "support", "support", sr.note == "support") }}
 														</fieldset>
 														{{ handler("tech-handler-" ~ x.id, support.tech, sr.fulfilled_by) }}
 													</fieldset>
