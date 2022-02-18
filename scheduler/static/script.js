@@ -238,9 +238,18 @@ function wire_editor_expando() {
 		);
 		// get the next state
 		const expanded = !to_bool(expando.getAttribute("aria-expanded"));
-		// toggle the off hour rows
+		if (expanded) {
+			// unhide any hidden rows
 		for (const c of controls) {
-			c.hidden = !expanded;
+				c.hidden = false;
+			}
+		} else {
+			// hide rows unless they contain a changed cell
+			for (const c of controls) {
+				if (c.querySelector("entry-cell[data-changed=true]") == null) {
+					c.hidden = true;
+				}
+			}
 		}
 		// update the button state
 		expando.setAttribute("aria-expanded", from_bool(expanded));
