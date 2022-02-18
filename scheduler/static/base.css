@@ -543,4 +543,14 @@ entry-cell button[data-for][hidden] {
 		z-index: 1;
 		left: 0;
 	}
+	/* add padding to left and right edges of tables to compensate for the floating col headers */
+	.editor tbody {
+		--th-off: 1.5rem;
+	}
+	.editor tbody td:first-of-type {
+		padding-left: var(--th-off);
+	}
+	.editor tbody td:last-of-type {
+		padding-right: var(--th-off);
+	}
 }
