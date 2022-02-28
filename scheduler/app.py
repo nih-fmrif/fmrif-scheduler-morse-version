@@ -937,6 +937,15 @@ def device(the_device):
             members_of_groups = logic.member_datalists_by_group_for(device, g.user)
             groups = logic.groups_of_device_for(device, g.user)
 
+    perms_json = {  # the permissions the js needs
+        "edit": perms.edit,
+        "edit_any": perms.edit_any,
+        "tech": perms.tech,
+        "medical": perms.medical,
+        "training": perms.training,
+    }
+    groups_json = [id for (id, _) in groups]
+
     top_row, grouped_entries = logic.group_schedule_entries(entries)
 
     hours = logic.fmt_hours()
@@ -944,6 +953,7 @@ def device(the_device):
     return {
         "device": device,
         "perms": perms,
+        "perms_json": perms_json,
         "start_date": fmt_start_date,
         "end_date": fmt_end_date,
         "days": days,
@@ -956,6 +966,7 @@ def device(the_device):
         "support": support,
         "members_of_groups": members_of_groups,
         "groups": groups,
+        "groups_json": groups_json,
         "off_hours": list(off_hours),
         "off_hour_map": off_hour_map,
         "colors": colors,

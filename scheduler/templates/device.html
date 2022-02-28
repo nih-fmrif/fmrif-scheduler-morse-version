@@ -19,6 +19,8 @@
 		{% if no_entries %}
 			<p class=note>{{ icons.info() }} {{ no_entries }}</p>
 		{% else %}
+			<script id="user-perms" type="application/json">{{ perms_json|tojson }}</script>
+			<script id="user-groups" type="application/json">{{ groups_json|tojson }}</script>
 			{{ macros.datalist("groups", groups, "invalid group") }}
 			{{ macros.datalist("tech", support.tech, "invalid technologist") }}
 			{{ macros.datalist("med", support.medical, "invalid medical support member") }}
