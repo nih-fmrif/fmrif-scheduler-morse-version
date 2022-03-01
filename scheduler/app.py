@@ -1351,6 +1351,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
     institutes = logic.get_institutes_datalist()
     members_of_groups = logic.all_member_datalists_by_group(device)
     groups = logic.all_groups_of_device(device)
+    device_groups_json = [id for (id, _) in groups]
     grouped_entries = logic.group_template_entries(entries)
     colors = logic.all_group_colors()
     hours = logic.fmt_hours()
@@ -1359,6 +1360,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
         "entries": grouped_entries,
         "institutes": institutes,
         "groups": groups,
+        "device_groups_json": device_groups_json,
         "members_of_groups": members_of_groups,
         "colors": colors,
         "hours": hours,
