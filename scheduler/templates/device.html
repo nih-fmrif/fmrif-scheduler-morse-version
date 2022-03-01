@@ -102,7 +102,7 @@
 														<input-widget>
 															<input id="{{ "tech-" ~ kind ~ "-" ~id }}" name="kind-{{ id }}" type=radio {% if checked %}checked{% endif %}>
 														</input-widget>
-														<label for="{{ id }}">{{ lbl }}</label>
+														<label for="{{ "tech-" ~ kind ~ "-" ~ id }}">{{ lbl }}</label>
 													</input-set>
 												{% endmacro %}
 												{% if support.tech or sr.tech %}
