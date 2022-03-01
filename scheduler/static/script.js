@@ -80,6 +80,7 @@ function enforce_datalists() {
 	}
 
 	for (const input of inputs) {
+		validate_and_normalize(input);
 		input.addEventListener("input", evt => {
 			// clear invalid flag whenever input is changed.
 			input.setCustomValidity('');
