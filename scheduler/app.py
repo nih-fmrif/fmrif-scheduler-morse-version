@@ -924,6 +924,7 @@ def device(the_device):
     support = logic.SupportRequestDatalists([], [], [])
     members_of_groups = {}
     groups = []
+    device_groups = logic.all_groups_of_device(device)
 
     # load any data user may need to edit
     if device.active and perms.edit:
@@ -932,7 +933,7 @@ def device(the_device):
         # load all relevant group-member datalists
         if perms.edit_any:
             members_of_groups = logic.all_member_datalists_by_group(device)
-            groups = logic.all_groups_of_device(device)
+            groups = device_groups
         else:
             members_of_groups = logic.member_datalists_by_group_for(device, g.user)
             groups = logic.groups_of_device_for(device, g.user)
@@ -945,6 +946,7 @@ def device(the_device):
         "training": perms.training,
     }
     groups_json = [id for (id, _) in groups]
+    device_groups_json = [id for (id, _) in device_groups]
 
     top_row, grouped_entries = logic.group_schedule_entries(entries)
 
@@ -967,6 +969,7 @@ def device(the_device):
         "members_of_groups": members_of_groups,
         "groups": groups,
         "groups_json": groups_json,
+        "device_groups_json": device_groups_json,
         "off_hours": list(off_hours),
         "off_hour_map": off_hour_map,
         "colors": colors,
