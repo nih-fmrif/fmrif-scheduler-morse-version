@@ -600,10 +600,10 @@ function edge_focusables(elm) {
 
 function editor_grid() {
 	const container = document.querySelector(".editor #scroll-container");
-	const editor = container.querySelector(':scope>table');
-	if (editor == null) {
+	if (container == null) {
 		return;
 	}
+	const editor = container.querySelector(':scope>table');
 
 	// create matrix indexing cells by (row, col)
 	// and add extra attributes while we're in there
