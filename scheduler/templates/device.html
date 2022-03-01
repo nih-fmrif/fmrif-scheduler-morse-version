@@ -100,7 +100,7 @@
 												{% macro tech_kind(id, kind, lbl, checked) %}
 													<input-set is-option>
 														<input-widget>
-															<input id="{{ "tech-" ~ kind ~ "-" ~id }}" name="kind-{{ id }}" type=radio {% if checked %}checked{% endif %}>
+															<input id="{{ "tech-" ~ kind ~ "-" ~id }}" name="kind-{{ id }}" type=radio {% if checked %}checked{% endif %} value="{{ lbl }}">
 														</input-widget>
 														<label for="{{ "tech-" ~ kind ~ "-" ~ id }}">{{ lbl }}</label>
 													</input-set>
