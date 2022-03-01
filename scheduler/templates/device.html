@@ -25,7 +25,7 @@
 			{{ macros.datalist("groups", groups, "invalid group") }}
 			{{ macros.datalist("tech", support.tech, "invalid technologist") }}
 			{{ macros.datalist("med", support.medical, "invalid medical support member") }}
-			{{ macros.datalist("train", support.train, "invalid training support member") }}
+			{{ macros.datalist("train", support.training, "invalid training support member") }}
 			{% for k, v in members_of_groups.items() %}
 				{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 			{% endfor %}
@@ -117,7 +117,7 @@
 														{{ handler("tech-handler-" ~ x.id, "tech", sr.fulfilled_by) }}
 													</fieldset>
 												{% endif %}
-												{% if support.train or sr.train %}
+												{% if support.training or sr.train %}
 													<fieldset data-sr=train disabled>
 														<legend>training</legend>
 														{{ requested("train-requested-" ~ x.id, sr.tech) }}
