@@ -109,7 +109,7 @@
 													<fieldset data-sr=tech disabled>
 														<legend>technologist</legend>
 														{{ requested("tech-requested-" ~ x.id, sr.tech) }}
-														<fieldset data-orig="{{ sr.note }}">
+														<fieldset data-orig="{{ sr.note or "cover" }}">
 															<legend>kind</legend>
 															{{ tech_kind(x.id, "cover", "cover", sr.note != "support") }}
 															{{ tech_kind(x.id, "support", "support", sr.note == "support") }}
