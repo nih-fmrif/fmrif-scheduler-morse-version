@@ -5,7 +5,7 @@
 	{{ macros.datalist("institutes", institutes, "invalid institute") }}
 	{{ macros.datalist("groups", groups, "invalid group") }}
 	{% for k, v in members_of_groups.items() %}
-	{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
+		{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 	{% endfor %}
 	<form class="editor template-editor">
 		<div id=caption data-changed="false" data-error="false">{{ title }}{{ macros.edit_icons("template") }}</div>
