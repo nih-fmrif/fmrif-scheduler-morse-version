@@ -30,6 +30,7 @@
 			{% for k, v in members_of_groups.items() %}
 				{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 			{% endfor %}
+			<datalist id=none></datalist>
 			<form class="editor schedule-editor">
 				{% if off_hours|length %}
 					<button id="expando" type=button hidden aria-expanded=false data-expands="{{ off_hours|tojson }}">
@@ -62,7 +63,7 @@
 											{{ macros.entry_legend(colors[x.group] if x.group) }}
 											<entry-editor>
 												{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
-												{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
+												{{ macros.entry_text("mem-" ~ x.id, "member", "none", x.user) }}
 											</entry-editor>
 											<entry-support>
 												{# bucket support requests #}
