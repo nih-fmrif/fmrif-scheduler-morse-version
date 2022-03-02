@@ -682,6 +682,38 @@ function editor_grid() {
 		if (evt.isComposing || evt.keyCode == 229) {
 			return;
 		}
+
+		// we only want to intercept esc and tab when we're in a cell
+		if (grid.isOpen()) {
+			switch (evt.key) {
+				case "Esc":
+				case "Escape":
+					grid.focus(...grid.pos(), true)
+					break;
+
+				case "Tab":
+					// if we're in a cell, only need to worry about focus exiting the cell
+					const t = evt.target;
+					const [first, last] = edge_focusables(grid.selectedCell());
+					let leaving = false;
+					if (evt.shiftKey) {
+						// shift+tab on first element
+						leaving = first == t;
+					} else {
+						// tab on last element
+						leaving = last == t;
+					}
+					if (leaving) {
+						grid.focus(...grid.pos(), true);
+						evt.preventDefault();
+					}
+					break;
+			}
+
+			return;
+		}
+
+		// if we're not in cell, we need to intercept all grid keys
 		switch (evt.key) {
 			case "Left":
 			case "ArrowLeft":
@@ -733,28 +765,22 @@ function editor_grid() {
 				grid.selectedCell().querySelector(":is(input, button):not(:disabled)").focus();
 				break;
 
-			case "Esc":
-			case "Escape":
-				grid.focus(...grid.pos(), true)
+			case "Tab":
+					if (evt.shiftKey) {
+					focusableBefore.focus();
+					} else {
+					focusableAfter.focus();
+					}
 				break;
 
-			case "Tab":
-				// if we're in a cell, only need to worry about focus exiting the cell
-				if (grid.isOpen()) {
-					const t = evt.target;
-					const [first, last] = edge_focusables(grid.selectedCell());
-					let leaving = false;
-					console.log(evt.shiftKey, first, last);
-					if (evt.shiftKey) {
-						// shift+tab on first element
-						leaving = first == t;
-					} else {
-						// tab on last element
-						leaving = last == t;
-					}
-					if (leaving) {
-						grid.focus(...grid.pos(), true);
+			default:
+				return
+		}
 						evt.preventDefault();
+	});
+	editor.setAttribute("role", "grid");
+	container.classList.add("js-grid");
+}
 					}
 					// avoid prevent default after switch in this case
 					// to allow focus to propagate normally within the cell
