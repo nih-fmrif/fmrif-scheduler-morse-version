@@ -238,6 +238,13 @@ body {
 	outline: 0;
 }
 
+input[list]::-webkit-calendar-picker-indicator {
+	display: none !important;
+}
+input[list]::-webkit-list-button {
+	display: none;
+}
+
 .flash-messages {
 	margin: 1.5rem;
 }
