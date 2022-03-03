@@ -108,7 +108,7 @@
 													</input-set>
 												{% endmacro %}
 												{% if support.tech or sr.tech %}
-													<fieldset data-sr=tech disabled>
+													<fieldset data-sr=tech data-new="{% if sr.tech %}false{% else %}true{% endif %}" disabled>
 														<legend>technologist</legend>
 														{{ requested("tech-requested-" ~ x.id, sr.tech) }}
 														<fieldset data-orig="{{ sr.note or "cover" }}">
@@ -120,14 +120,14 @@
 													</fieldset>
 												{% endif %}
 												{% if support.training or sr.train %}
-													<fieldset data-sr=train disabled>
+													<fieldset data-sr=train data-new="{% if sr.training %}false{% else %}true{% endif %}" disabled>
 														<legend>training</legend>
 														{{ requested("train-requested-" ~ x.id, sr.tech) }}
 														{{ handler("train-handler-" ~ x.id, "train", sr.fulfilled_by) }}
 													</fieldset>
 												{% endif %}
 												{% if support.medical or sr.medical %}
-													<fieldset data-sr=med disabled>
+													<fieldset data-sr=med data-new="{% if sr.medical %}false{% else %}true{% endif %}" disabled>
 														<legend>medical coverage</legend>
 														{{ requested("med-requested-" ~ x.id, sr.tech) }}
 														{{ handler("med-handler-" ~ x.id, "med", sr.fulfilled_by) }}
