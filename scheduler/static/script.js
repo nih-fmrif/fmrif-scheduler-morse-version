@@ -82,10 +82,11 @@ function enforce_datalists() {
 	for (const input of inputs) {
 		validate_and_normalize(input);
 		input.addEventListener("input", evt => {
+			const t = evt.target;
 			// clear invalid flag whenever input is changed.
-			input.setCustomValidity('');
+			t.setCustomValidity('');
 			// run validation
-			validate_and_normalize(evt.target);
+			validate_and_normalize(t);
 		});
 	}
 }
