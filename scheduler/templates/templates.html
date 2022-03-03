@@ -9,6 +9,7 @@
 	{% for k, v in members_of_groups.items() %}
 		{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 	{% endfor %}
+	<datalist id=none></datalist>
 	<form class="editor template-editor">
 		<div id=caption data-changed="false" data-error="false">{{ title }}{{ macros.edit_icons("template") }}</div>
 		<div id="scroll-container" aria-labelledby=caption tabindex=0>
@@ -36,7 +37,7 @@
 									<entry-editor>
 										{{ macros.entry_text("ins-" ~ x.id, "institute", "institutes", x.inst) }}
 										{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
-										{{ macros.entry_text("mem-" ~ x.id, "member", "", x.user) }}
+										{{ macros.entry_text("mem-" ~ x.id, "member", "none", x.user) }}
 									</entry-editor>
 									<entry-status>{{ macros.edit_icons("entry") }}</entry-status>
 								</entry-cell>
