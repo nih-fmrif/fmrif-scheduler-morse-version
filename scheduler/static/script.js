@@ -79,6 +79,17 @@ function enforce_datalists() {
 		});
 	}
 
+	// re-validate inputs if the list changes
+	const mo = new MutationObserver(ms => {
+		for (const m of ms) {
+			const t = m.target;
+			if (t.list != null) { // can be null when between lists
+				t.setCustomValidity("");
+				validate_and_normalize(t);
+			}
+		}
+	});
+
 	for (const input of inputs) {
 		validate_and_normalize(input);
 		input.addEventListener("input", evt => {
@@ -87,6 +98,10 @@ function enforce_datalists() {
 			t.setCustomValidity('');
 			// run validation
 			validate_and_normalize(t);
+		});
+		mo.observe(input, {
+			attributes: true,
+			attributeFilter: ['list'],
 		});
 	}
 }
