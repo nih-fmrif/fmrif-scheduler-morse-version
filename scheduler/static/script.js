@@ -257,7 +257,7 @@ function wire_editor_expando() {
 		const expanded = !to_bool(expando.getAttribute("aria-expanded"));
 		if (expanded) {
 			// unhide any hidden rows
-		for (const c of controls) {
+			for (const c of controls) {
 				c.hidden = false;
 			}
 		} else {
@@ -782,28 +782,6 @@ function editor_grid() {
 				break;
 
 			case "Tab":
-					if (evt.shiftKey) {
-					focusableBefore.focus();
-					} else {
-					focusableAfter.focus();
-					}
-				break;
-
-			default:
-				return
-		}
-						evt.preventDefault();
-	});
-	editor.setAttribute("role", "grid");
-	container.classList.add("js-grid");
-}
-					}
-					// avoid prevent default after switch in this case
-					// to allow focus to propagate normally within the cell
-					return;
-				}
-
-				// if we're not in a cell, send us to the focusable before or after the grid.
 				if (evt.shiftKey) {
 					focusableBefore.focus();
 				} else {
@@ -820,6 +798,395 @@ function editor_grid() {
 	container.classList.add("js-grid");
 }
 
+class SupportRequestSubForm {
+	constructor(elm, parent, cfg) {
+		this.elm = elm;
+		this.isNew = to_bool(elm.dataset.new);
+		this.kind = elm.dataset.sr;
+		this.parent = parent;
+
+		this.perms = cfg.perms;
+		this.membership = cfg.membership;
+		this.members = cfg.sr_members[this.kind];
+
+		this.requested = elm.querySelector('.requested');
+		this.handler = elm.querySelector('.handler');
+
+		this.orig = {
+			requested: to_bool(this.requested.dataset.orig),
+			handler: this.handler.dataset.orig,
+			subkind: "",
+		};
+
+		this.subkind_fieldset = elm.querySelector('fieldset'); // null if not tech
+		this.subkind = null;
+		if (this.kind == "tech") {
+			// get the RadioNodeList of the radio group
+			const radio = this.subkind_fieldset.querySelector('[type=radio]');
+			this.subkind = radio.form.elements[radio.name];
+
+			this.orig.subkind = this.subkind_fieldset.dataset.orig;
+		}
+
+		if (!this.editable) {
+			return;
+		}
+
+		this.elm.disabled = false;
+	}
+	get changed() {
+		if (this.requested.checked != this.orig.requested) {
+			return true;
+		}
+		// only check subkind if it exists and there is a request
+		if (this.requested.checked && this.subkind != null && this.orig.subkind != this.subkind.value) {
+			return true;
+		}
+		return this.handler.value != this.orig.handler;
+	}
+	get invalid() {
+		// the handler is the only element that can be in an invalid state
+		// but we only report it if it's something the user can fix
+		return this.handler_editable && !this.handler.validity.valid;
+	}
+	get editable() {
+		// editable if part of an editable cell and there exists someone to fulfill the request
+		return this.members.size > 0 && this.parent.editable;
+	}
+	get handler_editable() {
+		// each kind has the same name as the corresponding perm.
+		return this.editable && this.perms[this.kind];
+	}
+	diff() {
+		if (!this.changed) {
+			return null;
+		}
+		const changes = {};
+		if (this.requested.checked != this.orig.requested) {
+			// only one other option so no need to store both values
+			changes.requested = this.requested.checked;
+		}
+		if (this.handler.value != this.orig.handler) {
+			changes.handler = [this.orig.handler, this.handler.value];
+		}
+		if (this.subkind != null) {
+			if (this.new) {
+				// simplify backend code by including this implicit transition in the diff
+				changes.subkind = ["", this.subkind.value];
+			} else if (this.subkind.value != this.orig.subkind) {
+				changes.subkind = [this.orig.subkind, this.subkind.value];
+			}
+		}
+		return changes;
+	}
+	reset() {
+		this.requested.checked = this.orig.requested;
+		this.handler.value = this.orig.handler;
+		if (this.subkind != null) {
+			this.subkind.value = this.orig.subkind;
+		}
+	}
+}
+
+class Cell {
+	constructor(elm, cfg) {
+		this.elm = elm;
+		this.perms = cfg.perms;
+		this.membership = cfg.membership;
+		this.device_groups = cfg.device_groups;
+		this.schedulable_groups = cfg.schedulable_groups;
+		this.colors = cfg.colors;
+
+		// institute may be null depending on the page
+		this.institute = elm.querySelector('input[id^=ins-]');
+		this.group = elm.querySelector('input[id^=grp-]');
+		this.member = elm.querySelector('input[id^=mem-]');
+		this.legend = elm.querySelector('entry-legend');
+
+		this.id = elm.dataset.id;
+
+		// note that date is very different depending on the editor used
+		this.hour = elm.dataset.hour;
+		this.date = elm.dataset.date;
+
+		// data-old is undefined in template editor so we simplify that to false.
+		this.old = to_bool(elm.dataset.old) ?? false;
+
+		this.orig = {
+			institute: this.institute?.dataset.orig,
+			group: this.group.dataset.orig,
+			member: this.member.dataset.orig,
+		};
+
+		// gather any support requests
+		const subforms = [...elm.querySelectorAll("fieldset[data-sr]")];
+		const kv = subforms.map(sr => [
+			sr.dataset.sr,
+			new SupportRequestSubForm(sr, this, cfg),
+		]);
+		this.sr = Object.fromEntries(kv);
+
+		// nothing further to do unless this is an editable cell
+		if (!this.editable) {
+			return;
+		}
+
+		if (this.institute) {
+			this.institute.disabled = false;
+		}
+		this.group.disabled = false;
+		this.member.disabled = false;
+		this.update_list();
+
+		this.elm.addEventListener("input", evt => {
+			this.update_list();
+			this.update_swatch();
+			this.fire_change();
+		});
+	}
+	get changed() {
+		if (this.institute && this.orig.institute != this.institute.value) {
+			return true;
+		}
+		for (const sr of Object.values(this.sr)) {
+			if (sr.changed) {
+				return true;
+			}
+		}
+		return (this.orig.group != this.group.value) || (this.orig.member != this.member.value);
+	}
+	get invalid() {
+		if (!this.editable) {
+			// cell state may be incorrect but the user can do nothing about it.
+			return false;
+		}
+		if (this.institute && !this.institute.validity.valid) {
+			return true;
+		}
+		for (const sr of Object.values(this.sr)) {
+			if (sr.invalid) {
+				return true;
+			}
+		}
+		return !this.group.validity.valid || !this.member.validity.valid;
+	}
+	get editable() {
+		if (this.perms.edit_any) {
+			return true;
+		}
+		if (this.perms.edit && !this.old) {
+			const g = this.orig.group;
+			if (!this.device_groups.has(g)) {
+				// if the original group no longer belongs to the device, consider the slot up for grabs
+				return true;
+			}
+			// Otherwise, consider a cell editable if it was editable
+			// when the editor was loaded even if the user had set
+			// the cell to a group they don't belong to, allowing them to undo a mistake
+			return this.membership.has(this.orig.group);
+		}
+		return false;
+	}
+	diff() {
+		if (!this.changed) {
+			return null;
+		}
+		// start off with the metadata
+		const changes = {
+			"id": this.id,
+			"date": this.date,
+			"hour": this.hour,
+		};
+		if (this.institute && this.orig.institute != this.institute.value) {
+			changes.institute = [this.orig.institute, this.institute.value];
+		}
+		if (this.orig.group != this.group.value) {
+			changes.group = [this.orig.group, this.group.value];
+		}
+		if (this.orig.member != this.member.value) {
+			changes.member = [this.orig.member, this.member.value];
+		}
+		for (const [kind, sr] of Object.entries(this.sr)) {
+			const sr_changes = sr.diff();
+			if (sr_changes) {
+				changes[kind] = sr_changes;
+			}
+		}
+		return changes;
+	}
+	reset() {
+		if (this.institute) {
+			this.institute.value = this.orig.institute;
+		}
+		this.group.value = this.orig.group;
+		this.member.value = this.orig.member;
+		for (const sr of Object.values(this.sr)) {
+			sr.reset();
+		}
+		this.update_list();
+		this.fire_change();
+	}
+	update_list() {
+		const gv = this.group.value;
+		let list = 'none'; // special list always empty to simplify checks
+		// group has members, update list to point to appropriate datalist.
+		if (this.schedulable_groups.has(gv)) {
+			list = `members-of-${gv}`;
+		}
+		// only update the list if it's different than the current value
+		// to avoid unnecessary revalidation
+		if (this.member.list.id != list) {
+			this.member.setAttribute("list", list);
+		}
+	}
+	update_swatch() {
+		this.legend.style.setProperty("--swatch", this.colors[this.group.value] ?? "transparent");
+	}
+	fire_change() {
+		this.elm.dispatchEvent(new CustomEvent('cell_change', {
+			bubbles: true,
+			detail: this,
+		}));
+	}
+}
+
+function json_from_script_or(id, def) {
+	const script = document.querySelector('script[type="application/json"]#' + id);
+	if (!script) {
+		return def;
+	}
+	const text = script.textContent;
+	if (!text) {
+		return def;
+	}
+	// we do not use json_or here as text MUST be valid json;
+	return JSON.parse(text);
+}
+
+function datalist_ids_or(id, def) {
+	const dl = document.querySelector('datalist#' + id);
+	if (!dl) {
+		return def;
+	}
+	return [...dl.options].map(opt => opt.value);
+}
+
+function wire_cell_editors() {
+	const container = document.querySelector(".editor #scroll-container tbody");
+	if (container == null) {
+		return;
+	}
+
+	// if this is missing, we're on a template page so everything is true
+	const perms = json_from_script_or("user-perms", {
+		"edit": true,
+		"edit_any": true,
+		"medical": true,
+		"tech": true,
+		"training": true
+	});
+
+	// if this is missing we're on a template page so edit_any is true and it's irrelevant
+	const membership = new Set(json_from_script_or("user-groups", []));
+	membership.add(""); // consider every one a member of the null group
+
+	const device_groups = new Set(json_from_script_or("device-groups", []));
+	const colors = json_from_script_or("group-colors", {});
+
+	const tech_members = new Set(datalist_ids_or("tech", []));
+	const train_members = new Set(datalist_ids_or("train", []));
+	const med_members = new Set(datalist_ids_or("med", []));
+
+	// get a set of all group names for groups that have member lists
+	const schedulable_groups = new Set([...document.querySelectorAll('datalist[id^=members-of-]')].map(
+		elm => elm.id.slice("members-of-".length)
+	));
+
+	const cfg = {
+		perms,
+		membership,
+		device_groups,
+		schedulable_groups,
+		colors,
+		"sr_members": {
+			"tech": tech_members,
+			"train": train_members,
+			"med": med_members,
+		},
+	};
+
+
+	const cells = [...container.querySelectorAll("td entry-cell")].map(elm => new Cell(elm, cfg));
+
+	// keep track of changed and invalid cells
+	const changed = new Set();
+	const any_changed = () => Boolean(changed.size);
+	const invalid = new Set();
+	const any_invalid = () => Boolean(invalid.size);
+	// no cells can be changed yet but they could have come invalid
+	for (const cell of cells) {
+		if (cell.invalid) {
+			invalid.add(cell);
+		}
+	}
+
+	// keep caption in sync with cell updates
+	const caption = document.querySelector("#caption");
+	const update_caption = (which, bool) => {
+		caption.dataset[which] = from_bool(bool);
+	};
+	update_caption("error", any_invalid());
+	container.addEventListener("cell_change", evt => {
+		const cell = evt.detail;
+		console.log("diff", cell.diff()); // XXX for debugging
+
+		if (cell.invalid) {
+			invalid.add(cell);
+		} else {
+			invalid.delete(cell);
+		}
+		update_caption("error", any_invalid());
+
+		if (cell.changed) {
+			changed.add(cell);
+		} else {
+			changed.delete(cell);
+		}
+		update_caption("changed", any_changed());
+	});
+
+	const apply = document.querySelector("#apply");
+	apply.disabled = false;
+	apply.addEventListener("click", evt => {
+		evt.preventDefault();
+		if (any_invalid()) {
+			// TODO show warning that can't submit with errors -- allow ignoring errors that came with load?
+		} else if (!any_changed()) {
+			// TODO show warning that nothing has been edited
+		} else {
+			const diffs = [];
+			for (const cell of changed) {
+				diffs.push(cell.diff);
+			}
+			// order the diffs by civil time
+			diffs.sort((a, b) => {
+				if (a.date < b.date) {
+					return -1;
+				} else if (a.date > b.date) {
+					return 1;
+				}
+				if (a.hour < b.hour) {
+					return -1;
+				} else if (a.hour > b.hour) {
+					return 1;
+				}
+				return 0;
+			});
+			// TODO show summary etc
+		}
+	});
+}
+
 function main() {
 	enforce_datalists();
 	clear_server_errors_on_input();
@@ -827,5 +1194,6 @@ function main() {
 	wire_editor_expando();
 	editor_grid();
 	wire_log_buttons();
+	wire_cell_editors();
 }
 main();
