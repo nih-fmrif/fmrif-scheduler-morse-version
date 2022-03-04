@@ -913,6 +913,8 @@ class SupportRequestSubForm {
 			} else if (this.subkind.value != this.orig.subkind) {
 				changes.subkind = [this.orig.subkind, this.subkind.value];
 			}
+			// always grab this for printing summary.
+			changes.effectiveSubkind = this.subkind.value;
 		}
 		return changes;
 	}
