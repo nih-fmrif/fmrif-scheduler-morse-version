@@ -1111,9 +1111,39 @@ function datalist_ids_or(id, def) {
 }
 
 function fmt_editor_diffs(templateEditor, diffs) {
+	const acc = ['<dl>'];
 	let notifications = false;
+	const recordTransition = (k, a, b) => {
+		// return if this is notification worthy
+		if (a == "") {
+			acc.push(`set ${k} to ${b}`);
+			return true;
+		} else if (b == "") {
+			acc.push(`cleared ${k} (was ${a})`);
+			return false;
+		} else {
+			acc.push(`set ${k} to ${b} (was ${a})`);
+			return true;
+		}
+	};
+	const add = (diff, k) => {
+		const rec = diff[k];
+		if (!rec) {
+			return;
+		}
+		const [a, b] = rec;
+		acc.push('<dd>');
+		const ret = recordTransition(k, a, b);
+		acc.push('</dd>');
+		return ret;
+	};
 	for (const diff of diffs) {
+		acc.push(`<dt>${diff.date}: ${diff.hour}</dt>`); // TODO need to humanize these values
+		notifications ||= add(diff, 'institute');
+		notifications ||= add(diff, 'group');
+		notifications ||= add(diff, 'member');
 	}
+	acc.push('</dl>');
 	return [!templateEditor && notifications, acc.join('')];
 }
 
