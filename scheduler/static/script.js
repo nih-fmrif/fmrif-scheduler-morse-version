@@ -798,6 +798,39 @@ function editor_grid() {
 	container.classList.add("js-grid");
 }
 
+function editor_dialog(save, titleText, innerHTML, then) {
+	const con = document.getElementById('save-dialog-container');
+	const modal = con.querySelector(".dialog-box-container");
+	const title = con.querySelector("#save-dialog-title");
+	const body = con.querySelector(".dialog-content-inner");
+	const cancel = con.querySelector("button[name=cancel]");
+	title.innerText = titleText;
+	body.innerHTML = innerHTML;
+	if (save) {
+		cancel.disabled = false;
+	}
+	const dialog = new A11yDialog(con);
+	dialog.on("show", () => {
+		// scroll lock and focus cancel button
+		disableBodyScroll(modal);
+		cancel.focus();
+	});
+	dialog.on("hide", (_, evt) => {
+		enableBodyScroll(modal);
+		// only follow continuation if confirm button was used
+		if (evt.target && evt.target.name && evt.target.name == "confirm" && then) {
+			// in case there are form elements in body that need to be read
+			then(body);
+		}
+		// reset template
+		title.innerText = "";
+		body.innerHTML = "";
+		cancel.disabled = false;
+
+	});
+	dialog.show();
+}
+
 class SupportRequestSubForm {
 	constructor(elm, parent, cfg) {
 		this.elm = elm;
@@ -1160,9 +1193,9 @@ function wire_cell_editors() {
 	apply.addEventListener("click", evt => {
 		evt.preventDefault();
 		if (any_invalid()) {
-			// TODO show warning that can't submit with errors -- allow ignoring errors that came with load?
+			editor_dialog(false, "outstanding errors", "all errors must be resolved before submitting", null);
 		} else if (!any_changed()) {
-			// TODO show warning that nothing has been edited
+			editor_dialog(false, "no changes", "there are no changes to submit", null);
 		} else {
 			const diffs = [];
 			for (const cell of changed) {
@@ -1182,7 +1215,9 @@ function wire_cell_editors() {
 				}
 				return 0;
 			});
-			// TODO show summary etc
+			let summary = "TODO";
+			editor_dialog(true, "publish changes", summary, body => {
+			});
 		}
 	});
 }
