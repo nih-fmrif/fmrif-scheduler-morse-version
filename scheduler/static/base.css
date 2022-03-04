@@ -69,9 +69,11 @@ input-error {
 	gap: .5em;
 	align-items: center;
 }
+input-set:not([hidden]) {
+	display: grid;
+}
 input-set {
 	margin: .5rem .25rem;
-	display: grid;
 	gap: .25rem 1rem;
 	align-items: baseline;
 	grid-template: 
