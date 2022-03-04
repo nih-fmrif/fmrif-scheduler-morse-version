@@ -1108,12 +1108,11 @@ function datalist_ids_or(id, def) {
 	return [...dl.options].map(opt => opt.value);
 }
 
-function fmt_editor_diffs(diffs) {
-	const acc = [];
+function fmt_editor_diffs(templateEditor, diffs) {
 	let notifications = false;
 	for (const diff of diffs) {
 	}
-	return [notifications, acc.join('')];
+	return [!templateEditor && notifications, acc.join('')];
 }
 
 function wire_cell_editors() {
@@ -1121,6 +1120,7 @@ function wire_cell_editors() {
 	if (container == null) {
 		return;
 	}
+	const templateEditor = document.querySelector('form.editor').classList.contains('template-editor');
 
 	// if this is missing, we're on a template page so everything is true
 	const perms = json_from_script_or("user-perms", {
@@ -1227,7 +1227,7 @@ function wire_cell_editors() {
 				}
 				return 0;
 			});
-			let [notifications, summary] = fmt_editor_diffs(diffs);
+			let [notifications, summary] = fmt_editor_diffs(templateEditor, diffs);
 			editor_dialog(true, notifications, "publish changes", summary, checked => {
 			});
 		}
