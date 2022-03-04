@@ -798,16 +798,21 @@ function editor_grid() {
 	container.classList.add("js-grid");
 }
 
-function editor_dialog(save, titleText, innerHTML, then) {
+function editor_dialog(save, showNotifications, titleText, innerHTML, then) {
 	const con = document.getElementById('save-dialog-container');
 	const modal = con.querySelector(".dialog-box-container");
 	const title = con.querySelector("#save-dialog-title");
 	const body = con.querySelector(".dialog-content-inner");
 	const cancel = con.querySelector("button[name=cancel]");
+	const notificationsCon = con.querySelector(".dialog-form input-set");
+	const notifications = notificationsCon.querySelector("#send-notifications");
 	title.innerText = titleText;
 	body.innerHTML = innerHTML;
 	if (save) {
-		cancel.disabled = false;
+		cancel.hidden = false;
+	}
+	if (showNotifications) {
+		notificationsCon.hidden = false;
 	}
 	const dialog = new A11yDialog(con);
 	dialog.on("show", () => {
@@ -819,14 +824,13 @@ function editor_dialog(save, titleText, innerHTML, then) {
 		enableBodyScroll(modal);
 		// only follow continuation if confirm button was used
 		if (evt.target && evt.target.name && evt.target.name == "confirm" && then) {
-			// in case there are form elements in body that need to be read
-			then(body);
+			then(notifications.checked);
 		}
 		// reset template
 		title.innerText = "";
 		body.innerHTML = "";
-		cancel.disabled = false;
-
+		cancel.hidden = true;
+		notificationsCon.hidden = true;
 	});
 	dialog.show();
 }
@@ -1104,6 +1108,14 @@ function datalist_ids_or(id, def) {
 	return [...dl.options].map(opt => opt.value);
 }
 
+function fmt_editor_diffs(diffs) {
+	const acc = [];
+	let notifications = false;
+	for (const diff of diffs) {
+	}
+	return [notifications, acc.join('')];
+}
+
 function wire_cell_editors() {
 	const container = document.querySelector(".editor #scroll-container tbody");
 	if (container == null) {
@@ -1193,9 +1205,9 @@ function wire_cell_editors() {
 	apply.addEventListener("click", evt => {
 		evt.preventDefault();
 		if (any_invalid()) {
-			editor_dialog(false, "outstanding errors", "all errors must be resolved before submitting", null);
+			editor_dialog(false, false, "outstanding errors", "all errors must be resolved before submitting", null);
 		} else if (!any_changed()) {
-			editor_dialog(false, "no changes", "there are no changes to submit", null);
+			editor_dialog(false, false, "no changes", "there are no changes to submit", null);
 		} else {
 			const diffs = [];
 			for (const cell of changed) {
@@ -1215,8 +1227,8 @@ function wire_cell_editors() {
 				}
 				return 0;
 			});
-			let summary = "TODO";
-			editor_dialog(true, "publish changes", summary, body => {
+			let [notifications, summary] = fmt_editor_diffs(diffs);
+			editor_dialog(true, notifications, "publish changes", summary, checked => {
 			});
 		}
 	});
