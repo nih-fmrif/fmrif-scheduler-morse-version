@@ -1168,6 +1168,7 @@ function wire_cell_editors() {
 	const any_changed = () => Boolean(changed.size);
 	const invalid = new Set();
 	const any_invalid = () => Boolean(invalid.size);
+	const changedInvalid = new Set();
 	// no cells can be changed yet but they could have come invalid
 	for (const cell of cells) {
 		if (cell.invalid) {
@@ -1198,17 +1199,24 @@ function wire_cell_editors() {
 			changed.delete(cell);
 		}
 		update_caption("changed", any_changed());
+
+		if (cell.changed && cell.invalid) {
+			changedInvalid.add(cell);
+		} else {
+			changedInvalid.delete(cell);
+		}
 	});
 
 	const apply = document.querySelector("#apply");
 	apply.disabled = false;
 	apply.addEventListener("click", evt => {
 		evt.preventDefault();
-		if (any_invalid()) {
-			editor_dialog(false, false, "outstanding errors", "all errors must be resolved before submitting", null);
-		} else if (!any_changed()) {
+		if (!any_changed()) {
 			editor_dialog(false, false, "no changes", "there are no changes to submit", null);
+		} else if (changedInvalid.size > 0) {
+			editor_dialog(false, false, "outstanding errors", "all errors must be resolved in updated entries before submitting", null);
 		} else {
+			// at least one cell is changed and no changed cells contain errors
 			const diffs = [];
 			for (const cell of changed) {
 				diffs.push(cell.diff());
