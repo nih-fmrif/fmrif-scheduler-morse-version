@@ -1211,7 +1211,7 @@ function wire_cell_editors() {
 		} else {
 			const diffs = [];
 			for (const cell of changed) {
-				diffs.push(cell.diff);
+				diffs.push(cell.diff());
 			}
 			// order the diffs by civil time
 			diffs.sort((a, b) => {
