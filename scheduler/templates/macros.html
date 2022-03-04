@@ -123,3 +123,25 @@
 	</input-widget>
 	</input-set>
 {% endmacro %}
+
+{% macro save_dialog() %}
+<div id="save-dialog-container" class=dialog-container aria-hidden=true aria-labelledby=save-dialog-title>
+	<div class=dialog-overlay data-a11y-dialog-hide></div>
+	<div class=dialog-box-container role=document>
+		<h1 id="save-dialog-title" class=dialog-title></h1>
+		<button type=button data-a11y-dialog-hide>
+			{{ icons.close() }}
+			<sr-only>Close dialog</sr-only>
+		</button>
+		<div id="save-dialog-content" class=dialog-content><div class=dialog-content-inner></div></div>
+		<div class=dialog-form>
+			<input-set is-option hidden>
+				<input-widget><input id="send-notifications" type=checkbox checked></input-widget>
+				<label for=send-notifications>send notifications</label>
+			</input-set>
+			<button hidden data-a11y-dialog-hide name=cancel type=button>cancel</button>
+			<button data-a11y-dialog-hide name=confirm type=button>confirm</button>
+		</div>		
+	</div>
+</div>
+{% endmacro %}
