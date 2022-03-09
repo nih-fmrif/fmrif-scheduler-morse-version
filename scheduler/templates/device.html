@@ -60,6 +60,7 @@
 											data-id="{{ x.id }}"
 											data-hour="{{ x.hour }}" data-date="{{ x.date }}"
 											data-old="{% if x.date < cur_date or (x.date == cur_date and x.hour <= cur_hour) %}true{% else %}false{% endif %}"
+											data-can-edit="false"
 											data-changed="false" data-error="false">
 											{{ macros.entry_legend(colors[x.group] if x.group) }}
 											<entry-editor>

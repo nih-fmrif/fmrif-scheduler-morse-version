@@ -977,6 +977,8 @@ class Cell {
 		this.member.disabled = false;
 		this.update_list();
 
+		this.elm.dataset.canEdit = this.editable;
+
 		this.elm.addEventListener("input", evt => {
 			this.update_list();
 			this.update_swatch();
