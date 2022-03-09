@@ -1116,13 +1116,13 @@ function fmt_editor_diffs(templateEditor, diffs) {
 	const recordTransition = (k, a, b) => {
 		// return if this is notification worthy
 		if (a == "") {
-			acc.push(`set ${k} to ${b}`);
+			acc.push(`set ${k} to <b>${b}</b>`);
 			return 1;
 		} else if (b == "") {
-			acc.push(`cleared ${k} (was ${a})`);
+			acc.push(`cleared ${k} (was <b>${a}</b>)`);
 			return 0;
 		} else {
-			acc.push(`set ${k} to ${b} (was ${a})`);
+			acc.push(`set ${k} to <b>${b}</b> (was <b>${a}</b>)`);
 			return 1;
 		}
 	};
