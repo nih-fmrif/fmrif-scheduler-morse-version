@@ -835,6 +835,11 @@ function editor_dialog(save, showNotifications, titleText, innerHTML, then) {
 	dialog.show();
 }
 
+// force elm to reprocess and report its validity to the css
+function resetList(elm) {
+	elm.setAttribute("list", elm.list.id);
+}
+
 class SupportRequestSubForm {
 	constructor(elm, parent, cfg) {
 		this.elm = elm;
@@ -921,6 +926,7 @@ class SupportRequestSubForm {
 	reset() {
 		this.requested.checked = this.orig.requested;
 		this.handler.value = this.orig.handler;
+		resetList(this.handler);
 		if (this.subkind != null) {
 			this.subkind.value = this.orig.subkind;
 		}
@@ -941,6 +947,7 @@ class Cell {
 		this.group = elm.querySelector('input[id^=grp-]');
 		this.member = elm.querySelector('input[id^=mem-]');
 		this.legend = elm.querySelector('entry-legend');
+		this.resetBtn = elm.querySelector('button[data-reset]');
 
 		this.id = elm.dataset.id;
 
@@ -978,11 +985,15 @@ class Cell {
 		this.update_list();
 
 		this.elm.dataset.canEdit = this.editable;
+		this.resetBtn.disabled = !this.editable;
 
+		this.resetBtn.addEventListener("click", evt => {
+			evt.preventDefault();
+			this.reset();
+			this.update();
+		});
 		this.elm.addEventListener("input", evt => {
-			this.update_list();
-			this.update_swatch();
-			this.fire_change();
+			this.update();
 		});
 	}
 	get changed() {
@@ -1058,9 +1069,12 @@ class Cell {
 	reset() {
 		if (this.institute) {
 			this.institute.value = this.orig.institute;
+			resetList(this.institute);
 		}
 		this.group.value = this.orig.group;
+		resetList(this.group);
 		this.member.value = this.orig.member;
+		resetList(this.member);
 		for (const sr of Object.values(this.sr)) {
 			sr.reset();
 		}
@@ -1088,6 +1102,11 @@ class Cell {
 			bubbles: true,
 			detail: this,
 		}));
+	}
+	update() {
+		this.update_list();
+		this.update_swatch();
+		this.fire_change();
 	}
 }
 
