@@ -1110,6 +1110,87 @@ function datalist_ids_or(id, def) {
 	return [...dl.options].map(opt => opt.value);
 }
 
+function fmt_sr_diff(acc, k, sr) {
+	// count the number of changes in the diff
+	// if the count is one, we can present a simpler summary
+	// also note whether the subkind changed.
+	let n = 0;
+	let changesSubkind = false;
+	const has = f => Number(f != undefined); // 0 if undefined, 1 otherwise
+	n += has(sr.requested);
+	n += has(sr.handler);
+	// only count subkind if it transitioned from a previous value
+	// otherwise it would always be reported the first time
+	if (sr.subkind && sr.subkind[0] != "") {
+		n++;
+		changesSubkind = true;
+	}
+
+	// compute the human name of this SR
+	let name = {
+		"tech": "technologist",
+		"train": "training",
+		"med": "medical",
+	}[k];
+	// for tech requests, include the subkind in the name
+	// unless the subkind has changed (per the definition above)
+	// since that gets reported on its own
+	if (k == "tech" && !changesSubkind) {
+		name = `${name} (${sr.effectiveSubkind})`;
+	}
+	name += ' request';
+
+	// format the individual diffs, if they exist
+	let requested = "";
+	if (sr.requested != undefined) {
+		if (sr.requested) {
+			requested = "<i>filed</i>";
+		} else {
+			requested = "<i>canceled</i>";
+		}
+	}
+
+	let handler = "";
+	if (sr.handler != undefined) {
+		const [Old, New] = sr.handler;
+		if (New) {
+			handler = `fulfilled by <b>${New}</b>`;
+			if (Old) {
+				handler += `(was <b>${Old}</b>)`;
+			}
+		} else {
+			handler = `no longer fulfilled by <b>${Old}</b>`;
+		}
+	}
+
+	let subkind = "";
+	if (changesSubkind) {
+		// only one other option so no need to report old value
+		subkind = `changed to <i>${sr.subkind[1]}</i>`;
+	}
+
+	// n is at least 1 by construction
+	if (n == 1) {
+		acc.push(`<dd>${name} `);
+		// only 1 of these isn't the empty string
+		acc.push(requested, handler, subkind);
+		acc.push('</dd>');
+		return;
+	}
+
+	// we have at least 2 changes, use a sub-dl
+	acc.push(`<dd><dl><dt>${name}:</dt>`);
+	const push = s => {
+		if (s) {
+			acc.push('<dd>', s, '</dd>');
+		}
+	};
+	push(requested);
+	push(subkind);
+	push(handler);
+	acc.push('</dl></dd>');
+}
+
 function fmt_editor_diffs(templateEditor, diffs) {
 	const acc = ['<dl>'];
 	let notifications = 0;
@@ -1142,6 +1223,12 @@ function fmt_editor_diffs(templateEditor, diffs) {
 		notifications += add(diff, 'institute');
 		notifications += add(diff, 'group');
 		notifications += add(diff, 'member');
+		for (const k of ['tech', 'train', 'med']) {
+			const sr = diff[k];
+			if (sr) {
+				fmt_sr_diff(acc, k, sr);
+			}
+		}
 	}
 	acc.push('</dl>');
 	return [!templateEditor && (notifications > 0), acc.join('')];
