@@ -1112,18 +1112,18 @@ function datalist_ids_or(id, def) {
 
 function fmt_editor_diffs(templateEditor, diffs) {
 	const acc = ['<dl>'];
-	let notifications = false;
+	let notifications = 0;
 	const recordTransition = (k, a, b) => {
 		// return if this is notification worthy
 		if (a == "") {
 			acc.push(`set ${k} to ${b}`);
-			return true;
+			return 1;
 		} else if (b == "") {
 			acc.push(`cleared ${k} (was ${a})`);
-			return false;
+			return 0;
 		} else {
 			acc.push(`set ${k} to ${b} (was ${a})`);
-			return true;
+			return 1;
 		}
 	};
 	const add = (diff, k) => {
@@ -1139,12 +1139,12 @@ function fmt_editor_diffs(templateEditor, diffs) {
 	};
 	for (const diff of diffs) {
 		acc.push(`<dt>${diff.date}: ${diff.hour}</dt>`); // TODO need to humanize these values
-		notifications ||= add(diff, 'institute');
-		notifications ||= add(diff, 'group');
-		notifications ||= add(diff, 'member');
+		notifications += add(diff, 'institute');
+		notifications += add(diff, 'group');
+		notifications += add(diff, 'member');
 	}
 	acc.push('</dl>');
-	return [!templateEditor && notifications, acc.join('')];
+	return [!templateEditor && (notifications > 0), acc.join('')];
 }
 
 function wire_cell_editors() {
