@@ -907,7 +907,7 @@ class SupportRequestSubForm {
 			changes.handler = [this.orig.handler, this.handler.value];
 		}
 		if (this.subkind != null) {
-			if (this.new) {
+			if (this.isNew) {
 				// simplify backend code by including this implicit transition in the diff
 				changes.subkind = ["", this.subkind.value];
 			} else if (this.subkind.value != this.orig.subkind) {
