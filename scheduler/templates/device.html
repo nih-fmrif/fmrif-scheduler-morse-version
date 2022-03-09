@@ -23,6 +23,7 @@
 			<script id="user-groups" type="application/json">{{ groups_json|tojson }}</script>
 			<script id="device-groups" type="application/json">{{ device_groups_json|tojson }}</script>
 			<script id="group-colors" type="application/json">{{ colors|tojson }}</script>
+			<script id="human-hours" type="application/json">{{ hours|tojson }}</script>
 			{{ macros.datalist("groups", groups, "invalid group") }}
 			{{ macros.datalist("tech", support.tech, "invalid technologist") }}
 			{{ macros.datalist("med", support.medical, "invalid medical support member") }}

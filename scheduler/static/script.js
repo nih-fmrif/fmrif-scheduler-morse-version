@@ -1191,7 +1191,7 @@ function fmt_sr_diff(acc, k, sr) {
 	acc.push('</dl></dd>');
 }
 
-function fmt_editor_diffs(templateEditor, diffs) {
+function fmt_editor_diffs(human_hours, templateEditor, diffs) {
 	const acc = ['<dl>'];
 	let notifications = 0;
 	const recordTransition = (k, a, b) => {
@@ -1219,7 +1219,7 @@ function fmt_editor_diffs(templateEditor, diffs) {
 		return ret;
 	};
 	for (const diff of diffs) {
-		acc.push(`<dt>${diff.date}: ${diff.hour}</dt>`); // TODO need to humanize these values
+		acc.push(`<dt>${diff.date}: ${human_hours[diff.hour]}</dt>`); // TODO need to humanize these values
 		notifications += add(diff, 'institute');
 		notifications += add(diff, 'group');
 		notifications += add(diff, 'member');
@@ -1256,6 +1256,7 @@ function wire_cell_editors() {
 
 	const device_groups = new Set(json_from_script_or("device-groups", []));
 	const colors = json_from_script_or("group-colors", {});
+	const human_hours = json_from_script_or("human-hours", null);
 
 	const tech_members = new Set(datalist_ids_or("tech", []));
 	const train_members = new Set(datalist_ids_or("train", []));
@@ -1354,7 +1355,7 @@ function wire_cell_editors() {
 				}
 				return 0;
 			});
-			let [notifications, summary] = fmt_editor_diffs(templateEditor, diffs);
+			let [notifications, summary] = fmt_editor_diffs(human_hours, templateEditor, diffs);
 			editor_dialog(true, notifications, "publish changes", summary, checked => {
 			});
 		}

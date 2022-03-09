@@ -4,6 +4,7 @@
 {% block body %}
 	<script id="device-groups" type="application/json">{{ device_groups_json|tojson }}</script>
 	<script id="group-colors" type="application/json">{{ colors|tojson }}</script>
+	<script id="human-hours" type="application/json">{{ hours|tojson }}</script>
 	{{ macros.datalist("institutes", institutes, "invalid institute") }}
 	{{ macros.datalist("groups", groups, "invalid group") }}
 	{% for k, v in members_of_groups.items() %}
