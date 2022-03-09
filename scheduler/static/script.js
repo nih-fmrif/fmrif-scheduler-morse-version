@@ -1191,6 +1191,15 @@ function fmt_sr_diff(acc, k, sr) {
 	acc.push('</dl></dd>');
 }
 
+// returns a date as-is but translate a day of week number
+// a short week day name
+function humanize_date_if_needed(date) {
+	if (/^[0-7]$/.test(date)) {
+		return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date];
+	}
+	return date;
+}
+
 function fmt_editor_diffs(human_hours, templateEditor, diffs) {
 	const acc = ['<dl>'];
 	let notifications = 0;
@@ -1219,7 +1228,7 @@ function fmt_editor_diffs(human_hours, templateEditor, diffs) {
 		return ret;
 	};
 	for (const diff of diffs) {
-		acc.push(`<dt>${diff.date}: ${human_hours[diff.hour]}</dt>`); // TODO need to humanize these values
+		acc.push(`<dt>${humanize_date_if_needed(diff.date)}: ${human_hours[diff.hour]}</dt>`);
 		notifications += add(diff, 'institute');
 		notifications += add(diff, 'group');
 		notifications += add(diff, 'member');
