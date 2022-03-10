@@ -1293,10 +1293,7 @@ def device_tmpl_archive(the_device):
 def device_tmpl_add(the_device):
     device, _ = check_device_tmpl_perms(the_device)
 
-    templates = [
-        (t.id, f"{t.label} ({t.id})")
-        for t in logic.templates_of_device(device, archived=False)
-    ]
+    templates = logic.all_templates_of_device(device)
     form = logic.TemplateMetadataForm(device, templates, create=True)
     if form.validate_on_submit():
         ok, id = logic.create_template(form, device)

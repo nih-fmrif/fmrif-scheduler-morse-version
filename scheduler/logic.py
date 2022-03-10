@@ -1230,6 +1230,18 @@ def templates_of_device(
     return q.all()
 
 
+def all_templates_of_device(device: model.Device) -> Datalist:
+    M = model.Template
+    q = M.query.filter(M.device == device.id).order_by(M.hidden, M.label)
+    out = []
+    for t in q.all():
+        archived = ""
+        if t.hidden:
+            archived = " [archived]"
+        out.append((t.id, f"{t.label} ({t.id}){archived}"))
+    return out
+
+
 class TemplateMetadataForm(FlaskForm):
     clone_from = fields.StringField(
         label="clone",
