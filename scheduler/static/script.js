@@ -892,11 +892,22 @@ class SupportRequestSubForm {
 		return this.handler_editable && !this.handler.validity.valid;
 	}
 	get editable() {
+		// past entries are not editable (past handles users with edit_any)
+		if (this.parent.past) {
+			return false;
+		}
 		// editable if part of an editable cell and there exists someone to fulfill the request
-		return this.members.size > 0 && this.parent.editable;
+		if (this.members.size > 0 && this.parent.editable) {
+			return true;
+		}
+		// if nothing else hit, the request editable if the current user
+		// can field this kind of request.
+		return this.perms[this.kind];
 	}
 	get handler_editable() {
 		// each kind has the same name as the corresponding perm.
+		// NB. while this is sometimes redundant this.editable short-circuits
+		// and is not redundant in those cases.
 		return this.editable && this.perms[this.kind];
 	}
 	diff() {
@@ -1021,6 +1032,13 @@ class Cell {
 			}
 		}
 		return !this.group.validity.valid || !this.member.validity.valid;
+	}
+	get past() {
+		// users with edit_any are not bound by this concept
+		if (this.perms.edit_any) {
+			return false;
+		}
+		return this.old;
 	}
 	get editable() {
 		if (this.perms.edit_any) {
