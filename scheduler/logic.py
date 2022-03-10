@@ -196,7 +196,7 @@ class JoinForm(FlaskForm):
     group = fields.StringField(
         label="department",
         validators=[validators.InputRequired()],
-        render_kw={"list": "departments", "autocomplete": "off"},
+        render_kw={"list": "departments", "autocomplete": "off", "spellcheck": "false"},
     )
 
     def __init__(self, departments, *args, **kwargs):
@@ -482,7 +482,7 @@ class GroupEditForm(FlaskForm):
                 max=10, message="deptcode must be 10 characters or fewer"
             ),
         ],
-        render_kw={"autocomplete": "off"},
+        render_kw={"autocomplete": "off", "spellcheck": "false"},
     )
     label = fields.StringField(
         label="label, short",
@@ -513,14 +513,14 @@ class GroupEditForm(FlaskForm):
     color = fields.StringField(label="legend color", widget=widgets.ColorInput())
     inst = fields.StringField(
         label="institute",
-        render_kw={"list": "institutes", "autocomplete": "off"},
+        render_kw={"list": "institutes", "autocomplete": "off", "spellcheck": "false"},
     )
     # pi is only used on the creation form
     pi = fields.StringField(
         label="pi",
         description="must be valid AD name of user in database",
         validators=[validators.InputRequired()],
-        render_kw={"autocomplete": "off"},
+        render_kw={"autocomplete": "off", "spellcheck": "false"},
     )
     active = fields.BooleanField(label="active", default=True)
 
@@ -723,7 +723,7 @@ class GroupPIForm(FlaskForm):
     pi = fields.StringField(
         label="pi",
         validators=[validators.InputRequired()],
-        render_kw={"list": "members", "autocomplete": "off"},
+        render_kw={"list": "members", "autocomplete": "off", "spellcheck": "false"},
     )
 
     def __init__(self, members, *args, **kwargs):
@@ -896,7 +896,7 @@ class DeviceEditForm(FlaskForm):
                 max=5, message="scannercode must be 5 characters or fewer"
             ),
         ],
-        render_kw={"autocomplete": "off"},
+        render_kw={"autocomplete": "off", "spellcheck": "false"},
     )
 
     label = fields.StringField(
@@ -1067,7 +1067,7 @@ class AddGroupToDeviceForm(FlaskForm):
     dept = fields.StringField(
         label="department",
         validators=[validators.InputRequired()],
-        render_kw={"list": "departments", "autocomplete": "off"},
+        render_kw={"list": "departments", "autocomplete": "off", "spellcheck": "false"},
     )
 
     def __init__(self, departments, *args, **kwargs):
@@ -1247,7 +1247,7 @@ class TemplateMetadataForm(FlaskForm):
         label="clone",
         description="prepopulate new template with schedule of an existing template (optional)",
         validators=[validators.Length(min=0, max=1)],
-        render_kw={"autocomplete": "off", "list": "templates"},
+        render_kw={"autocomplete": "off", "spellcheck": "false", "list": "templates"},
     )
     id = fields.StringField(
         label="template code",
@@ -1255,7 +1255,7 @@ class TemplateMetadataForm(FlaskForm):
             validators.InputRequired(),
             validators.Length(max=1, message="templatecode must be 1 character long"),
         ],
-        render_kw={"autocomplete": "off"},
+        render_kw={"autocomplete": "off", "spellcheck": "false"},
     )
     label = fields.StringField(
         label="label",
@@ -1392,7 +1392,7 @@ class TemplateApplyForm(FlaskForm):
         label="templates",
         description="ordered list of template codes to add to the schedule",
         validators=[validators.InputRequired()],
-        render_kw={"autocomplete": "off"},
+        render_kw={"autocomplete": "off", "spellcheck": "false"},
     )
 
     def __init__(self, valid_template_codes: List[str], *args, **kwargs):
