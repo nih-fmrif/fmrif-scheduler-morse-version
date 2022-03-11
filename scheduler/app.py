@@ -1063,6 +1063,11 @@ def device_tmpl(the_device):
 
     form = logic.TemplateApplyForm(codes)
     if form.validate_on_submit():
+        errs = logic.validate_templates_before_application(device, form.templates.data)
+        if len(errs) > 0:
+            for err in errs:
+                flash(err, category="error")
+        else:
         logic.process_template_apply(form, device, start, chg_by)
         flash("templates applied")
         return to("device", the_device=device.id, start=start)

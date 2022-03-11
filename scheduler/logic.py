@@ -4,6 +4,7 @@ import secrets
 from collections import defaultdict
 from typing import (
     Any,
+    DefaultDict,
     Dict,
     Generator,
     List,
@@ -1402,6 +1403,94 @@ class TemplateApplyForm(FlaskForm):
     def validate_templates(self, templates) -> None:
         if not (set(templates.data) <= self.valid_template_codes):
             raise validators.ValidationError("invalid template code(s)")
+
+
+def uniq(xs: str) -> List[str]:
+    """
+    uniq takes a string and returns a list of strings
+    of the unique elements in the same order as xs
+    """
+    acc = []
+    seen = set()
+    for x in xs:
+        if x not in seen:
+            seen.add(x)
+            acc.append(x)
+    return acc
+
+
+def validate_templates_before_application(device: model.Device, templates: str):
+    ts = uniq(templates)
+    errs = []
+
+    if len(ts) == 0:
+        errs.append("no templates to apply")
+        return errs
+
+    # quick sanity check that all the templates exist in a legal state
+    MT = model.Template
+    id_col = cast(Any, MT.id)  # mypy confused by sqlalchemy
+    q = (
+        MT.query.filter(MT.device == device.id)
+        .filter(id_col.in_(ts))
+        .filter(MT.hidden == False)
+    )
+    n = q.count()
+    if n != len(ts):
+        # the form validates this in the same transaction so this should never happen
+        # we report out of an abundance of caution but do not spend time on the error message
+        errs.append("invalid template codes provided")
+        if n == 0:
+            return errs
+
+    # load all the cells of all the templates to check that they're valid
+    has_invalid: Set[str] = set()
+    cell_count: DefaultDict[str, int] = defaultdict(int)
+
+    MI = model.Inst
+    q = MI.query.filter(MI.active)
+    inst: Set[Optional[str]] = set(i.id for i in q.all())
+    inst.add(None)  # in all these sets we include "" to simplify checks
+
+    # after construction, a (group, member) pair is valid if
+    # - group is in groups
+    # - member is in groups[group]
+    groups: Dict[Optional[str], Set[Optional[str]]] = {
+        None: {None}
+    }  # no group only allows no member
+    member_dls = all_member_datalists_by_group(device)
+    support_dls = support_request_datalists(device)
+    for g, ms in member_dls.items():
+        s: Set[Optional[str]] = set(m for (m, _) in ms)
+        s.add(None)  # so not being set is valid
+        groups[g] = s
+    # special case for training
+    groups["training"] = set(m for (m, _) in support_dls.training)
+    groups["training"].add(None)
+
+    M = model.TemplateEntry
+    template_col = cast(Any, M.template)
+    q = M.query.filter(M.device == device.id).filter(template_col.in_(ts))
+
+    for cell in q.all():
+        t = cell.template
+        cell_count[t] += 1
+        if cell.inst not in inst:
+            has_invalid.add(t)
+        elif not (cell.group in groups and cell.user in groups[cell.group]):
+            has_invalid.add(t)
+
+    # this is definitely something that should NEVER happen
+    # but if it somehow does we stop it before the error
+    # spreads to the rest of the system
+    for k, v in sorted(cell_count.items(), key=lambda p: p[0]):
+        if v != 7 * 24:
+            errs.append(f"{k} malformed: has {v} entries instead of {7*24}")
+
+    for x in sorted(has_invalid):
+        errs.append(f"{x} has invalid entries")
+
+    return errs
 
 
 def process_template_apply(
