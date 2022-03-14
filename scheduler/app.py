@@ -389,6 +389,10 @@ def join_form_subnav(user: model.User) -> Subpage_links:
     )
 
 
+def join_form_breadcrumb() -> Breadcrumb_links:
+    return breadcrumb(("join form", url_for("join_form")))
+
+
 @app.route("/join", methods=["GET", "POST"])
 @in_network_required
 @active_user_required
@@ -409,7 +413,7 @@ def join_form():
         "action": my_url(),
         "no_departments": no_departments,
         **join_form_subnav(g.user),
-        **breadcrumb("join form"),
+        **join_form_breadcrumb(),
     }
 
 
@@ -433,7 +437,7 @@ def join_form_tech():
         return to("home")
     return {
         **join_form_subnav(g.user),
-        **breadcrumb(("join form", url_for("join_form")), "technologist join form"),
+        **join_form_breadcrumb(),
     }
 
 
