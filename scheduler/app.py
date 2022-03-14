@@ -928,7 +928,7 @@ def device(the_device):
 
     # load any data user may need to edit
     if device.active and perms.edit:
-    support = logic.support_request_datalists(device)
+        support = logic.support_request_datalists(device) #force a commit
 
         # load all relevant group-member datalists
         if perms.edit_any:
