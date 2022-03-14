@@ -224,7 +224,7 @@ def show_tech_join_form(user: model.User) -> bool:
         """,
         {"user": user.id},
     )
-    return bool(q.first())
+    return q.first() is not None
 
 
 def record_join_form(form: JoinForm, user: model.User, group: str) -> bool:
@@ -352,7 +352,7 @@ def is_admin(user: model.User) -> bool:
     q = q.filter(model.Membership.group == "admin")
     q = q.filter(model.Membership.user_active)
     q = q.filter(model.Membership.approved)
-    return bool(q.first())
+    return q.first() is not None
 
 
 def create_reset_token_for(user: str) -> str:
@@ -880,7 +880,7 @@ def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
         },
     )
     # member of at least one department associated with this device
-    can_edit = q.first() > 0
+    can_edit = q.first()[0] > 0
 
     # grab any special permissions on this device
     UD = model.UserDevice.query.get((user.id, device.id))
