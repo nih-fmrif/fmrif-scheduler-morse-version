@@ -1072,9 +1072,9 @@ def device_tmpl(the_device):
             for err in errs:
                 flash(err, category="error")
         else:
-        logic.process_template_apply(form, device, start, chg_by)
-        flash("templates applied")
-        return to("device", the_device=device.id, start=start)
+            logic.process_template_apply(form, device, start, chg_by)
+            flash("templates applied")
+            return to("device", the_device=device.id, start=start)
 
     return {
         "title": f"apply templates to {device.label}",
