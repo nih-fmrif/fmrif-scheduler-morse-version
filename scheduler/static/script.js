@@ -1352,7 +1352,6 @@ function wire_cell_editors() {
 	update_caption("error", any_invalid());
 	container.addEventListener("cell_change", evt => {
 		const cell = evt.detail;
-		console.log("diff", cell.diff()); // XXX for debugging
 
 		if (cell.invalid) {
 			invalid.add(cell);
