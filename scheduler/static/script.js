@@ -375,6 +375,7 @@ function logDialog(titleText, id) {
 		disableBodyScroll(modal);
 
 		const [data, err] = await loadLog(id, abort.signal);
+		con.classList.add("dialog-loaded");
 		if (err != null) {
 			body.innerText = err;
 			return;
@@ -384,6 +385,7 @@ function logDialog(titleText, id) {
 	dialog.on("hide", (_, evt) => {
 		// reset scroll lock, zero template, and cancel http requests
 		enableBodyScroll(modal);
+		con.classList.remove("dialog-loaded");
 		title.innerText = "";
 		body.innerHTML = "";
 		abort.abort();
