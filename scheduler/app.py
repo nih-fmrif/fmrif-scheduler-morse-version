@@ -862,7 +862,7 @@ def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> Subpag
     )
 
 
-@app.route("/device/<the_device>")
+@app.route("/device/<the_device>", methods=["GET", "POST"])
 @login_required
 @render_to("device")
 def device(the_device):
@@ -956,6 +956,7 @@ def device(the_device):
 
     hours = logic.fmt_hours()
     cur_date, cur_hour = logic.db_now()
+    form = logic.JsonForm()
     return {
         "device": device,
         "perms": perms,
@@ -980,6 +981,7 @@ def device(the_device):
         "hours": hours,
         "cur_date": cur_date,
         "cur_hour": cur_hour,
+        "form": form,
         **device_breadcrumb(device),
         **device_subpage_nav(device, perms),
     }
@@ -1361,6 +1363,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
     grouped_entries = logic.group_template_entries(entries)
     colors = logic.all_group_colors()
     hours = logic.fmt_hours()
+    form = logic.JsonForm()
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
         "entries": grouped_entries,
@@ -1370,6 +1373,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
         "members_of_groups": members_of_groups,
         "colors": colors,
         "hours": hours,
+        "form": form,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }

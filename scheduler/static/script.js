@@ -1404,7 +1404,18 @@ function wire_cell_editors() {
 				return 0;
 			});
 			let [notifications, summary] = fmt_editor_diffs(human_hours, templateEditor, diffs);
-			editor_dialog(true, notifications, "publish changes", summary, checked => {
+			editor_dialog(true, notifications, "publish changes", summary, notify => {
+				const csrf_token = document.querySelector("#csrf_token").value;
+				const body = JSON.stringify({
+					csrf_token,
+					"payload": { diffs, notify },
+				});
+				// TODO need to run this in a new dialog or open dialogs based on the results
+				fetch(window.location, {
+					"method": "POST",
+					"headers": { "Content-Type": "application/json" },
+					body,
+				});
 			});
 		}
 	});

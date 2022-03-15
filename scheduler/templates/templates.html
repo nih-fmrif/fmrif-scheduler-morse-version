@@ -12,6 +12,7 @@
 	{% endfor %}
 	<datalist id=none></datalist>
 	<form class="editor template-editor">
+		{{ form.csrf_token }}
 		<div id=caption data-changed="false" data-error="false">{{ title }}{{ macros.edit_icons("template") }}</div>
 		<div id="scroll-container" aria-labelledby=caption tabindex=0>
 			<table aria-labelledby=caption>

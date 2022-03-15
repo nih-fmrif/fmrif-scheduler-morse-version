@@ -33,6 +33,7 @@
 			{% endfor %}
 			<datalist id=none></datalist>
 			<form class="editor schedule-editor">
+				{{ form.csrf_token }}
 				{% if off_hours|length %}
 					<button id="expando" type=button hidden aria-expanded=false data-expands="{{ off_hours|tojson }}">
 						<span class=icons>{{ icons.add() }}{{ icons.close() }}</span>

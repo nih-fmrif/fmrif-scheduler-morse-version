@@ -1,4 +1,5 @@
 import datetime
+import json
 import re
 import secrets
 from collections import defaultdict
@@ -1904,3 +1905,14 @@ def db_now() -> Tuple[datetime.date, int]:
         "select current_date, extract(hour from current_timestamp) as hour"
     )
     return q.first()
+
+
+class JsonForm(FlaskForm):
+    """
+    This form is used for javascript submit.
+    There are other ways to handle this,
+    but this is by far the simplest.
+    """
+
+    payload = fields.TextAreaField(validators=[validators.InputRequired()])
+    notify = fields.BooleanField()
