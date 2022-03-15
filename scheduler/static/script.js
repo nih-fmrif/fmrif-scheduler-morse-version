@@ -1,6 +1,10 @@
 import A11yDialog from "./a11y-dialog/dialog.js";
 import { enableBodyScroll, disableBodyScroll } from "./scroll-lock/body-scroll-lock.js";
 
+function announce(txt) {
+	document.querySelector("#announce").innerText = txt;
+}
+
 function get_datalists() {
 	const elms = document.querySelectorAll("datalist");
 	const out = new Map();
@@ -376,6 +380,7 @@ function logDialog(titleText, id) {
 
 		const [data, err] = await loadLog(id, abort.signal);
 		con.classList.add("dialog-loaded");
+		announce("log loaded");
 		if (err != null) {
 			body.innerText = err;
 			return;
