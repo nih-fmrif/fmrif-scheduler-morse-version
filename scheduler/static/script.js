@@ -294,7 +294,7 @@ async function loadLog(id, signal) {
 		} else if (err instanceof SyntaxError) {
 			return [null, "error: invalid json returned from api"];
 		} else {
-			return [null, `error: ${e.message}`];
+			return [null, `error: ${err.message}`];
 		}
 	}
 }
