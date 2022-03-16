@@ -375,7 +375,6 @@ function logDialog(titleText, id) {
 	const dialog = new A11yDialog(con);
 	const abort = new AbortController();
 	dialog.on("show", async () => {
-		// scroll lock and focus cancel button
 		disableBodyScroll(modal);
 
 		const [data, err] = await loadLog(id, abort.signal);
