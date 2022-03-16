@@ -23,7 +23,6 @@ update tlkpdept set (ismain, archivable) = (false, false) where deptcode in (
 	'',
 	'GE',
 	'SIEM',
-	'UNAVAIL',
 	'post',
 	'test',
 	'training'
@@ -35,7 +34,6 @@ update tlkpdept set joinable = false where deptcode in (
 	'',
 	'GE',
 	'SIEM',
-	'UNAVAIL',
 	'post',
 	'test'
 );
@@ -44,8 +42,7 @@ update tlkpdept set iscurrent = false where deptcode in (
 	'',
 	'post',
 	'GE',
-	'SIEM',
-	'UNAVAIL'
+	'SIEM'
 );
 
 -- add a training institute to allow resource tracking
