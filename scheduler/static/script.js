@@ -841,6 +841,38 @@ function editor_dialog(save, showNotifications, titleText, innerHTML, then) {
 	dialog.show();
 }
 
+function result_dialog(proc) {
+	const con = document.getElementById('result-dialog-container');
+	const modal = con.querySelector(".dialog-box-container");
+	const body = con.querySelector(".dialog-content-inner");
+	const dialog = new A11yDialog(con);
+	const abort = new AbortController();
+	let changesSaved = false;
+	dialog.on("show", async () => {
+		disableBodyScroll(modal);
+
+		const [data, err] = await proc(abort.signal);
+		con.classList.add("dialog-loaded")
+		announce("results available");
+		if (err != null) {
+			body.innerText = err;
+			return;
+		}
+		body.innerHTML = data;
+		changesSaved = true;
+	});
+	dialog.on("hide", (_, evt) => {
+		enableBodyScroll(modal);
+		con.classList.remove("dialog-loaded");
+		body.innerHTML = "";
+		abort.abort();
+		if (changesSaved) {
+			location.reload();
+		}
+	});
+	dialog.show();
+}
+
 // force elm to reprocess and report its validity to the css
 function resetList(elm) {
 	elm.setAttribute("list", elm.list.id);
@@ -1288,6 +1320,10 @@ function fmt_editor_diffs(human_hours, templateEditor, diffs) {
 	return [!templateEditor && (notifications > 0), acc.join('')];
 }
 
+function fmt_save_results(data) {
+	return ["TODO: implement", null];
+}
+
 function wire_cell_editors() {
 	const container = document.querySelector(".editor #scroll-container tbody");
 	if (container == null) {
@@ -1415,11 +1451,25 @@ function wire_cell_editors() {
 					csrf_token,
 					"payload": { diffs, notify },
 				});
-				// TODO need to run this in a new dialog or open dialogs based on the results
-				fetch(window.location, {
-					"method": "POST",
-					"headers": { "Content-Type": "application/json" },
-					body,
+				result_dialog(async (signal) => {
+					try {
+						const resp = await fetch(window.location, {
+							"method": "POST",
+							"headers": { "Content-Type": "application/json" },
+							body,
+							signal,
+						});
+						if (!resp.ok) {
+							return [null, `error: unexpected ${resp.status} from server`];
+						}
+						const data = await resp.json();
+						return fmt_save_results(data);
+					} catch (err) {
+						if (err instanceof AbortError) {
+							return [null, null];
+						}
+						return [null, `error: ${err.message}`];
+					}
 				});
 			});
 		}

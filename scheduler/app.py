@@ -896,7 +896,6 @@ def device(the_device):
     end_date = logic.end_date(date, days)
 
     entries = logic.schedule_for(device, date, end_date)
-    # TODO build forms for entries
 
     min, max = logic.device_schedule_extreme_dates(device)
 
@@ -956,7 +955,14 @@ def device(the_device):
 
     hours = logic.fmt_hours()
     cur_date, cur_hour = logic.db_now()
+
     form = logic.JsonForm()
+    if request.method == "POST":
+        if not form.validate():
+            # client response must specify payload
+            abort(500)
+        return jsonify()
+
     return {
         "device": device,
         "perms": perms,
@@ -1354,7 +1360,6 @@ def device_tmpl_schedule_edit(the_device, the_template):
     if tmpl is None:
         abort(404)
 
-    # TODO edit template schedule
     entries = logic.get_template_entries(device, tmpl)
     institutes = logic.get_institutes_datalist()
     members_of_groups = logic.all_member_datalists_by_group(device)
@@ -1363,7 +1368,14 @@ def device_tmpl_schedule_edit(the_device, the_template):
     grouped_entries = logic.group_template_entries(entries)
     colors = logic.all_group_colors()
     hours = logic.fmt_hours()
+
     form = logic.JsonForm()
+    if request.method == "POST":
+        if not form.validate():
+            # client response must specify payload
+            abort(500)
+        return jsonify()
+
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
         "entries": grouped_entries,
