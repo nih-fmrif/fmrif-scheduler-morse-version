@@ -289,7 +289,7 @@ async function loadLog(id, signal) {
 		const data = await resp.json();
 		return [data, null];
 	} catch (err) {
-		if (err instanceof AbortError) {
+		if (err.name == 'AbortError') {
 			return [null, null];
 		} else if (err instanceof SyntaxError) {
 			return [null, "error: invalid json returned from api"];
@@ -1465,7 +1465,7 @@ function wire_cell_editors() {
 						const data = await resp.json();
 						return fmt_save_results(data);
 					} catch (err) {
-						if (err instanceof AbortError) {
+						if (err.name == 'AbortError') {
 							return [null, null];
 						}
 						return [null, `error: ${err.message}`];
