@@ -1915,4 +1915,4 @@ class JsonForm(FlaskForm):
     """
 
     payload = fields.TextAreaField(validators=[validators.InputRequired()])
-    notify = fields.BooleanField()
+
