@@ -1375,7 +1375,11 @@ function wire_cell_editors() {
 	};
 
 
-	const cells = [...container.querySelectorAll("td entry-cell")].map(elm => new Cell(elm, cfg));
+	// create a map of id => Cell from the entry-cell tags in the grid
+	const cells = new Map([...container.querySelectorAll("td entry-cell")].map(elm => {
+		const cell = new Cell(elm, cfg);
+		return [cell.id, cell];
+	}));
 
 	// keep track of changed and invalid cells
 	const changed = new Set();
@@ -1384,7 +1388,7 @@ function wire_cell_editors() {
 	const any_invalid = () => Boolean(invalid.size);
 	const changedInvalid = new Set();
 	// no cells can be changed yet but they could have come invalid
-	for (const cell of cells) {
+	for (const cell of cells.entries()) {
 		if (cell.invalid) {
 			invalid.add(cell);
 		}
