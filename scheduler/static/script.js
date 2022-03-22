@@ -1390,6 +1390,16 @@ function wire_cell_editors() {
 		}
 	}
 
+	// the beforeunload handler is added and removed as needed
+	// as otherwise the browser will ignore a host of optimizations
+	const beforeunload = ["beforeunload", evt => {
+		evt.preventDefault();
+		// unclear if setting the return value and returning a string
+		// is still necessary for compatibility but doesn't harm anything
+		evt.returnValue = "You have unsaved changes that will be lost. Are you sure?";
+		return evt.returnValue;
+	}, { capture: true }]
+
 	// keep caption in sync with cell updates
 	const caption = document.querySelector("#caption");
 	const update_caption = (which, bool) => {
@@ -1417,6 +1427,14 @@ function wire_cell_editors() {
 			changedInvalid.add(cell);
 		} else {
 			changedInvalid.delete(cell);
+		}
+
+		// add the beforeunload handler if there are changes
+		// and remove it if not
+		if (any_changed()) {
+			window.addEventListener(...beforeunload);
+		} else {
+			window.removeEventListener(...beforeunload);
 		}
 	});
 
