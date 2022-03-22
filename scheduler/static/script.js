@@ -931,6 +931,9 @@ class SupportRequestSubForm {
 		return this.handler_editable && !this.handler.validity.valid;
 	}
 	get editable() {
+		if (this.parent.locked) {
+			return false;
+		}
 		// past entries are not editable (past handles users with edit_any)
 		if (this.parent.past) {
 			return false;
@@ -1008,6 +1011,9 @@ class Cell {
 		// data-old is undefined in template editor so we simplify that to false.
 		this.old = to_bool(elm.dataset.old) ?? false;
 
+		// only set to true if this failed server side validation
+		this.locked = false;
+
 		this.orig = {
 			institute: this.institute?.dataset.orig,
 			group: this.group.dataset.orig,
@@ -1083,6 +1089,9 @@ class Cell {
 		return this.old;
 	}
 	get editable() {
+		if (this.locked) {
+			return false;
+		}
 		if (this.perms.edit_any) {
 			return true;
 		}
@@ -1167,6 +1176,24 @@ class Cell {
 		this.update_list();
 		this.update_swatch();
 		this.fire_change();
+	}
+	resetAndLock() {
+		// this cell was submitted to and rejected by the server
+		// reset it to default state and prevent further changes
+		this.reset()
+		this.locked = true;
+		this.elm.dataset.canEdit = false;
+		this.elm.dataset.locked = "true";
+
+		if (this.institute) {
+			this.institute.disabled = true;
+		}
+		this.group.disabled = true;
+		this.member.disabled = true;
+		this.resetBtn.disabled = true;
+		for (const sr of Object.values(this.sr)) {
+			sr.elm.disabled = true;
+		}
 	}
 }
 
@@ -1343,8 +1370,8 @@ function fmt_save_results(data, cells, human_hours) {
 	const acc = [`<p>${errors.length} irreconcilable errors. Affected entries will be reset, please review before resubmitting</p><dl>`];
 	for (const [id, errs] of errors) {
 		const cell = cells.get(id);
-		cell.reset(); // TODO we need a way to lock known-bad cells like this
-		cell.update();
+		// prevent future edits to this cell
+		cell.resetAndLock();
 		acc.push(`<dt>${humanize_date_if_needed(cell.date)}: `);
 		acc.push(`${human_hours[cell.hour]}</dt>`);
 		for (const err of errs) {

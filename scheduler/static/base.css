@@ -545,11 +545,15 @@ button#expando[aria-expanded="true"] svg:nth-of-type(2) {
 	gap: .25rem;
 	padding-left: .25rem;
 }
-.editor #caption[data-changed=false] .edit-icons svg:first-child,
+.editor #caption .edit-icons svg:first-child {
+	display: none;
+}
+.editor #caption[data-changed=false] .edit-icons svg:nth-child(2),
 .editor #caption[data-error=false] .edit-icons svg:last-child {
 	visibility: hidden;
 }
-entry-cell[data-changed=false] .edit-icons svg:first-child,
+entry-cell:not([data-locked]) .edit-icons svg:first-child,
+entry-cell[data-changed=false] .edit-icons svg:nth-child(2),
 entry-cell[data-error=false] .edit-icons svg:last-child {
 	visibility: hidden;
 }

@@ -57,6 +57,7 @@
 
 {% macro edit_icons(typ) %}
 	<div class=edit-icons>
+		{{ icons.lock("server rejected " ~ typ) }}
 		{{ icons.pencil("edits to " ~ typ) }}
 		{{ icons.exclaim_triangle("error in " ~ typ) }}
 	</div>
