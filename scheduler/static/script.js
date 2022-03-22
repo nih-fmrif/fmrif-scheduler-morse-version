@@ -90,6 +90,7 @@ function enforce_datalists() {
 			if (t.list != null) { // can be null when between lists
 				t.setCustomValidity("");
 				validate_and_normalize(t);
+				t.dispatchEvent(new CustomEvent('list-change'));
 			}
 		}
 	});
@@ -1042,6 +1043,9 @@ class Cell {
 			this.update();
 		});
 		this.elm.addEventListener("input", evt => {
+			this.update();
+		});
+		this.member.addEventListener("list-change", evt => {
 			this.update();
 		});
 	}
