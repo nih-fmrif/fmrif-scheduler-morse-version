@@ -1324,8 +1324,60 @@ function fmt_editor_diffs(human_hours, templateEditor, diffs) {
 	return [!templateEditor && (notifications > 0), acc.join('')];
 }
 
-function fmt_save_results(data) {
-	return ["TODO: implement", null];
+function fmt_save_results(data, cells, human_hours) {
+	if (data.saved > 0) {
+		let s = "entry";
+		if (data.saved > 1) {
+			s = "entries";
+		}
+		return `${data.saved} ${s} updated`;
+	}
+
+	const errors = Object.entries(data.errors ?? []);
+	if (errors.length == 0) {
+		// serious bug if this ever happens but better to let the user
+		// know something than to just stop without indication as to why
+		return "internal error: expected confirmation or errors but got neither";
+	}
+
+	const acc = [`<p>${errors.length} irreconcilable errors. Affected entries will be reset, please review before resubmitting</p><dl>`];
+	for (const [id, errs] of errors) {
+		const cell = cells.get(id);
+		cell.reset(); // TODO we need a way to lock known-bad cells like this
+		cell.update();
+		acc.push(`<dt>${humanize_date_if_needed(cell.date)}: `);
+		acc.push(`${human_hours[cell.hour]}</dt>`);
+		for (const err of errs) {
+			const key = err.key;
+			acc.push('<dd>');
+			switch (err.type) {
+				case "removed":
+					const value = err.value;
+					acc.push(`${value} is no longer a valid ${key}`);
+					break;
+
+				case "overwrote":
+					const expected = err.expected;
+					const got = err.got;
+					acc.push(`${key} overwritten by another user: expected `);
+					if (expected) {
+						acc.push(`<b>${expected}</b>`);
+					} else {
+						acc.push("blank entry");
+					}
+					acc.push(" got ");
+					if (got) {
+						acc.push(`<b>${got}</b>`);
+					} else {
+						acc.push("blank entry");
+					}
+					break;
+			}
+			acc.push('</dd>');
+		}
+	}
+	acc.push('</dl>');
+	return acc.join('');
 }
 
 function wire_cell_editors() {
@@ -1489,7 +1541,10 @@ function wire_cell_editors() {
 							return [null, `error: unexpected ${resp.status} from server`];
 						}
 						const data = await resp.json();
-						return fmt_save_results(data);
+						// the error is for severe errors like networking errors
+						// validation errors are not counted here as they are
+						// considered a normal response
+						return [fmt_save_results(data, cells, human_hours), null];
 					} catch (err) {
 						if (err.name == 'AbortError') {
 							return [null, null];

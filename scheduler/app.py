@@ -1374,7 +1374,19 @@ def device_tmpl_schedule_edit(the_device, the_template):
         if not form.validate():
             # client response must specify payload
             abort(500)
-        return jsonify()
+        diffs = form.payload.data["diffs"]
+
+        staged, errors = logic.verify_and_prep_template_diffs(
+            diffs, entries, institutes, groups, members_of_groups
+        )
+        if errors is not None:
+            return jsonify({"errors": errors})
+
+        for s in staged:
+            app.logger.warn(s)
+            model.db.session.add(s)
+        model.db.session.commit()
+        return jsonify({"saved": len(staged)})
 
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",

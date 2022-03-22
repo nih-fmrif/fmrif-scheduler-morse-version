@@ -1916,3 +1916,95 @@ class JsonForm(FlaskForm):
 
     payload = fields.TextAreaField(validators=[validators.InputRequired()])
 
+
+def verify_and_prep_template_diffs(
+    diffs, entries, institutes, groups, members_of_groups
+):
+    # grab just the referenced entries
+    ids = frozenset(int(d["id"]) for d in diffs)
+    referenced = {e.id: e for e in entries if e.id in ids}
+
+    # convert the datalists into sets for easier comparison
+    inst = frozenset(id for (id, _) in institutes)
+    g = frozenset(id for (id, _) in groups)
+    # absence of a group has no members to simplify checks
+    # for templates, neither ever has any members but are not
+    # included in members_of_groups so we add them first
+    m = {
+        "": frozenset(),
+        "maint": frozenset(),
+        "training": frozenset(),
+    }
+    for k, v in members_of_groups.items():
+        m[k] = frozenset(id for (id, _) in v)
+
+    errors = defaultdict(list)
+    staged = []
+
+    def check(id, diff, key, entry_val, set):
+        # input from the site uses "" for NULL so we normalize to that here
+        # to simplify all the checks
+        if entry_val is None:
+            entry_val = ""
+        if key not in diff:
+            return entry_val, True
+        old, new = diff[key]
+        failed = False
+        # if entry_val is empty we don't check
+        # since the worst case it transitioned to empty
+        # but if it is now empty and wasn't before
+        # the new transition is still always legal
+        # and cannot step on anyone else's toes as the slot
+        # is up for grabs
+        if entry_val != "" and entry_val != old:
+            errors[id].append(
+                {
+                    "type": "overwrote",
+                    "key": key,
+                    "expected": old,
+                    "got": entry_val,
+                }
+            )
+            failed = True
+        ret = entry_val
+        if new:
+            ret = new
+            if new not in set:
+                errors[id].append(
+                    {
+                        "type": "removed",
+                        "key": key,
+                        "value": new,
+                    }
+                )
+                failed = True
+        return ret, not failed
+
+    for diff in diffs:
+        id = int(diff["id"])
+        entry = referenced[id]
+        check(id, diff, "institute", entry.inst, inst)
+        group, ok = check(id, diff, "group", entry.group, g)
+        # only check member if group check succeeded,
+        # otherwise the check can be meaningless;
+        # but the cell has already failed validation so it's okay
+        if ok:
+            check(id, diff, "member", entry.user, m[group])
+
+        # validation passed, prepare the changes for this entry
+        if id not in errors:
+            # for each item in diff set the entry value to the new value,
+            # but if the new value is "" set it to NULL
+            if "institute" in diff:
+                entry.inst = diff["institute"][1] or None
+            if "group" in diff:
+                entry.group = diff["group"][1] or None
+            if "member" in diff:
+                entry.user = diff["member"][1] or None
+            staged.append(entry)
+
+    # if there are errors, only return the errors
+    # if there are no errors, only return the entries to commit
+    if len(errors) > 0:
+        return [], errors
+    return staged, None
