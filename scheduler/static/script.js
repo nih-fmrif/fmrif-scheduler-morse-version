@@ -1386,7 +1386,7 @@ function fmt_save_results(data, cells, human_hours) {
 				case "overwrote":
 					const expected = err.expected;
 					const got = err.got;
-					acc.push(`${key} overwritten by another user: expected `);
+					acc.push(`${key} overwritten by another user: expected the old value to be `);
 					if (expected) {
 						acc.push(`<b>${expected}</b>`);
 					} else {
