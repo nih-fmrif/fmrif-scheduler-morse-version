@@ -1383,7 +1383,6 @@ def device_tmpl_schedule_edit(the_device, the_template):
             return jsonify({"errors": errors})
 
         for s in staged:
-            app.logger.warn(s)
             model.db.session.add(s)
         model.db.session.commit()
         return jsonify({"saved": len(staged)})
