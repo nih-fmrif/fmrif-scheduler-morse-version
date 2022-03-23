@@ -1367,7 +1367,13 @@ function fmt_save_results(data, cells, human_hours) {
 		return "internal error: expected confirmation or errors but got neither";
 	}
 
-	const acc = [`<p>${errors.length} irreconcilable errors. Affected entries will be reset, please review before resubmitting</p><dl>`];
+	const acc = ["<p>"];
+	if (errors.length > 1) {
+		acc.append(`${errors.length} irreconcilable errors. Affected entries will be reset and locked,`);
+	} else {
+		acc.append("Irreconcilable error. The affected entry will be reset and locked,");
+	}
+	acc.append("please review before resubmitting</p><dl>");
 	for (const [id, errs] of errors) {
 		const cell = cells.get(id);
 		// prevent future edits to this cell
