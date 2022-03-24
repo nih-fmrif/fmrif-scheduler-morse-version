@@ -2012,3 +2012,24 @@ def verify_and_prep_template_diffs(
     if len(errors) > 0:
         return [], errors
     return staged, None
+
+
+def old(
+    entry_date: datetime.date,
+    entry_hour: int,
+    cur_date: datetime.date,
+    cur_hour: int,
+    cur_minute: int,
+) -> bool:
+    # construct datetimes from the dates
+    c = datetime.datetime(
+        cur_date.year, cur_date.month, cur_date.day, cur_hour, cur_minute
+    )
+    e = datetime.datetime(
+        entry_date.year, entry_date.month, entry_date.day, entry_hour, 0
+    )
+    # take 15 minutes off of the entry time so we can compare it directly to the current time
+    # while taking the deadline into account
+    e -= datetime.timedelta(minutes=15)
+    return e < c
+
