@@ -954,7 +954,7 @@ def device(the_device):
     top_row, grouped_entries = logic.group_schedule_entries(entries)
 
     hours = logic.fmt_hours()
-    cur_date, cur_hour = logic.db_now()
+    cur_date, cur_hour, cur_minute = logic.db_now()
 
     form = logic.JsonForm()
     if request.method == "POST":
