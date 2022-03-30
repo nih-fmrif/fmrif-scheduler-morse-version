@@ -1369,11 +1369,11 @@ function fmt_save_results(data, cells, human_hours) {
 
 	const acc = ["<p>"];
 	if (errors.length > 1) {
-		acc.append(`${errors.length} irreconcilable errors. Affected entries will be reset and locked,`);
+		acc.push(`${errors.length} irreconcilable errors. Affected entries will be reset and locked, `);
 	} else {
-		acc.append("Irreconcilable error. The affected entry will be reset and locked,");
+		acc.push("Irreconcilable error. The affected entry will be reset and locked, ");
 	}
-	acc.append("please review before resubmitting</p><dl>");
+	acc.push("please review before resubmitting</p><dl>");
 	for (const [id, errs] of errors) {
 		const cell = cells.get(id);
 		// prevent future edits to this cell
