@@ -2033,3 +2033,8 @@ def is_old(
     e -= datetime.timedelta(minutes=15)
     return e < c
 
+
+def null2epsilon(s: Optional[str]) -> str:
+    if s is None:
+        return ""
+    return s
