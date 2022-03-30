@@ -2014,7 +2014,7 @@ def verify_and_prep_template_diffs(
     return staged, None
 
 
-def old(
+def is_old(
     entry_date: datetime.date,
     entry_hour: int,
     cur_date: datetime.date,
