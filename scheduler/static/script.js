@@ -1385,8 +1385,7 @@ function fmt_save_results(data, cells, human_hours) {
 			acc.push('<dd>');
 			switch (err.type) {
 				case "removed":
-					const value = err.value;
-					acc.push(`${value} is no longer a valid ${key}`);
+					acc.push(`${err.value} is no longer a valid ${key}`);
 					break;
 
 				case "overwrote":
