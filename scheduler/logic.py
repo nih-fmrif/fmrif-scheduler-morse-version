@@ -1904,8 +1904,8 @@ def db_now() -> Tuple[datetime.date, int, int]:
         """
         select
             current_date,
-            extract(hour from current_timestamp) as hour,
-            extract(minute from current_timestamp) as minute
+            extract(hour from current_timestamp)::integer as hour,
+            extract(minute from current_timestamp)::integer as minute
         """
     )
     return q.first()
