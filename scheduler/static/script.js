@@ -1384,6 +1384,18 @@ function fmt_save_results(data, cells, human_hours) {
 			const key = err.key;
 			acc.push('<dd>');
 			switch (err.type) {
+				case "revocation":
+					acc.push("you no longer have access to edit this device")
+					break;
+
+				case "expired":
+					acc.push("you missed the submission deadline")
+					break;
+
+				case "user-removed":
+					acc.push(`you are no longer in ${key} ${err.value}`);
+					break;
+
 				case "removed":
 					acc.push(`${err.value} is no longer a valid ${key}`);
 					break;
