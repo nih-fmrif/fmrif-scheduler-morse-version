@@ -2265,3 +2265,15 @@ def verify_scheduler_diffs(
                 fail_removed(id, f"{kind} handler", new)
 
     return returns()
+
+
+def apply_scheduler_diffs(user: model.User, xs):
+    stage = []
+    for _, diff, entry in xs:
+        entry.modified_by = user.id
+        if "group" in diff:
+            entry.group = diff["group"][1] or None
+        if "member" in diff:
+            entry.user = diff["member"][1] or None
+        stage.append(entry)
+    return stage

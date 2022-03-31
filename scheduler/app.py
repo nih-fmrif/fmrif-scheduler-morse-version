@@ -984,7 +984,14 @@ def device(the_device):
         if errors is not None:
             return jsonify({"errors": errors})
 
-        return jsonify({"saved": len(xs)})  # XXX temporary
+        staged = logic.apply_scheduler_diffs(g.user, xs)
+
+
+        for s in staged:
+            model.db.session.add(s)
+        model.db.session.commit()
+
+        return jsonify({"saved": len(staged), "notifications": "TODO"})
 
     return {
         "device": device,
