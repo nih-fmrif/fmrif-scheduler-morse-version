@@ -2207,10 +2207,16 @@ def verify_scheduler_diffs(
         entry.requests.append(sr)  # XXX still need to stage?
         return sr, True
 
+    support_human_name = {
+        1: "medical",
+        2: "training",
+        3: "technologist",
+    }
+
     def record_sr(id, diff, entry, k, n):
         if k not in diff:
             return
-        srs.append((id, diff[k], *get_sr(entry, n)))
+        srs.append((id, support_human_name[n], diff[k], *get_sr(entry, n)))
 
     for id, diff, entry in xs:
         record_sr(id, diff, entry, "med", 1)
@@ -2232,16 +2238,8 @@ def verify_scheduler_diffs(
         2: frozenset(id for (id, _) in support.training),
         3: frozenset(id for (id, _) in support.tech),
     }
-    support_human_name = {
-        1: "medical",
-        2: "training",
-        3: "technologist",
-    }
 
-    for id, diff, sr, is_new in srs:
-        # label for error messages (can't count on sr.kind if is_new)
-        kind = support_human_name[sr.supportkind]
-
+    for id, kind, diff, sr, is_new in srs:
         if not is_new:
             # check overwrites.
             # the only ones we can detect are scan/cover and handler
