@@ -2205,6 +2205,7 @@ def verify_scheduler_diffs(
         sr.supportkind = n
         sr.filed_by = user.id
         sr.modified_by = user.id # XXX temporary, this will be set in a later stage
+        entry.requests.append(sr)
         return sr, True
 
     support_human_name = {
