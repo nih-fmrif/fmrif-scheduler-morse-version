@@ -6,6 +6,7 @@ from typing import (
     Any,
     DefaultDict,
     Dict,
+    FrozenSet,
     Generator,
     List,
     Literal,
@@ -2038,3 +2039,229 @@ def null2epsilon(s: Optional[str]) -> str:
     if s is None:
         return ""
     return s
+
+
+def verify_scheduler_diffs(
+    diffs,
+    entries: List[model.ScheduleEntry],
+    perms: DevicePerms,
+    support: SupportRequestDatalists,
+    cur_date: datetime.date,
+    cur_hour: int,
+    cur_minute: int,
+    groups: Datalist,
+    members_of_groups: Dict[str, Datalist],
+    user: model.User,
+):
+    # pair up the diffs and entries to ease further processing
+    ids = frozenset(int(d["id"]) for d in diffs)
+    referenced = {e.id: e for e in entries if e.id in ids}
+    xs = []
+    for diff in diffs:
+        id = int(diff["id"])
+        entry = referenced[id]
+        xs.append((id, diff, entry))
+
+    # set up some closures to reduce the error handling boilerplate
+    errors: DefaultDict[int, List[Dict[str, str]]] = defaultdict(list)
+
+    def fail(id: int, msg: Dict[str, str]) -> None:
+        errors[id].append(msg)
+
+    def fail_removed(id, key, value):
+        fail(id, {"type": "removed", "key": key, "value": value})
+
+    def fail_overwrote(id, key, expected, got):
+        fail(
+            id,
+            {
+                "type": "overwrote",
+                "key": key,
+                "expected": expected,
+                "got": got,
+            },
+        )
+
+    def fail_user_removed(id, key, value):
+        fail(id, {"type": "user-removed", "key": key, "value": value})
+
+    # in some stages we find errors so catastrophic that the entry needs to be yanked
+    # from further processing or there will be second and third order errors.
+    # we yank them by deleting their entry in referenced
+    # then before the next stage we call this to filter out any entries we have removed
+    def compact():
+        if len(xs) != len(referenced):
+            return [(id, diff, entry) for id, diff, entry in xs if id in referenced]
+        return xs
+
+    # first, check for submissions that missed the submission deadline
+    if not perms.edit_any:
+        for id, _, entry in xs:
+            if is_old(entry.date, entry.hour, cur_date, cur_hour, cur_minute):
+                fail(id, {"type": "expired"})
+                # do no further validation for expired entries
+                # as there is nothing a user who sees this message could do about anything else
+                del referenced[id]
+        # all entries expired, nothing more to do
+        if len(referenced) == 0:
+            return [], [], errors
+
+        xs = compact()
+
+    g = frozenset(id for (id, _) in groups)
+
+    # absence of a group has no members to simplify checks,
+    # maint never has members
+    # training is computed from support.training
+    m: Dict[str, FrozenSet[str]] = {
+        "": frozenset(),
+        "maint": frozenset(),
+        "training": frozenset(id for (id, _) in support.training),
+    }
+    for k, v in members_of_groups.items():
+        m[k] = frozenset(id for (id, _) in v)
+
+    # ensure group assignments are valid
+    for id, diff, entry in xs:
+        group = null2epsilon(entry.group)
+
+        if "group" not in diff:
+            # even though we're not updating the group, we need to make sure
+            # that it's valid as all other checks below assume the group is valid
+            if group != "" and group not in g:
+                fail_removed(id, "group", group)
+                del referenced[id]
+            continue
+
+        old, new = diff["group"]
+
+        # check that no one overwrote the group
+        # but skip if it's currently empty as that is a no harm no foul situation
+        # as it is currently up for grabs by anyone
+        if group != "" and group != old:
+            fail_overwrote(id, "group", group, old)
+            del referenced[id]
+            continue
+
+        # new group no longer on this device.
+        # note that we do not check that the old group is valid here:
+        # this implicitly treats a removed group the same as an empty group
+        # but we're assuming that that frontend made the then-appropriate checks
+        if new != "" and new not in g:
+            fail_removed(id, "group", new)
+            del referenced[id]
+            continue
+
+        if not perms.edit_any:
+            # no longer member of old group
+            if old != "" and user.id not in m[old]:
+                fail_user_removed(id, "group", old)
+                del referenced[id]
+
+            # no longer member of new group
+            if new != "" and user.id not in m[new]:
+                fail_user_removed(id, "group", new)
+                del referenced[id]
+
+    xs = compact()
+
+    # ensure member assignments are valid
+    for id, diff, entry in xs:
+        if "member" not in diff:
+            continue
+
+        old, new = diff["member"]
+
+        member = null2epsilon(entry.user)
+        if member != "" and old != member:
+            fail_overwrote(id, "member", member, old)
+
+        # make sure new still belongs to the group
+        # we do not check that old still belongs to the group because
+        #  - it's irrelevant to safety
+        #  - we can assume that it was correct
+        if new != "":
+            # need the latest group to check membership against
+            group = null2epsilon(entry.group)
+            if "group" in diff:
+                _, group = diff["group"]
+
+            if new not in m[group]:
+                fail_removed(id, "member", new)
+
+    # split out support requests so we can verify them separately,
+    # now that we know they can't be expired or have lost edit privilege.
+    srs: List[model.SupportRequest] = []
+
+    # get the support request of kind n or create a blank one
+    def get_sr(entry, n):
+        for sr in entry.requests:
+            if sr.supportkind == n:
+                return sr, False
+
+        # no existing sr, create one
+        # it will be filled in later
+        sr = model.SupportRequest()
+        sr.supportkind = n
+        sr.filed_by = user.id
+        entry.requests.append(sr)  # XXX still need to stage?
+        return sr, True
+
+    def record_sr(id, diff, entry, k, n):
+        if k not in diff:
+            return
+        srs.append((id, diff[k], *get_sr(entry, n)))
+
+    for id, diff, entry in xs:
+        record_sr(id, diff, entry, "med", 1)
+        record_sr(id, diff, entry, "train", 2)
+        record_sr(id, diff, entry, "tech", 3)
+
+    def returns():
+        # if there are errors, only return the errors
+        if len(errors) > 0:
+            return [], [], errors
+        return xs, srs, None
+
+    # no support requests so we've verified everything
+    if len(srs) == 0:
+        return returns()
+
+    support_staff = {
+        1: frozenset(id for (id, _) in support.medical),
+        2: frozenset(id for (id, _) in support.training),
+        3: frozenset(id for (id, _) in support.tech),
+    }
+    support_human_name = {
+        1: "medical",
+        2: "training",
+        3: "technologist",
+    }
+
+    for id, diff, sr, is_new in srs:
+        # label for error messages (can't count on sr.kind if is_new)
+        kind = support_human_name[sr.supportkind]
+
+        if not is_new:
+            # check overwrites.
+            # the only ones we can detect are scan/cover and handler
+            # we do not check scan/cover as every error self corrects:
+            # that is if we change from scan to cover and there's an overwrite,
+            # the result is the same
+            if "handler" in diff:
+                old, _ = diff["handler"]
+                handler = null2epsilon(sr.fulfilled_by)
+                if handler != "" and handler != old:
+                    fail_overwrote(id, f"{kind} handler", handler, old)
+
+        # the request was cancelled so we ignore any other changes
+        if "requested" in diff and not diff["requested"]:
+            continue
+
+        # make sure the handler is valid
+        if "handler" in diff:
+            _, new = diff["handler"]
+            if new != "" and new not in support_staff[sr.supportkind]:
+                fail_removed(id, f"{kind} handler", new)
+
+    return returns()

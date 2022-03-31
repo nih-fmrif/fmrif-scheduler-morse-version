@@ -958,10 +958,33 @@ def device(the_device):
 
     form = logic.JsonForm()
     if request.method == "POST":
+        if not perms.edit:
+            # direct request or user lost edit access between fetching page and submitting form
+            abort(403)
         if not form.validate():
             # client response must specify payload
             abort(500)
-        return jsonify()
+
+        data = form.payload.data
+        diffs = data["diffs"]
+        send_notifications = data["notify"]
+
+        xs, _, errors = logic.verify_scheduler_diffs(
+            diffs,
+            entries,
+            perms,
+            support,
+            cur_date,
+            cur_hour,
+            cur_minute,
+            groups,
+            members_of_groups,
+            g.user,
+        )
+        if errors is not None:
+            return jsonify({"errors": errors})
+
+        return jsonify({"saved": len(xs)})  # XXX temporary
 
     return {
         "device": device,
