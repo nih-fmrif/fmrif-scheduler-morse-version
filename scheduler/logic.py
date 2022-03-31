@@ -2204,7 +2204,7 @@ def verify_scheduler_diffs(
         sr = model.SupportRequest()
         sr.supportkind = n
         sr.filed_by = user.id
-        entry.requests.append(sr)  # XXX still need to stage?
+        sr.modified_by = user.id # XXX temporary, this will be set in a later stage
         return sr, True
 
     support_human_name = {
