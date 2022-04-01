@@ -2214,10 +2214,24 @@ def verify_scheduler_diffs(
         3: "technologist",
     }
 
+    support_staff = {
+        1: frozenset(id for (id, _) in support.medical),
+        2: frozenset(id for (id, _) in support.training),
+        3: frozenset(id for (id, _) in support.tech),
+    }
+
     def record_sr(id, diff, entry, k, n):
         if k not in diff:
             return
-        srs.append((id, support_human_name[n], diff[k], *get_sr(entry, n)))
+        srs.append(
+            (
+                id,
+                support_human_name[n],
+                diff[k],
+                *get_sr(entry, n),
+                user.id in support_staff[n] or perms.edit_any,
+            )
+        )
 
     for id, diff, entry in xs:
         record_sr(id, diff, entry, "med", 1)
@@ -2234,13 +2248,7 @@ def verify_scheduler_diffs(
     if len(srs) == 0:
         return returns()
 
-    support_staff = {
-        1: frozenset(id for (id, _) in support.medical),
-        2: frozenset(id for (id, _) in support.training),
-        3: frozenset(id for (id, _) in support.tech),
-    }
-
-    for id, kind, diff, sr, is_new in srs:
+    for id, kind, diff, sr, is_new, _ in srs:
         if not is_new:
             # check overwrites.
             # the only ones we can detect are scan/cover and handler
