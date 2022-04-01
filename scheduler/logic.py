@@ -2276,3 +2276,8 @@ def apply_scheduler_diffs(user: model.User, xs):
             entry.user = diff["member"][1] or None
         stage.append(entry)
     return stage
+
+
+def apply_scheduler_sr_diffs(user: model.User, srs):
+    notes = []
+    return notes
