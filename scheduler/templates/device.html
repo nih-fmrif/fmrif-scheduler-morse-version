@@ -114,7 +114,7 @@
 												{% if support.tech or sr.tech %}
 													<fieldset data-sr=tech data-new="{% if sr.tech %}false{% else %}true{% endif %}" disabled>
 														<legend>technologist</legend>
-														{{ requested("tech-requested-" ~ x.id, sr.tech) }}
+														{{ requested("tech-requested-" ~ x.id, sr.tech is defined and sr.tech.approved is not sameas false) }}
 														<fieldset data-orig="{{ sr.note or "cover" }}">
 															<legend>kind</legend>
 															{{ tech_kind(x.id, "cover", "cover", sr.note != "support") }}
@@ -126,14 +126,14 @@
 												{% if support.training or sr.train %}
 													<fieldset data-sr=train data-new="{% if sr.train %}false{% else %}true{% endif %}" disabled>
 														<legend>training</legend>
-														{{ requested("train-requested-" ~ x.id, sr.train) }}
+														{{ requested("train-requested-" ~ x.id, sr.train is defined and sr.train.approved is not sameas false) }}
 														{{ handler("train-handler-" ~ x.id, "train", sr.train) }}
 													</fieldset>
 												{% endif %}
 												{% if support.medical or sr.medical %}
 													<fieldset data-sr=med data-new="{% if sr.medical %}false{% else %}true{% endif %}" disabled>
 														<legend>medical coverage</legend>
-														{{ requested("med-requested-" ~ x.id, sr.medical) }}
+														{{ requested("med-requested-" ~ x.id, sr.medical is defined and sr.medical.approved is not sameas false) }}
 														{{ handler("med-handler-" ~ x.id, "med", sr.medical) }}
 													</fieldset>
 												{% endif %}
