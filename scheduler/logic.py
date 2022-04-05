@@ -2204,7 +2204,6 @@ def verify_scheduler_diffs(
         sr = model.SupportRequest()
         sr.supportkind = n
         sr.filed_by = user.id
-        sr.modified_by = user.id  # XXX temporary, this will be set in a later stage
         entry.requests.append(sr)
         return sr, True
 
@@ -2288,4 +2287,61 @@ def apply_scheduler_diffs(user: model.User, xs):
 
 def apply_scheduler_sr_diffs(user: model.User, srs):
     notes = []
+    for id, kind, diff, sr, is_new, staff_request in srs:
+        note = {"id": id, "kind": kind}
+        sr.modified_by = user.id
+
+        # set a default state that may be overridden by something more specific
+        if is_new:
+            note["state"] = "new"
+        else:
+            note["state"] = "updated"
+
+        # this won't affect any state transitions, simply note it
+        if "subkind" in diff:
+            sr.note = diff["subkind"][1]
+            note["subkind"] = diff["subkind"]
+
+        canceled = False
+        decision = sr.approved or False
+        if "requested" in diff:
+            if diff["requested"]:
+                # if this is a new entry this does nothing;
+                # if this is an old entry with approved=False,
+                # this resets it to a new-ish request
+                sr.approved = None
+            else:
+                canceled = True
+                sr.fulfilled_by = None
+                note["state"] = "retracted"
+                if staff_request:
+                    sr.approved = False
+                    note["state"] = "denied"
+                    if decision:
+                        note["state"] = "canceled"
+
+        # as we null out the handler when the request is retracted/canceled
+        # as otherwise anyone could take an unchecked SR with a set handler
+        # and make it approved by re-checking the SR.
+        # hence we can skip all this when the SR is canceled.
+        if "handler" in diff and not canceled:
+            old, new = diff["handler"]
+            sr.fulfilled_by = new or None
+
+            # if there's a handler in the new state, record it
+            if new != "":
+                note["handler"] = new
+
+            if old == "" and new != "":
+                sr.approved = True
+                note["state"] = "approved"
+            elif old != "" and new == "":
+                # no longer assigned to anyone but request still open
+                sr.approved = None
+                note["state"] = "unassigned"
+            else:
+                # reassigned from one handler to another without altering approval state
+                note["state"] = "reassigned"
+
+        notes.append(note)
     return notes
