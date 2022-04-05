@@ -2021,6 +2021,7 @@ def is_old(
     cur_date: datetime.date,
     cur_hour: int,
     cur_minute: int,
+    shift: bool = True,
 ) -> bool:
     # construct datetimes from the dates
     c = datetime.datetime(
@@ -2029,9 +2030,10 @@ def is_old(
     e = datetime.datetime(
         entry_date.year, entry_date.month, entry_date.day, entry_hour, 0
     )
-    # take 15 minutes off of the entry time so we can compare it directly to the current time
-    # while taking the deadline into account
-    e -= datetime.timedelta(minutes=15)
+    if shift:
+        # take 15 minutes off of the entry time so we can compare it directly to the current time
+        # while taking the deadline into account
+        e -= datetime.timedelta(minutes=15)
     return e < c
 
 
@@ -2056,11 +2058,14 @@ def verify_scheduler_diffs(
     # pair up the diffs and entries to ease further processing
     ids = frozenset(int(d["id"]) for d in diffs)
     referenced = {e.id: e for e in entries if e.id in ids}
+    old_entries = set()
     xs = []
     for diff in diffs:
         id = int(diff["id"])
         entry = referenced[id]
         xs.append((id, diff, entry))
+        if is_old(entry.date, entry.hour, cur_date, cur_hour, cur_minute, shift=False):
+            old_entries.add(id)
 
     # set up some closures to reduce the error handling boilerplate
     errors: DefaultDict[int, List[Dict[str, str]]] = defaultdict(list)
@@ -2104,7 +2109,7 @@ def verify_scheduler_diffs(
                 del referenced[id]
         # all entries expired, nothing more to do
         if len(referenced) == 0:
-            return [], [], errors
+            return [], [], old_entries, errors
 
         xs = compact()
 
@@ -2240,8 +2245,8 @@ def verify_scheduler_diffs(
     def returns():
         # if there are errors, only return the errors
         if len(errors) > 0:
-            return [], [], errors
-        return xs, srs, None
+            return [], [], old_entries, errors
+        return xs, srs, old_entries, None
 
     # no support requests so we've verified everything
     if len(srs) == 0:

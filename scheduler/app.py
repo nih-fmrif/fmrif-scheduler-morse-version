@@ -969,7 +969,7 @@ def device(the_device):
         diffs = data["diffs"]
         send_notifications = data["notify"]
 
-        xs, srs, errors = logic.verify_scheduler_diffs(
+        xs, srs, _, errors = logic.verify_scheduler_diffs(
             diffs,
             entries,
             perms,
