@@ -349,7 +349,7 @@ function fmt_log(entries) {
 		if (entry.kind == 'main') {
 			acc.push('the entry:<ul>');
 		} else {
-			acc.push(`the ${kind} request:<ul>`);
+			acc.push(`the ${entry.kind} request:<ul>`);
 		}
 
 		// sort values by key according to _fmt_log_order.
