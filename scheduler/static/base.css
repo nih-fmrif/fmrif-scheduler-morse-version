@@ -391,7 +391,7 @@ input[list]::-webkit-list-button {
 	background-color: transparent;
 }
 
-#dialog-content {
+.dialog-content {
 	grid-area: body;
 	overflow-y: auto;
 }
