@@ -89,14 +89,14 @@
 														<label for="{{ id }}">requested</label>
 													</input-set>
 												{% endmacro %}
-												{% macro handler(id, list, val) %}
+												{% macro handler(id, list, sr) %}
 													<input-set label-above shrink>
 														<label for="{{ id }}">handler</label>
 														<input-widget>
 															<input id="{{ id }}" class=handler
 																{% if list %}list="{{ list }}"{% endif %}
-																data-orig="{{ val }}"
-																value="{{ val }}"
+																data-orig="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
+																value="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
 																spellcheck=false
 																autocomplete=off>
 															{{ macros.validation_icons() }}
@@ -120,21 +120,21 @@
 															{{ tech_kind(x.id, "cover", "cover", sr.note != "support") }}
 															{{ tech_kind(x.id, "support", "support", sr.note == "support") }}
 														</fieldset>
-														{{ handler("tech-handler-" ~ x.id, "tech", sr.fulfilled_by) }}
+														{{ handler("tech-handler-" ~ x.id, "tech", sr.tech) }}
 													</fieldset>
 												{% endif %}
 												{% if support.training or sr.train %}
 													<fieldset data-sr=train data-new="{% if sr.train %}false{% else %}true{% endif %}" disabled>
 														<legend>training</legend>
 														{{ requested("train-requested-" ~ x.id, sr.train) }}
-														{{ handler("train-handler-" ~ x.id, "train", sr.fulfilled_by) }}
+														{{ handler("train-handler-" ~ x.id, "train", sr.train) }}
 													</fieldset>
 												{% endif %}
 												{% if support.medical or sr.medical %}
 													<fieldset data-sr=med data-new="{% if sr.medical %}false{% else %}true{% endif %}" disabled>
 														<legend>medical coverage</legend>
 														{{ requested("med-requested-" ~ x.id, sr.medical) }}
-														{{ handler("med-handler-" ~ x.id, "med", sr.fulfilled_by) }}
+														{{ handler("med-handler-" ~ x.id, "med", sr.medical) }}
 													</fieldset>
 												{% endif %}
 											</entry-support>
