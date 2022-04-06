@@ -84,7 +84,7 @@
 												{% macro requested(id, checked) %}
 													<input-set is-option>
 														<input-widget>
-															<input id="{{ id }}" class=requested type=checkbox data-orig={% if checked %}"true" checked{% else %}"false"{% endif %}>
+															<input id="{{ id }}" class=requested type=checkbox autocomplete=off data-orig={% if checked %}"true" checked{% else %}"false"{% endif %}>
 														</input-widget>
 														<label for="{{ id }}">requested</label>
 													</input-set>
@@ -106,7 +106,7 @@
 												{% macro tech_kind(id, kind, lbl, checked) %}
 													<input-set is-option>
 														<input-widget>
-															<input id="{{ "tech-" ~ kind ~ "-" ~id }}" name="kind-{{ id }}" type=radio {% if checked %}checked{% endif %} value="{{ lbl }}">
+															<input id="{{ "tech-" ~ kind ~ "-" ~id }}" name="kind-{{ id }}" autocomplete=off type=radio {% if checked %}checked{% endif %} value="{{ lbl }}">
 														</input-widget>
 														<label for="{{ "tech-" ~ kind ~ "-" ~ id }}">{{ lbl }}</label>
 													</input-set>
