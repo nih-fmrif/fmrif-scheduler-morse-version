@@ -2352,3 +2352,33 @@ def apply_scheduler_sr_diffs(user: model.User, srs):
 
         notes.append(note)
     return notes
+
+
+def prepare_notifications(send_notifications, when, diffs, srs_notes):
+    # filter out diffs that won't cause a notification
+    diffs_out = []
+    if not send_notifications:
+        for d in diffs:
+            id = int(d["id"])
+            # old entry
+            if when[id][0]:
+                continue
+            # only has SR
+            if not any(x in d for x in ("group", "member")):
+                continue
+            diffs_out.append(d)
+
+    srs_out = {
+        "device": [],
+        "train": [],
+        "medical": [],
+        "tech": [],
+    }
+    for sn in srs_notes:
+        # old entry
+        if when[sn["id"]][0]:
+            continue
+        srs_out["device"] = sn
+        srs_out[sn["kind"]] = sn
+
+    return diffs_out, srs_out

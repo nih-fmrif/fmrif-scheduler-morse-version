@@ -969,7 +969,7 @@ def device(the_device):
         diffs = data["diffs"]
         send_notifications = data["notify"]
 
-        xs, srs, _, errors = logic.verify_scheduler_diffs(
+        xs, srs, when, errors = logic.verify_scheduler_diffs(
             diffs,
             entries,
             perms,
@@ -986,7 +986,9 @@ def device(the_device):
 
         staged = logic.apply_scheduler_diffs(g.user, xs)
 
-        _ = logic.apply_scheduler_sr_diffs(g.user, srs)
+        srs_notes = logic.apply_scheduler_sr_diffs(g.user, srs)
+
+        _, _ = logic.prepare_notifications(send_notifications, when, diffs, srs_notes)
 
         for s in staged:
             model.db.session.add(s)
