@@ -2370,9 +2370,9 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
 
     srs_out = {
         "device": [],
-        "train": [],
+        "training": [],
         "medical": [],
-        "tech": [],
+        "technologist": [],
     }
     for sn in srs_notes:
         # old entry
