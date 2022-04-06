@@ -2058,14 +2058,16 @@ def verify_scheduler_diffs(
     # pair up the diffs and entries to ease further processing
     ids = frozenset(int(d["id"]) for d in diffs)
     referenced = {e.id: e for e in entries if e.id in ids}
-    old_entries = set()
+    when = {}
     xs = []
     for diff in diffs:
         id = int(diff["id"])
         entry = referenced[id]
         xs.append((id, diff, entry))
-        if is_old(entry.date, entry.hour, cur_date, cur_hour, cur_minute, shift=False):
-            old_entries.add(id)
+        past = is_old(
+            entry.date, entry.hour, cur_date, cur_hour, cur_minute, shift=False
+        )
+        when[id] = (past, entry.date, entry.hour)
 
     # set up some closures to reduce the error handling boilerplate
     errors: DefaultDict[int, List[Dict[str, str]]] = defaultdict(list)
@@ -2109,7 +2111,7 @@ def verify_scheduler_diffs(
                 del referenced[id]
         # all entries expired, nothing more to do
         if len(referenced) == 0:
-            return [], [], old_entries, errors
+            return [], [], {}, errors
 
         xs = compact()
 
@@ -2234,7 +2236,6 @@ def verify_scheduler_diffs(
                 diff[k],
                 *get_sr(entry, n),
                 user.id in support_staff[n] or perms.edit_any,
-                (entry.date, entry.hour),
             )
         )
 
@@ -2246,14 +2247,14 @@ def verify_scheduler_diffs(
     def returns():
         # if there are errors, only return the errors
         if len(errors) > 0:
-            return [], [], old_entries, errors
-        return xs, srs, old_entries, None
+            return [], [], {}, errors
+        return xs, srs, when, None
 
     # no support requests so we've verified everything
     if len(srs) == 0:
         return returns()
 
-    for id, kind, diff, sr, is_new, _, _ in srs:
+    for id, kind, diff, sr, is_new, _ in srs:
         if not is_new:
             # check overwrites.
             # the only ones we can detect are scan/cover and handler
@@ -2293,8 +2294,8 @@ def apply_scheduler_diffs(user: model.User, xs):
 
 def apply_scheduler_sr_diffs(user: model.User, srs):
     notes = []
-    for id, kind, diff, sr, is_new, staff_request, when in srs:
-        note = {"id": id, "kind": kind, "when": when}
+    for id, kind, diff, sr, is_new, staff_request in srs:
+        note = {"id": id, "kind": kind}
         sr.modified_by = user.id
 
         # set a default state that may be overridden by something more specific
