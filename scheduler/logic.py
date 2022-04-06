@@ -2234,6 +2234,7 @@ def verify_scheduler_diffs(
                 diff[k],
                 *get_sr(entry, n),
                 user.id in support_staff[n] or perms.edit_any,
+                (entry.date, entry.hour),
             )
         )
 
@@ -2252,7 +2253,7 @@ def verify_scheduler_diffs(
     if len(srs) == 0:
         return returns()
 
-    for id, kind, diff, sr, is_new, _ in srs:
+    for id, kind, diff, sr, is_new, _, _ in srs:
         if not is_new:
             # check overwrites.
             # the only ones we can detect are scan/cover and handler
@@ -2292,8 +2293,8 @@ def apply_scheduler_diffs(user: model.User, xs):
 
 def apply_scheduler_sr_diffs(user: model.User, srs):
     notes = []
-    for id, kind, diff, sr, is_new, staff_request in srs:
-        note = {"id": id, "kind": kind}
+    for id, kind, diff, sr, is_new, staff_request, when in srs:
+        note = {"id": id, "kind": kind, "when": when}
         sr.modified_by = user.id
 
         # set a default state that may be overridden by something more specific
