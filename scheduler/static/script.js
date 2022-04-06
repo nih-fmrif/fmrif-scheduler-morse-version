@@ -5,6 +5,25 @@ function announce(txt) {
 	document.querySelector("#announce").innerText = txt;
 }
 
+const setBeforeUnload = (() => {
+	// the beforeunload handler is added and removed as needed
+	// as otherwise the browser will ignore a host of optimizations
+	const beforeunload = ["beforeunload", evt => {
+		evt.preventDefault();
+		// unclear if setting the return value and returning a string
+		// is still necessary for compatibility but doesn't harm anything
+		evt.returnValue = "You have unsaved changes that will be lost. Are you sure?";
+		return evt.returnValue;
+	}, { capture: true }]
+	return on => {
+		if (on) {
+			window.addEventListener(...beforeunload);
+		} else {
+			window.removeEventListener(...beforeunload);
+		}
+	};
+})();
+
 function get_datalists() {
 	const elms = document.querySelectorAll("datalist");
 	const out = new Map();
@@ -868,6 +887,9 @@ function result_dialog(proc) {
 		body.innerHTML = "";
 		abort.abort();
 		if (changesSaved) {
+			// updates made, reload the page to refresh state
+			// but first we need to disable our beforeunload handler
+			window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 			location.reload();
 		}
 	});
@@ -1490,16 +1512,6 @@ function wire_cell_editors() {
 		}
 	}
 
-	// the beforeunload handler is added and removed as needed
-	// as otherwise the browser will ignore a host of optimizations
-	const beforeunload = ["beforeunload", evt => {
-		evt.preventDefault();
-		// unclear if setting the return value and returning a string
-		// is still necessary for compatibility but doesn't harm anything
-		evt.returnValue = "You have unsaved changes that will be lost. Are you sure?";
-		return evt.returnValue;
-	}, { capture: true }]
-
 	// keep caption in sync with cell updates
 	const caption = document.querySelector("#caption");
 	const update_caption = (which, bool) => {
@@ -1531,11 +1543,7 @@ function wire_cell_editors() {
 
 		// add the beforeunload handler if there are changes
 		// and remove it if not
-		if (any_changed()) {
-			window.addEventListener(...beforeunload);
-		} else {
-			window.removeEventListener(...beforeunload);
-		}
+		setBeforeUnload(any_changed());
 	});
 
 	const apply = document.querySelector("#apply");
