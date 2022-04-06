@@ -889,6 +889,9 @@ function result_dialog(proc) {
 		if (changesSaved) {
 			// updates made, reload the page to refresh state
 			// but first we need to disable our beforeunload handler
+			// then scroll to the top of the page in case the browser saves
+			// scroll position so it's clear what happened
+			setBeforeUnload(false);
 			window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 			location.reload();
 		}
