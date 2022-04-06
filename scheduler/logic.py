@@ -2382,3 +2382,25 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
         srs_out[sn["kind"]] = sn
 
     return diffs_out, srs_out
+
+
+def fmt_notifications(when, ens, sns):
+    out = {
+        "device": fmt_regular_notifications(ens)
+        + fmt_support_notifications(when, sns["device"]),
+    }
+    for k in ("training", "medical", "technologist"):
+        out[k] = fmt_notifications(when, sns[k])
+    return out
+
+
+def fmt_regular_notifications(ens):
+    if len(ens) == 0:
+        return ""
+    return ""  # TODO
+
+
+def fmt_support_notifications(when, sns):
+    if len(sns) == 0:
+        return ""
+    return ""  # TODO
