@@ -984,15 +984,17 @@ def device(the_device):
         if errors is not None:
             return jsonify({"errors": errors})
 
+        # update models
         staged = logic.apply_scheduler_diffs(g.user, xs)
-
         srs_notes = logic.apply_scheduler_sr_diffs(g.user, srs)
 
+        # prepare any notifications
         ens, sns = logic.prepare_notifications(
             send_notifications, when, diffs, srs_notes
         )
         notifications = logic.fmt_notifications(when, ens, sns)
 
+        # apply the changes then send notifications once they're committed
         for s in staged:
             model.db.session.add(s)
         model.db.session.commit()
