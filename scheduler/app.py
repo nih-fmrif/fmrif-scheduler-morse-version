@@ -991,13 +991,14 @@ def device(the_device):
         ens, sns = logic.prepare_notifications(
             send_notifications, when, diffs, srs_notes
         )
-        _ = logic.fmt_notifications(when, ens, sns)
+        notifications = logic.fmt_notifications(when, ens, sns)
 
         for s in staged:
             model.db.session.add(s)
         model.db.session.commit()
+        notification_results = logic.send_scheduler_notifications(device, notifications)
 
-        return jsonify({"saved": len(staged), "notifications": "TODO"})
+        return jsonify({"saved": len(staged), "notifications": notification_results})
 
     return {
         "device": device,

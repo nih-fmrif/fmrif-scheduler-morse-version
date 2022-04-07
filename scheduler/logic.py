@@ -2406,3 +2406,30 @@ def fmt_support_notifications(when, sns):
     if len(sns) == 0:
         return ""
     return ""  # TODO
+
+
+def send_scheduler_notifications(device: model.Device, msgs):
+    tbl = (
+        ("schedule", device.addr, "schedule change"),
+        ("training", device.train_addr, "training request change"),
+        ("medical", device.med_addr, "medical coverage request change"),
+        ("technologist", device.tech_addr, "technologist request change"),
+    )
+    notes = []
+    for key, addr, subj in tbl:
+        msg = msgs[key]
+        if msg == "":
+            continue
+
+        def note(what):
+            notes.append({"key": key, "msg": what})
+
+        if "@" not in addr:
+            note("address")
+            continue
+
+        subject = f"[scheduler] {key} {subj}"
+        ok = message.send(addr, subject, msg)
+        note("failed" if not ok else "success")
+
+    return notes
