@@ -2392,7 +2392,7 @@ def fmt_notifications(when, ens, sns):
         + fmt_support_notifications(when, sns["schedule"]),
     }
     for k in ("training", "medical", "technologist"):
-        out[k] = fmt_notifications(when, sns[k])
+        out[k] = fmt_support_notifications(when, sns[k])
     return out
 
 
