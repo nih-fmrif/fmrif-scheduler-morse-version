@@ -24,5 +24,5 @@ def send(to: str, subj: str, msg: str, sender: Optional[str] = None) -> bool:
             current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
         return True
     except SMTPException as e:
-        current_app.logger.warn(e)
+        current_app.logger.error(e)
         return False
