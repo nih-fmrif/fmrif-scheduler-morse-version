@@ -2369,7 +2369,7 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
             diffs_out.append(d)
 
     srs_out = {
-        "device": [],
+        "schedule": [],
         "training": [],
         "medical": [],
         "technologist": [],
@@ -2378,7 +2378,7 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
         # old entry
         if when[sn["id"]][0]:
             continue
-        srs_out["device"] = sn
+        srs_out["schedule"] = sn
         srs_out[sn["kind"]] = sn
 
     return diffs_out, srs_out
@@ -2386,8 +2386,8 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
 
 def fmt_notifications(when, ens, sns):
     out = {
-        "device": fmt_regular_notifications(ens)
-        + fmt_support_notifications(when, sns["device"]),
+        "schedule": fmt_regular_notifications(ens)
+        + fmt_support_notifications(when, sns["schedule"]),
     }
     for k in ("training", "medical", "technologist"):
         out[k] = fmt_notifications(when, sns[k])
