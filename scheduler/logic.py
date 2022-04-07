@@ -2390,10 +2390,10 @@ def fmt_notifications(when, ens, sns):
     hours = fmt_hours()
     out = {
         "schedule": fmt_regular_notifications(hours, ens)
-        + fmt_support_notifications(hours, when, sns["schedule"]),
+        + fmt_support_notifications(hours, when, sns["schedule"], True),
     }
     for k in ("training", "medical", "technologist"):
-        out[k] = fmt_support_notifications(hours, when, sns[k])
+        out[k] = fmt_support_notifications(hours, when, sns[k], False)
     return out
 
 
@@ -2424,7 +2424,7 @@ def fmt_regular_notifications(hours, ens):
     return "\n".join(acc)
 
 
-def fmt_support_notifications(hours, when, sns):
+def fmt_support_notifications(hours, when, sns, include_kind):
     if len(sns) == 0:
         return ""
     return ""  # TODO
