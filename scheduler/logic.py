@@ -2400,7 +2400,28 @@ def fmt_notifications(when, ens, sns):
 def fmt_regular_notifications(hours, ens):
     if len(ens) == 0:
         return ""
-    return ""  # TODO
+    acc = []
+
+    def push(t):
+        acc.append(t)
+
+    def push_state(what, old, new):
+        if old == "":
+            push(f"\tset {what} to {new}")
+        elif new == "":
+            push(f"\tcleared {what} (was {old})")
+        else:
+            push(f"\tchanged {what} from {old} to {new}")
+
+    for en in ens:
+        hour = hours[int(en["hour"])]
+        push(f"{en['date']}: {hour}")
+        if "group" in en:
+            push_state("group", *en["group"])
+        if "member" in en:
+            push_state("member", *en["member"])
+
+    return "\n".join(acc)
 
 
 def fmt_support_notifications(hours, when, sns):
