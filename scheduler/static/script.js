@@ -1382,7 +1382,31 @@ function fmt_save_results(data, cells, human_hours) {
 		if (data.saved > 1) {
 			s = "entries";
 		}
-		return `${data.saved} ${s} updated`;
+		let out = `${data.saved} ${s} updated`;
+		if ("notifications" in data) {
+			let acc = ['<ul>'];
+			for (const n of data["notifications"]) {
+				acc.push('<li>');
+				console.log(n);
+				switch (n.msg) {
+					case "address":
+						acc.push(`no address in database to send ${n.key} notification`);
+						break;
+
+					case "failed":
+						acc.push(`${n.key} notification failed to send, check server logs`);
+						break;
+
+					case "success":
+						acc.push(`${n.key} notification sent`);
+						break;
+				}
+				acc.push(`</li>`);
+			}
+			acc.push("</ul>")
+			out += acc.join("");
+		}
+		return out;
 	}
 
 	const errors = Object.entries(data.errors ?? []);
