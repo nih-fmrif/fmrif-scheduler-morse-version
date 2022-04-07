@@ -2428,7 +2428,7 @@ def send_scheduler_notifications(device: model.Device, msgs):
             note("address")
             continue
 
-        subject = f"[scheduler] {key} {subj}"
+        subject = f"[scheduler] {device.label}: {key} {subj}"
         ok = message.send(addr, subject, msg)
         note("failed" if not ok else "success")
 
