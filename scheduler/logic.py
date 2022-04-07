@@ -2375,11 +2375,13 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
         "technologist": [],
     }
     for sn in srs_notes:
+        t = when[sn["id"]]
         # old entry
-        if when[sn["id"]][0]:
+        if t[0]:
             continue
-        srs_out["schedule"] = sn
-        srs_out[sn["kind"]] = sn
+        with_time = (t[1:], sn)
+        srs_out["schedule"] = with_time
+        srs_out[sn["kind"]] = with_time
 
     return diffs_out, srs_out
 
