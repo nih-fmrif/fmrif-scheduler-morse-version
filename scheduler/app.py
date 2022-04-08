@@ -992,7 +992,7 @@ def device(the_device):
         ens, sns = logic.prepare_notifications(
             send_notifications, when, diffs, srs_notes
         )
-        notifications = logic.fmt_notifications(when, ens, sns)
+        notifications = logic.fmt_notifications(ens, sns)
 
         # apply the changes then send notifications once they're committed
         for s in staged:

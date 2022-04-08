@@ -2375,24 +2375,24 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
         "technologist": [],
     }
     for sn in srs_notes:
-        t = when[sn["id"]]
-        # old entry
-        if t[0]:
+        old, date, hour = when[sn["id"]]
+        if old:
             continue
+        with_time = (date, hour, sn)
         srs_out["schedule"].append(with_time)
         srs_out[sn["kind"]].append(with_time)
 
     return diffs_out, srs_out
 
 
-def fmt_notifications(when, ens, sns):
+def fmt_notifications(ens, sns):
     hours = fmt_hours()
     out = {
         "schedule": fmt_regular_notifications(hours, ens)
-        + fmt_support_notifications(hours, when, sns["schedule"], True),
+        + fmt_support_notifications(hours, sns["schedule"], True),
     }
     for k in ("training", "medical", "technologist"):
-        out[k] = fmt_support_notifications(hours, when, sns[k], False)
+        out[k] = fmt_support_notifications(hours, sns[k], False)
     return out
 
 
@@ -2423,7 +2423,7 @@ def fmt_regular_notifications(hours, ens):
     return "\n".join(acc)
 
 
-def fmt_support_notifications(hours, when, sns, include_kind):
+def fmt_support_notifications(hours, sns, include_kind):
     if len(sns) == 0:
         return ""
     return ""  # TODO
