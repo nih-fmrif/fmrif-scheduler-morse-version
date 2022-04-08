@@ -2379,9 +2379,8 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
         # old entry
         if t[0]:
             continue
-        with_time = (t[1:], sn)
-        srs_out["schedule"] = with_time
-        srs_out[sn["kind"]] = with_time
+        srs_out["schedule"].append(with_time)
+        srs_out[sn["kind"]].append(with_time)
 
     return diffs_out, srs_out
 
