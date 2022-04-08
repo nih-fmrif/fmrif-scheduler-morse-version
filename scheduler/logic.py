@@ -2387,10 +2387,14 @@ def prepare_notifications(send_notifications, when, diffs, srs_notes):
 
 def fmt_notifications(ens, sns):
     hours = fmt_hours()
-    out = {
-        "schedule": fmt_regular_notifications(hours, ens)
-        + fmt_support_notifications(hours, sns["schedule"], True),
-    }
+    schedule = fmt_regular_notifications(hours, ens)
+    sr_schedule = fmt_support_notifications(hours, sns["schedule"], True)
+    if sr_schedule:
+        # both regular and SR notifications, add separator
+        if schedule:
+            schedule += "\n"
+        schedule += "Support Requests\n" + sr_schedule
+    out = {"schedule": schedule}
     for k in ("training", "medical", "technologist"):
         out[k] = fmt_support_notifications(hours, sns[k], False)
     return out
