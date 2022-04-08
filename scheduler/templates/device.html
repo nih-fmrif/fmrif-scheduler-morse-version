@@ -115,10 +115,11 @@
 													<fieldset data-sr=tech data-new="{% if sr.tech %}false{% else %}true{% endif %}" disabled>
 														<legend>technologist</legend>
 														{{ requested("tech-requested-" ~ x.id, sr.tech is defined and sr.tech.approved is not sameas false) }}
-														<fieldset data-orig="{{ sr.note or "cover" }}">
+														{% set note %}{% if sr.tech %}{{ sr.tech.note }}{% else %}cover{% endif %}{% endset %}
+														<fieldset data-orig="{{ note }}">
 															<legend>kind</legend>
-															{{ tech_kind(x.id, "cover", "cover", sr.note != "support") }}
-															{{ tech_kind(x.id, "support", "support", sr.note == "support") }}
+															{{ tech_kind(x.id, "cover", "cover", note != "support") }}
+															{{ tech_kind(x.id, "support", "support", note == "support") }}
 														</fieldset>
 														{{ handler("tech-handler-" ~ x.id, "tech", sr.tech) }}
 													</fieldset>
