@@ -2430,7 +2430,52 @@ def fmt_regular_notifications(hours, ens):
 def fmt_support_notifications(hours, sns, include_kind):
     if len(sns) == 0:
         return ""
-    return ""  # TODO
+    acc = []
+
+    def push(t):
+        acc.append(t)
+
+    # if we're including kind, double indent
+    indent = "\t"
+    if include_kind:
+        indent = "\t\t"
+
+    last_section = ""
+    for (date, hour, sn) in sns:
+        # if this is for the regular email, there may be multiple SR changes in a row,
+        # if so, we only want to add the section header once
+        section = f"{date}: {hours[hour]}"
+        if section != last_section:
+            push(section)
+            last_section = section
+        if include_kind:
+            push(f"\t{sn['kind']}")
+
+        s = sn["state"]
+        if s == "new":
+            push(f"{indent}new request")
+        elif s == "updated":
+            push(f"{indent}request updated")
+        elif s == "retracted":
+            push(f"{indent}request retracted")
+        elif s == "denied":
+            push(f"{indent}request denied")
+        elif s == "canceled":
+            push(f"{indent}request canceled")
+        elif s == "unassigned":
+            push(f"{indent}request no longer has handler but still open")
+        elif s == "reassigned":
+            push(f"{indent}request reassigned to new handler")
+        elif s == "approved":
+            push(f"{indent}request approved")
+
+        if "handler" in sn:
+            push(f"{indent}to be handled by {sn['handler']}")
+
+        if "subkind" in sn:
+            push(f"{indent}scan/cover set to {sn['subkind'][1]}")
+
+    return "\n".join(acc)
 
 
 def send_scheduler_notifications(device: model.Device, msgs):
