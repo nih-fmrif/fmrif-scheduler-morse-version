@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 13.4 (Debian 13.4-3)
--- Dumped by pg_dump version 13.4 (Debian 13.4-3)
+-- Dumped from database version 13.5 (Debian 13.5-0+deb11u1)
+-- Dumped by pg_dump version 13.5 (Debian 13.5-0+deb11u1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -394,7 +394,7 @@ CREATE VIEW public.app_log_json AS
            FROM support_entries
         ), filtered_and_sorted_entries AS (
          SELECT combined_entries.schedid,
-            json_build_object('modified', combined_entries.modified, 'kind', combined_entries.kind, 'values', combined_entries."values") AS entries
+            json_build_object('modified', combined_entries.modified, 'kind', combined_entries.kind, 'by', combined_entries.chg_by, 'values', combined_entries."values") AS entries
            FROM combined_entries
           WHERE (length((combined_entries."values")::text) > 2)
           ORDER BY combined_entries.modified
