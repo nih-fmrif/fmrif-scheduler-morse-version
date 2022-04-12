@@ -11,71 +11,73 @@
 		{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
 	{% endfor %}
 	<datalist id=none></datalist>
-	<form class="editor template-editor">
-		{{ form.csrf_token }}
-		<div id=caption data-changed="false" data-error="false">{{ title }}{{ macros.edit_icons("template") }}</div>
-		<div id="scroll-container" aria-labelledby=caption tabindex=0>
-			<table aria-labelledby=caption>
-				<thead>
-					<tr>
-						<td></td>
-						<th>Sun</th>
-						<th>Mon</th>
-						<th>Tue</th>
-						<th>Wed</th>
-						<th>Thu</th>
-						<th>Fri</th>
-						<th>Sat</th>
-					</tr>
-				</thead>
-				<tbody>
-					{% for xs in entries %}
-						{% set h = loop.index-1 %}
-						<tr id="row-{{ h }}" data-hour="{{ h }}"><th scope=row>{{ hours[h] }}</th>
-						{% for x in xs %}
-							<td>
-								<entry-cell data-id="{{ x.id }}" data-hour="{{ x.hour }}" data-date="{{ x.dow }}" data-can-edit="false" data-changed="false" data-error="false">
-									{{ macros.entry_legend(colors[x.group] if x.group) }}
-									<entry-editor>
-										{{ macros.entry_text("ins-" ~ x.id, "institute", "institutes", x.inst) }}
-										{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
-										{{ macros.entry_text("mem-" ~ x.id, "member", "none", x.user) }}
-									</entry-editor>
-									<entry-buttons><button type=button disabled data-reset>reset</button></entry-buttons>
-									<entry-status>{{ macros.edit_icons("entry") }}</entry-status>
-								</entry-cell>
-							</td>
+	<div class="editor-container">
+		<form class="editor template-editor">
+			{{ form.csrf_token }}
+			<div id=caption data-changed="false" data-error="false">{{ title }}{{ macros.edit_icons("template") }}</div>
+			<div id="scroll-container" aria-labelledby=caption tabindex=0>
+				<table aria-labelledby=caption>
+					<thead>
+						<tr>
+							<td></td>
+							<th>Sun</th>
+							<th>Mon</th>
+							<th>Tue</th>
+							<th>Wed</th>
+							<th>Thu</th>
+							<th>Fri</th>
+							<th>Sat</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for xs in entries %}
+							{% set h = loop.index-1 %}
+							<tr id="row-{{ h }}" data-hour="{{ h }}"><th scope=row>{{ hours[h] }}</th>
+							{% for x in xs %}
+								<td>
+									<entry-cell data-id="{{ x.id }}" data-hour="{{ x.hour }}" data-date="{{ x.dow }}" data-can-edit="false" data-changed="false" data-error="false">
+										{{ macros.entry_legend(colors[x.group] if x.group) }}
+										<entry-editor>
+											{{ macros.entry_text("ins-" ~ x.id, "institute", "institutes", x.inst) }}
+											{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
+											{{ macros.entry_text("mem-" ~ x.id, "member", "none", x.user) }}
+										</entry-editor>
+										<entry-buttons><button type=button disabled data-reset>reset</button></entry-buttons>
+										<entry-status>{{ macros.edit_icons("entry") }}</entry-status>
+									</entry-cell>
+								</td>
+							{% endfor %}
 						{% endfor %}
-					{% endfor %}
-				</tbody>
-			</table>
-		</div>
-		<div id="focus-trap"></div>
-		<button id="apply" type=submit disabled>save</button>
-	</form>
-	<figure class=legend>
-		<figcaption>legend</figcaption>
-		<dl>
-			<div>
-				<dt>state icons</dt>
-				<dd>
-					<dl>
-						<div>
-							<dt>{{ icons.pencil("pencil") }}</dt>
-							<dd>unsaved changes</dd>
-						</div>
-						<div>
-							<dt>{{ icons.exclaim_triangle("exclamation point in triangle")}}</dt>
-							<dd>errors are present</dd>
-						</div>
-						<div>
-							<dt>{{ icons.lock("lock") }}</dt>
-							<dd>server could not process request as another user has edited that entry</dd>
-						</div>
-					</dl>
-				</dd>
+					</tbody>
+				</table>
 			</div>
-		</dl>
-	</figure>
+			<div id="focus-trap"></div>
+			<button id="apply" type=submit disabled>save</button>
+		</form>
+		<figure class=legend>
+			<figcaption>legend</figcaption>
+			<dl>
+				<div>
+					<dt>state icons</dt>
+					<dd>
+						<dl>
+							<div>
+								<dt>{{ icons.pencil("pencil") }}</dt>
+								<dd>unsaved changes</dd>
+							</div>
+							<div>
+								<dt>{{ icons.exclaim_triangle("exclamation point in triangle")}}</dt>
+								<dd>errors are present</dd>
+							</div>
+							<div>
+								<dt>{{ icons.lock("lock") }}</dt>
+								<dd>server could not process request</dd>
+							</div>
+						</dl>
+					</dd>
+				</div>
+			</dl>
+		</figure>
+	</div>
 	{{ macros.save_dialogs() }}
 {% endblock %}

@@ -558,12 +558,26 @@ p.note svg {
 	margin-bottom: 1rem;
 }
 
+.editor-container {
+	display: flex;
+	flex-wrap: wrap;
+}
+.editor-container .editor {
+	flex-grow: 1;
+	flex-shrink: 0;
+	max-width: 100%;
+}
+
 figure.legend {
 	margin: 1.5rem;
 	border: 1px solid currentColor;
 	padding: .5rem;
-	width: max-content;
-	max-width: 100%;
+	min-width: min-content;
+	width: 100%;
+	max-width: max-content;
+	flex-shrink: 1;
+	flex-grow: 0;
+	align-self: start;
 }
 
 .legend figcaption {
