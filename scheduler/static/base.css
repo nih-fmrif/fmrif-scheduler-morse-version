@@ -616,10 +616,19 @@ figure.legend {
 	margin: 0;
 }
 
+.editor table {
+	border-collapse: collapse;
+}
+.editor :where(td, th) {
+	border: 0;
+	padding: 0;
+}
+
 entry-status {
 	font-size: .875rem;
 	display: flex;
 	gap: 1rem;
+	margin-right: .25rem;
 }
 
 entry-status .edit-icons {
@@ -673,10 +682,12 @@ entry-cell {
 entry-legend {
 	grid-area: legend;
 	background-color: var(--swatch);
+	forced-color-adjust: none;
 }
 entry-status {
 	grid-area: status;
 	justify-self: end;
+	line-height: 1;
 }
 entry-editor {
 	grid-area: editor;
@@ -687,6 +698,21 @@ entry-support {
 entry-buttons {
 	grid-area: buttons;
 	align-self: end;
+	padding: .25rem;
+}
+entry-cell input-set {
+	margin-top: 0;
+	margin-bottom: 0;
+	row-gap: 0;
+	column-gap: .25rem;
+}
+
+entry-support>fieldset {
+	padding: 0;
+	padding-bottom: .25rem;
+}
+entry-support legend {
+	font-size: .875rem;
 }
 entry-cell:not([data-locked]) .edit-icons svg:first-child,
 entry-cell[data-changed=false] .edit-icons svg:nth-child(2),
