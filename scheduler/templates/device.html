@@ -116,8 +116,8 @@
 														<legend>technologist</legend>
 														{{ requested("tech-requested-" ~ x.id, sr.tech is defined and sr.tech.approved is not sameas false) }}
 														{% set note %}{% if sr.tech %}{{ sr.tech.note }}{% else %}cover{% endif %}{% endset %}
-														<fieldset data-orig="{{ note }}">
-															<legend>kind</legend>
+														<fieldset class=sk-sel data-orig="{{ note }}">
+															<legend><span>kind</span></legend>
 															{{ tech_kind(x.id, "cover", "cover", note != "support") }}
 															{{ tech_kind(x.id, "support", "support", note == "support") }}
 														</fieldset>

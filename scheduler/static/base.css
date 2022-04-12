@@ -714,6 +714,18 @@ entry-support>fieldset {
 entry-support legend {
 	font-size: .875rem;
 }
+.sk-sel legend {
+	display: contents;
+}
+.sk-sel legend span { 
+	padding-left: .25rem;
+}
+fieldset.sk-sel {
+	padding: 0;
+	margin: 0;
+	border: 0;
+}
+
 entry-cell:not([data-locked]) .edit-icons svg:first-child,
 entry-cell[data-changed=false] .edit-icons svg:nth-child(2),
 entry-cell[data-error=false] .edit-icons svg:last-child {
