@@ -96,6 +96,28 @@ body {
 	}
 }
 
+a {
+	color: var(--link);
+}
+a:active {
+	color: var(--link-active);
+}
+a:visited {
+	color: var(--link-visited);
+}
+a:hover {
+	text-decoration-thickness: 2px;
+}
+:focus:not(:focus-visible) {
+	outline: 0;
+}
+:focus-visible {
+	outline: .2rem solid var(--focus);
+}
+a:focus-visible {
+	outline-offset: 1px;
+}
+
 sr-only {
 	clip: rect(0 0 0 0);
 	clip-path: inset(50%);
