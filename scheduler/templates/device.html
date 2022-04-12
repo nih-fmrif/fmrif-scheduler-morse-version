@@ -139,11 +139,14 @@
 													</fieldset>
 												{% endif %}
 											</entry-support>
-											<button type=button disabled data-reset>reset</button>
-											<button type=button aria-has-popup="true" data-for="{{ x.id }}" hidden>
-												{{ icons.book() }}<sr-only>view activity</sr-only> log
-											</button>
+											<entry-buttons>
+												<button type=button disabled data-reset>reset</button>
+												<button type=button aria-has-popup="true" data-for="{{ x.id }}" hidden>
+													{{ icons.book() }}<sr-only>view activity</sr-only> log
+												</button>
+											</entry-buttons>
 											<entry-status>
+												{{ macros.edit_icons("entry") }}
 												<div class=time-use-icon>
 													{% if x.used is none %}
 														{{ icons.square_empty() }}
@@ -153,7 +156,6 @@
 														{{ icons.square_unused("time unused") }}
 													{% endif %}
 												</div>
-												{{ macros.edit_icons("entry") }}
 											</entry-status>
 										</entry-cell>
 									</td>

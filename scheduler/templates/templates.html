@@ -41,7 +41,7 @@
 										{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
 										{{ macros.entry_text("mem-" ~ x.id, "member", "none", x.user) }}
 									</entry-editor>
-									<button type=button disabled data-reset>reset</button>
+									<entry-buttons><button type=button disabled data-reset>reset</button></entry-buttons>
 									<entry-status>{{ macros.edit_icons("entry") }}</entry-status>
 								</entry-cell>
 							</td>

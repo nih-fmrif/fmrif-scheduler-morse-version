@@ -661,6 +661,33 @@ button#expando[aria-expanded="true"] svg:nth-of-type(2) {
 	visibility: hidden;
 }
 
+entry-cell {
+	display: grid;
+	grid-template-columns: 1rem auto;
+	grid-template-areas: 
+		"legend status"
+		"legend editor"
+		"legend support"
+		"legend buttons";
+}
+entry-legend {
+	grid-area: legend;
+	background-color: var(--swatch);
+}
+entry-status {
+	grid-area: status;
+	justify-self: end;
+}
+entry-editor {
+	grid-area: editor;
+}
+entry-support {
+	grid-area: support;
+}
+entry-buttons {
+	grid-area: buttons;
+	align-self: end;
+}
 entry-cell:not([data-locked]) .edit-icons svg:first-child,
 entry-cell[data-changed=false] .edit-icons svg:nth-child(2),
 entry-cell[data-error=false] .edit-icons svg:last-child {
