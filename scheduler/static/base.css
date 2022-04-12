@@ -118,6 +118,15 @@ a:focus-visible {
 	outline-offset: 1px;
 }
 
+.validation-icons>:first-child,
+.edit-icons svg:not(:nth-child(2)),
+.legend .red {
+	color: var(--err);
+}
+.validation-icons>:last-child {
+	color: var(--ok);
+ }
+
 sr-only {
 	clip: rect(0 0 0 0);
 	clip-path: inset(50%);
