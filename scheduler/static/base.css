@@ -63,6 +63,39 @@ body {
 }
 
 /* end normalizations */
+
+:root {
+	--fg: black;
+	--bg: white;
+	--link: blue;
+	--link-active: red;
+	--link-visited: purple;
+	--ok: green;
+	--warn: yellow;
+	--err: red;
+	--focus: blue;
+	--btn: black;
+	--btn-bg: white;
+	--input-bg: white;
+	--dialog-overlay: rgb(0 0 0 / .5);
+	color-scheme: light dark;
+	accent-color: var(--link);
+	background-color: var(--bg);
+	color: var(--fg);
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--fg: white;
+		--bg: black;
+		--dialog-overlay: rgb(0 0 0 / .4);
+	}
+}
+@media (forced-colors: active) {
+	:root {
+		--dialog-overlay: Canvas;
+	}
+}
+
 sr-only {
 	clip: rect(0 0 0 0);
 	clip-path: inset(50%);
@@ -352,15 +385,13 @@ input[list]::-webkit-list-button {
 	left: 0;
 	right: 0;
 	bottom: 0;
-	background-color: rgb(0 0 0 / .5);
-	/* XXX hardcoded color */
+	background-color: var(--dialog-overlay);
 }
 
 .dialog-box-container {
 	isolation: isolate;
 	margin: auto;
-	background-color: white;
-	/* XXX hardcoded color */
+	background-color: var(--bg);
 	display: grid;
 	padding: .5rem .75rem;
 	max-width: 99vw;
@@ -697,6 +728,8 @@ entry-legend {
 	grid-area: legend;
 	background-color: var(--swatch);
 	forced-color-adjust: none;
+	-webkit-print-color-adjust: exact;
+	print-color-adjust: exact;
 }
 entry-status {
 	grid-area: status;
@@ -751,15 +784,13 @@ entry-cell button[data-for][hidden] {
 	visibility: hidden;
 }
 
+/* XXX temp */
 td:focus {
 	outline: 3px dotted hotpink
 }
-
-/* XXX temp */
 td:not(:focus):focus-within {
 	outline: 3px dotted dodgerblue;
 }
-
 /* XXX temp */
 
 @media screen {
@@ -772,8 +803,7 @@ td:not(:focus):focus-within {
 	}
 
 	.editor :is(tbody th, thead) {
-		background-color: white;
-		/* hardcoded color */
+		background-color: var(--bg);
 		position: sticky;
 	}
 
