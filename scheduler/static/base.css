@@ -71,11 +71,12 @@ body {
 	--link-active: red;
 	--link-visited: purple;
 	--ok: green;
-	--warn: yellow;
+	--warn: goldenrod;
 	--err: red;
 	--focus: blue;
 	--btn: black;
 	--btn-bg: white;
+	--input: black;
 	--input-bg: white;
 	--dialog-overlay: rgb(0 0 0 / .5);
 	color-scheme: light dark;
@@ -83,16 +84,43 @@ body {
 	background-color: var(--bg);
 	color: var(--fg);
 }
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
 	:root {
 		--fg: white;
 		--bg: black;
+		--link: blue;
+		--link-active: red;
+		--link-visited: violet;
+		--ok: lightgreen;
+		--warn: yellow;
+		--err: red;
+		--focus: blue;
+		--btn: white;
+		--btn-bg: black;
+		--input: white;
+		--input-bg: black;
 		--dialog-overlay: rgb(0 0 0 / .4);
 	}
 }
-@media (forced-colors: active) {
+@media screen and (forced-colors: active) {
 	:root {
+		/* these will be redundant in most cases but specifying everything fully
+		   so that nonstandard uses compute properly */
+		--fg: CanvasText;
+		--bg: Canvas;
+		--link: LinkText;
+		/* active and visited always use LinkText in HCM so follow the same practice here */
+		--link-active: LinkText;
+		--link-visited: LinkText;
 		--dialog-overlay: Canvas;
+		--ok: Highlight;
+		--warn: Highlight;
+		--err: Highlight;
+		--input: FieldText;
+		--input-bg: Field;
+		--btn: ButtonText;
+		--btn-bg: ButtonFace;
+		accent-color: revert;
 	}
 }
 
@@ -116,6 +144,20 @@ a:hover {
 }
 a:focus-visible {
 	outline-offset: 1px;
+}
+
+input:not([type=submit], [type=button], [type=color]) {
+	color: var(--input);
+	background-color: var(--input-bg);
+	border: 1px solid var(--input);
+	border-radius: 2px;
+}
+button,
+input:where([type=submit], [type=button]) {
+	color: var(--btn);
+	background-color: var(--btn-bg);
+	border: 1px solid var(--btn);
+	border-radius: 4px;
 }
 
 .validation-icons>:first-child,
@@ -224,6 +266,7 @@ input-set[is-required] label svg {
 	position: relative;
 	vertical-align: baseline;
 	top: -.3em;
+	color: var(--err);
 }
 
 input-widget {
@@ -366,30 +409,32 @@ input[list]::-webkit-list-button {
 	list-style: none;
 }
 
-.flash-messages .msg-info {
-	--msg-fg: ;
-	--msg-bg: ;
+.flash-messages .msg-message {
+	--msg-fg: var(--ok);
+	--msg-bg: var(--bg);
 }
 
 .flash-messages .msg-warning {
-	--msg-fg: ;
-	--msg-bg: ;
+	--msg-fg: var(--warn);
+	--msg-bg: var(--bg);
 }
 
 .flash-messages .msg-error {
-	--msg-fg: ;
-	--msg-bg: ;
+	--msg-fg: var(--err);
+	--msg-bg: var(--bg);
 }
 
 .flash-messages li {
-	color: var(--msg-fg);
 	background-color: var(--msg-bg);
-	border: .1875rem solid currentColor;
+	border: .1875rem solid var(--msg-fg);
 	border-radius: .5rem;
 	padding: .5rem;
 	display: flex;
 	gap: .5rem;
 	align-items: center;
+}
+.flash-messages svg {
+	color: var(--msg-fg);
 }
 
 .flash-messages li:not(:last-child) {
@@ -429,6 +474,7 @@ input[list]::-webkit-list-button {
 	max-height: 95vh;
 	overflow-y: hidden;
 	border-radius: 2px;
+	border: 3px solid currentColor;
 	gap: .5rem 1rem;
 	grid-template-columns: 1fr max-content;
 	grid-template-rows: auto 1fr auto;
@@ -476,7 +522,6 @@ input[list]::-webkit-list-button {
 }
 
 @keyframes wave {
-
 	0%,
 	100% {
 		transform: translateY(0);
@@ -815,14 +860,12 @@ entry-cell button[data-for][hidden] {
 	visibility: hidden;
 }
 
-/* XXX temp */
 td:focus {
-	outline: 3px dotted hotpink
+	outline: 3px solid var(--focus);
 }
 td:not(:focus):focus-within {
-	outline: 3px dotted dodgerblue;
+	outline: 3px solid var(--fg);
 }
-/* XXX temp */
 
 @media screen {
 	.editor #scroll-container {
