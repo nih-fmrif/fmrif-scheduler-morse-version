@@ -76,6 +76,7 @@ body {
 	--focus: blue;
 	--btn: black;
 	--btn-bg: white;
+	--btn-hover: white;
 	--input: black;
 	--input-bg: white;
 	--dialog-overlay: rgb(0 0 0 / .5);
@@ -97,6 +98,7 @@ body {
 		--focus: blue;
 		--btn: white;
 		--btn-bg: black;
+		--btn-hover: black;
 		--input: white;
 		--input-bg: black;
 		--dialog-overlay: rgb(0 0 0 / .4);
@@ -120,6 +122,7 @@ body {
 		--input-bg: Field;
 		--btn: ButtonText;
 		--btn-bg: ButtonFace;
+		--btn-hover: ButtonFace;
 		accent-color: revert;
 	}
 }
@@ -158,6 +161,10 @@ input:where([type=submit], [type=button]) {
 	background-color: var(--btn-bg);
 	border: 1px solid var(--btn);
 	border-radius: 4px;
+}
+
+:is(button, input:where([type=submit], [type=button])):hover {
+	background-color: var(--btn-hover);
 }
 
 .validation-icons>:first-child,
