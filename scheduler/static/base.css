@@ -958,3 +958,24 @@ td:not(:focus):focus-within {
 		padding-right: var(--th-off);
 	}
 }
+
+@media print {
+
+	.top,
+	.subpage-nav,
+	.jump-form,
+	.editor button,
+	.editor .validation-icons svg:nth-of-type(2) {
+		display: none;
+	}
+
+	.editor #caption {
+		text-align: center;
+	}
+
+	input:not([type=button], [type=submit], [type=color]) {
+		border-color: transparent;
+		background-color: transparent;
+		color: inherit;
+	}
+}

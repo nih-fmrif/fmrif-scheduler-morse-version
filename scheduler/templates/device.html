@@ -6,7 +6,7 @@
 	{% if never_entries %}
 		<p class=note>{{ icons.info() }} {{ never_entries }}</p>
 	{% else %}
-		<nav aria-labelledby=jump-hdr>
+		<nav class=jump-form aria-labelledby=jump-hdr>
 			<form>
 				<span id=jump-hdr>jump to</span>
 				<input name=start aria-label="start date" type=text spellcheck=false autocomplete=off pattern="[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}" value="{{ start_date }}" required>
