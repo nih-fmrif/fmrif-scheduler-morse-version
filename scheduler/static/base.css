@@ -903,7 +903,8 @@ entry-cell[data-error=false] .edit-icons svg:last-child {
 	visibility: hidden;
 }
 
-entry-cell button[data-for][hidden] {
+entry-cell button:is([data-reset][disabled], [data-for][hidden]),
+#focus-trap+#apply[disabled] {
 	display: inline-block;
 	visibility: hidden;
 }
