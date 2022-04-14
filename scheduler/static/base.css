@@ -65,21 +65,21 @@ body {
 /* end normalizations */
 
 :root {
-	--fg: black;
-	--bg: white;
-	--link: blue;
-	--link-active: red;
-	--link-visited: purple;
-	--ok: green;
+	--fg: #111;
+	--bg: #fefefe;
+	--link: #0470bb;
+	--link-active: #c50000;
+	--link-visited: #800080;
+	--ok: #0d7100;
 	--warn: goldenrod;
-	--err: red;
-	--focus: blue;
-	--btn: black;
-	--btn-bg: white;
-	--btn-hover: white;
-	--input: black;
-	--input-bg: white;
-	--border: gray;
+	--err: var(--link-active);
+	--focus: var(--link);
+	--btn: var(--fg);
+	--btn-bg: #f0faff;
+	--btn-hover: #909090;
+	--input: var(--fg);
+	--input-bg: #fcfcfc;
+	--border: #818181;
 	--dialog-overlay: rgb(0 0 0 / .5);
 	color-scheme: light dark;
 	accent-color: var(--link);
