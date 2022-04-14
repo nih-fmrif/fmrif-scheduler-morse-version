@@ -104,7 +104,7 @@ body {
 		--input: white;
 		--input-bg: black;
 		--border: darkgray;
-		--dialog-overlay: rgb(0 0 0 / .4);
+		--dialog-overlay: rgb(0 0 0 / .7);
 	}
 }
 
