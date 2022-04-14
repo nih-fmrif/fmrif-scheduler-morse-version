@@ -83,8 +83,12 @@ body {
 	--dialog-overlay: rgb(0 0 0 / .5);
 	color-scheme: light dark;
 	accent-color: var(--link);
-	background-color: var(--bg);
+}
+
+html,
+body {
 	color: var(--fg);
+	background-color: var(--bg);
 }
 
 @media screen and (prefers-color-scheme: dark) {
