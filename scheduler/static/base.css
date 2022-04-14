@@ -85,6 +85,7 @@ body {
 	background-color: var(--bg);
 	color: var(--fg);
 }
+
 @media screen and (prefers-color-scheme: dark) {
 	:root {
 		--fg: white;
@@ -104,6 +105,7 @@ body {
 		--dialog-overlay: rgb(0 0 0 / .4);
 	}
 }
+
 @media screen and (forced-colors: active) {
 	:root {
 		/* these will be redundant in most cases but specifying everything fully
@@ -130,21 +132,27 @@ body {
 a {
 	color: var(--link);
 }
+
 a:active {
 	color: var(--link-active);
 }
+
 a:visited {
 	color: var(--link-visited);
 }
+
 a:hover {
 	text-decoration-thickness: 2px;
 }
+
 :focus:not(:focus-visible) {
 	outline: 0;
 }
+
 :focus-visible {
 	outline: .2rem solid var(--focus);
 }
+
 a:focus-visible {
 	outline-offset: 1px;
 }
@@ -155,6 +163,7 @@ input:not([type=submit], [type=button], [type=color]) {
 	border: 1px solid var(--input);
 	border-radius: 2px;
 }
+
 button,
 input:where([type=submit], [type=button]) {
 	color: var(--btn);
@@ -172,9 +181,10 @@ input:where([type=submit], [type=button]) {
 .legend .red {
 	color: var(--err);
 }
+
 .validation-icons>:last-child {
 	color: var(--ok);
- }
+}
 
 sr-only {
 	clip: rect(0 0 0 0);
@@ -440,6 +450,7 @@ input[list]::-webkit-list-button {
 	gap: .5rem;
 	align-items: center;
 }
+
 .flash-messages svg {
 	color: var(--msg-fg);
 }
@@ -529,6 +540,7 @@ input[list]::-webkit-list-button {
 }
 
 @keyframes wave {
+
 	0%,
 	100% {
 		transform: translateY(0);
@@ -676,6 +688,7 @@ p.note svg {
 	display: flex;
 	flex-wrap: wrap;
 }
+
 .editor-container .editor {
 	flex-grow: 1;
 	flex-shrink: 0;
@@ -747,6 +760,7 @@ figure.legend {
 .editor table {
 	border-collapse: collapse;
 }
+
 .editor :where(td, th) {
 	border: 0;
 	padding: 0;
@@ -801,12 +815,13 @@ button#expando[aria-expanded="true"] svg:nth-of-type(2) {
 entry-cell {
 	display: grid;
 	grid-template-columns: 1rem auto;
-	grid-template-areas: 
+	grid-template-areas:
 		"legend status"
 		"legend editor"
 		"legend support"
 		"legend buttons";
 }
+
 entry-legend {
 	grid-area: legend;
 	background-color: var(--swatch);
@@ -814,22 +829,27 @@ entry-legend {
 	-webkit-print-color-adjust: exact;
 	print-color-adjust: exact;
 }
+
 entry-status {
 	grid-area: status;
 	justify-self: end;
 	line-height: 1;
 }
+
 entry-editor {
 	grid-area: editor;
 }
+
 entry-support {
 	grid-area: support;
 }
+
 entry-buttons {
 	grid-area: buttons;
 	align-self: end;
 	padding: .25rem;
 }
+
 entry-cell input-set {
 	margin-top: 0;
 	margin-bottom: 0;
@@ -841,15 +861,19 @@ entry-support>fieldset {
 	padding: 0;
 	padding-bottom: .25rem;
 }
+
 entry-support legend {
 	font-size: .875rem;
 }
+
 .sk-sel legend {
 	display: contents;
 }
-.sk-sel legend span { 
+
+.sk-sel legend span {
 	padding-left: .25rem;
 }
+
 fieldset.sk-sel {
 	padding: 0;
 	margin: 0;
@@ -870,6 +894,7 @@ entry-cell button[data-for][hidden] {
 td:focus {
 	outline: 3px solid var(--focus);
 }
+
 td:not(:focus):focus-within {
 	outline: 3px solid var(--fg);
 }
