@@ -857,6 +857,10 @@ entry-buttons {
 	grid-area: buttons;
 	align-self: end;
 	padding: .25rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5rem;
+	justify-content: space-between;
 }
 
 entry-cell input-set {
