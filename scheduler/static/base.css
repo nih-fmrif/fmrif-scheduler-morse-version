@@ -909,7 +909,7 @@ td:focus {
 }
 
 td:not(:focus):focus-within {
-	outline: 3px solid var(--fg);
+	outline: 3px solid var(--border);
 }
 
 .editor :is(tbody th, thead) {
