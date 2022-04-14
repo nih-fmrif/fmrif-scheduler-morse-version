@@ -129,6 +129,11 @@ body {
 	}
 }
 
+a[aria-current] {
+	font-weight: bold;
+	text-decoration-thickness: 1px;
+}
+
 a {
 	color: var(--link);
 }
@@ -332,10 +337,6 @@ form-submit {
 
 form>[type=submit] {
 	margin-top: .5rem;
-}
-
-a[aria-current] {
-	font-weight: bold;
 }
 
 svg {
