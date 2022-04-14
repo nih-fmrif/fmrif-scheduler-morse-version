@@ -908,6 +908,10 @@ td:not(:focus):focus-within {
 	outline: 3px solid var(--fg);
 }
 
+.editor :is(tbody th, thead) {
+	font-size: .875rem;
+}
+
 @media screen {
 	.editor #scroll-container {
 		overflow: auto;
