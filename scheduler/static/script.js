@@ -427,6 +427,7 @@ function wire_log_buttons() {
 		if (t == null) {
 			return;
 		}
+		evt.preventDefault();
 		const id = t.dataset["for"];
 		if (!/\d+/.test(id)) {
 			console.warn(["invalid data-for on log button", t]);
