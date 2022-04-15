@@ -928,7 +928,7 @@ td:focus entry-cell {
 	outline: 3px solid var(--focus);
 }
 
-td:not(:focus):focus-within entry-cell {
+td:not(:focus, :focus-visible):focus-within entry-cell {
 	outline: 3px solid var(--border);
 }
 
