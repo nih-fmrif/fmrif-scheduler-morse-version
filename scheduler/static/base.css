@@ -81,14 +81,6 @@ body {
 	--input-bg: #fcfcfc;
 	--border: #818181;
 	--dialog-overlay: rgb(0 0 0 / .5);
-	color-scheme: light dark;
-	accent-color: var(--link);
-}
-
-html,
-body {
-	color: var(--fg);
-	background-color: var(--bg);
 }
 
 @media screen and (prefers-color-scheme: dark) {
@@ -133,6 +125,21 @@ body {
 		--btn-hover: ButtonFace;
 		--border: CanvasText;
 		accent-color: revert;
+	}
+}
+
+html,
+body {
+	color: var(--fg);
+	background-color: var(--bg);
+}
+
+@media screen {
+
+	html,
+	body {
+		color-scheme: light dark;
+		accent-color: var(--link);
 	}
 }
 
