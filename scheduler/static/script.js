@@ -355,7 +355,7 @@ function _fmt_log_entry(k, v) {
 }
 
 function fmt_log(entries) {
-	if (entries.length == 0) {
+	if (entries == null || entries.length == 0) {
 		return "no changes have been logged";
 	}
 	const acc = ['<ul>'];
