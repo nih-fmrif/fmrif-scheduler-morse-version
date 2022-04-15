@@ -85,21 +85,21 @@ body {
 
 @media screen and (prefers-color-scheme: dark) {
 	:root {
-		--fg: white;
-		--bg: black;
-		--link: blue;
-		--link-active: red;
-		--link-visited: violet;
-		--ok: lightgreen;
-		--warn: yellow;
-		--err: red;
-		--focus: blue;
-		--btn: white;
-		--btn-bg: black;
-		--btn-hover: black;
-		--input: white;
-		--input-bg: black;
-		--border: darkgray;
+		--fg: #afaeae;
+		--bg: #1c1c25;
+		--link: #30a3e8;
+		--link-active: #f2564f;
+		--link-visited: #e0a6eb;
+		--ok: #85c252;
+		--warn: #cc0;
+		--err: var(--link-active);
+		--focus: var(--warn);
+		--btn: var(--input);
+		--btn-bg: #333;
+		--btn-hover: #7c7c7c;
+		--input: #eee;
+		--input-bg: #222;
+		--border: #dad0b3;
 		--dialog-overlay: rgb(0 0 0 / .7);
 	}
 }
