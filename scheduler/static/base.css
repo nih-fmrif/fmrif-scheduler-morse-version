@@ -928,6 +928,13 @@ td:not(:focus):focus-within {
 	font-size: .875rem;
 }
 
+.editor #caption {
+	font-size: 110%;
+	font-weight: bolder;
+	text-align: center;
+	margin: 1rem 0;
+}
+
 @media screen {
 	.editor #scroll-container {
 		overflow: auto;
