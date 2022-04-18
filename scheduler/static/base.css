@@ -168,7 +168,8 @@ a:hover {
 	outline: 0;
 }
 
-:focus-visible {
+:focus-visible,
+.editor :focus {
 	outline: .2rem solid var(--focus);
 }
 
