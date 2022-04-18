@@ -686,9 +686,8 @@ function editor_grid() {
 
 	// if focus moves inside the grid,
 	// make sure we update the selected cell in case it has changed
-	const focusFixer = evt => {
+	editor.querySelector('tbody').addEventListener('click', evt => {
 		let t = evt.target;
-
 		const setsInternalFocus = t.matches(":is(input, button, label):not(:disabled)");
 
 		// if we're not a cell, see if we're in a cell
@@ -701,15 +700,9 @@ function editor_grid() {
 
 		const ds = t.dataset;
 		grid.select(ds.row, ds.col);
-
-		// mark grid open if we're focusing an input element
-		if (setsInternalFocus && evt.type == "focusin") {
-			grid.setOpen(true);
-			grid.scrollIntoView(ds.row, ds.col);
-		}
-	};
-	editor.addEventListener("focusin", focusFixer);
-	editor.addEventListener("focusout", focusFixer);
+		grid.setOpen(setsInternalFocus);
+		grid.scrollIntoView(ds.row, ds.col);
+	});
 
 	// if we click inside the grid without changing focus,
 	// focus the correct cell
@@ -1388,7 +1381,6 @@ function fmt_save_results(data, cells, human_hours) {
 			let acc = ['<ul>'];
 			for (const n of data["notifications"]) {
 				acc.push('<li>');
-				console.log(n);
 				switch (n.msg) {
 					case "address":
 						acc.push(`no address in database to send ${n.key} notification`);
