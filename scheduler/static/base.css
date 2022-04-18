@@ -382,8 +382,17 @@ body {
 .top-inner,
 .flash-messages,
 .subpage-nav-inner,
-.body {
-	margin: 0 1rem;
+.body:not(.device, .device_tmpl_schedule_edit) {
+	margin: 0 auto;
+	padding: 0 1rem;
+	max-width: 80rem;
+}
+
+.body:is(.device, .device_tmpl_schedule_edit) {
+	padding: 0 1rem;
+	margin: 0 auto;
+	width: max-content;
+	max-width: 100%;
 }
 
 .top-inner,
@@ -712,6 +721,7 @@ p.note svg {
 .editor-container .editor {
 	flex-grow: 1;
 	flex-shrink: 0;
+	width: max-content;
 	max-width: 100%;
 }
 
@@ -720,8 +730,8 @@ figure.legend {
 	border: 1px solid currentColor;
 	padding: .5rem;
 	min-width: min-content;
-	width: 100%;
-	max-width: max-content;
+	width: max-content;
+	max-width: 100%;
 	flex-shrink: 1;
 	flex-grow: 0;
 	align-self: start;

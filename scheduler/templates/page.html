@@ -57,7 +57,7 @@
 				</div>
 			</nav>
 		{% endif %}
-		<div class=body>{% block body %}{% endblock %}</div>
+		<div class="body {{request.endpoint}}">{% block body %}{% endblock %}</div>
 	</main>
 	<div id=confirm-dialog-container class=dialog-container aria-hidden=true aria-labelledby=dialog-title>
 		<div class=dialog-overlay data-a11y-dialog-hide></div>
