@@ -1320,7 +1320,13 @@ def create_template(
     tmpl.device = for_device.id
 
     model.db.session.add(tmpl)
-    model.db.session.flush()  # need tmpl inserted for next step
+    # need tmpl inserted for next step
+    try:
+        model.db.session.flush()
+    except IntegrityError as ex:
+        form.set_errors_from_exception(ex)
+        model.db.session.rollback()
+        return (False, "")
 
     if form.clone_from.data:
         model.db.session.execute(
