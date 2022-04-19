@@ -1032,11 +1032,12 @@ def device(the_device):
     }
 
 
-@app.route("/json/v1/log/<eid>")
-def entry_log(eid):
+@app.route("/json/v1/log/<id>")
+def entry_log(id):
     if g.user is None:
         abort(403)
 
+    eid, _, templateid = id.partition("-")
     device = logic.get_device_from_schedid(eid)
     if device is None:
         abort(404)
@@ -1045,9 +1046,19 @@ def entry_log(eid):
     if not (device.active or perms.admin):
         abort(403)
 
-    r = logic.get_sched_log_entry(eid)
+    entries = logic.get_sched_log_entry(eid)
 
-    return jsonify(r)
+    template = None
+    templateObject = logic.get_template_from_templateid(templateid)
+    print(templateObject)
+    if templateObject is not None:
+        template = {
+            "id": templateObject.id,
+            "label": templateObject.label,
+            "hidden": templateObject.hidden,
+        }
+
+    return jsonify({"template": template, "entries": entries})
 
 
 @app.route("/device/<the_device>/edit", methods=["GET", "POST"])

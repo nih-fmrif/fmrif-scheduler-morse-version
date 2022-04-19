@@ -955,6 +955,10 @@ td:not(:focus, :focus-visible):focus-within entry-cell {
 	margin: 1rem 0;
 }
 
+p.template-log {
+	margin: 0;
+}
+
 @media screen {
 	.editor #scroll-container {
 		overflow: auto;

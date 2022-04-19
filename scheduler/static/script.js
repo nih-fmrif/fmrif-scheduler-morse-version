@@ -300,9 +300,9 @@ function wire_editor_expando() {
 
 const base = json_or(document.querySelector("#app-root").innerText, "/");
 
-async function loadLog(id, signal) {
+async function loadLog(id, template, signal) {
 	try {
-		const resp = await fetch(`${base}json/v1/log/${id}`, { signal });
+		const resp = await fetch(`${base}json/v1/log/${id}-${template}`, { signal });
 		if (!resp.ok) {
 			return [null, `error: api returned with error code ${resp.status}`];
 		}
@@ -354,7 +354,7 @@ function _fmt_log_entry(k, v) {
 	return `<b>${v}</b>`;
 }
 
-function fmt_log(entries) {
+function _fmt_log_entries(entries) {
 	if (entries == null || entries.length == 0) {
 		return "no changes have been logged";
 	}
@@ -386,7 +386,22 @@ function fmt_log(entries) {
 	return acc.join('');
 }
 
-function logDialog(titleText, id) {
+function _fmt_log_template(template) {
+	if (template == null) {
+		return "";
+	}
+	let status = "";
+	if (template.hidden) {
+		status = " (<i>archived</i>)";
+	}
+	return `<p class=template-log>From template <b>${template.id}</b>: <b>${template.label}</b>${status}.</p>`;
+}
+
+function fmt_log(data) {
+	return _fmt_log_template(data.template) + _fmt_log_entries(data.entries);
+}
+
+function logDialog(titleText, id, template) {
 	const con = document.getElementById('log-dialog-container');
 	const modal = con.querySelector(".dialog-box-container");
 	const title = con.querySelector("#log-dialog-title");
@@ -397,7 +412,7 @@ function logDialog(titleText, id) {
 	dialog.on("show", async () => {
 		disableBodyScroll(modal);
 
-		const [data, err] = await loadLog(id, abort.signal);
+		const [data, err] = await loadLog(id, template, abort.signal);
 		con.classList.add("dialog-loaded");
 		announce("log loaded");
 		if (err != null) {
@@ -433,7 +448,12 @@ function wire_log_buttons() {
 			console.warn(["invalid data-for on log button", t]);
 			return;
 		}
-		logDialog("history", id);
+		const tmpl = t.dataset["fromTemplate"];
+		if (!/\d+/.test(tmpl)) {
+			console.warn(["invalid data-from-template on log button", t]);
+			return;
+		}
+		logDialog("history", id, tmpl);
 	});
 	editor.querySelectorAll("entry-cell button[data-for]").forEach(e => e.hidden = false);
 	editor.classList.add('js-log-buttons');

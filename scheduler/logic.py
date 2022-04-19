@@ -1220,6 +1220,15 @@ def get_template(
     return model.Template.query.get((template_id, for_device.id))
 
 
+def get_template_from_templateid(templateid: str) -> Optional[model.Template]:
+    if templateid == "":
+        return None
+    entry = model.TemplateEntry.query.get(templateid)
+    if entry is None:
+        return None
+    return model.Template.query.get((entry.template, entry.device))
+
+
 def templates_of_device(
     device: model.Device, archived: bool = False
 ) -> List[model.Template]:
