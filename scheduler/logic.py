@@ -1568,7 +1568,7 @@ def group_schedule_entries(
     for entry in entries:
         if entry.date not in days:
             days.add(entry.date)
-            hdr.append(fmt_date(entry.date))
+            hdr.append(fmt_date(entry.date, with_day=True))
         out[entry.hour].append(entry)
     return hdr, out
 
@@ -1603,10 +1603,13 @@ def date_or_today(date: Optional[datetime.date]) -> datetime.date:
     return date
 
 
-def fmt_date(date: Optional[datetime.date]) -> str:
+def fmt_date(date: Optional[datetime.date], with_day: bool = False) -> str:
     if date is None:
         return ""
-    return date.strftime("%Y-%m-%d")
+    fmt = "%Y-%m-%d"
+    if with_day:
+        fmt += " %a"
+    return date.strftime(fmt)
 
 
 def parse_date(s: str) -> Optional[datetime.date]:
