@@ -3,7 +3,7 @@
 {% import "svg/icons.html" as icons %}
 {% block title %}{{title}}{% endblock %}
 {% block body %}
-	{% if warn %}<p class=note>{{ icons.info() }}{{ warn }}</p>{% endif %}
+	<p class=note>{% if warn %}{{ icons.info() }}{{ warn }}{% else %}template application begins on {{ start }}{% endif %}</p>
 	{% if templates %}
 		<div class=apply-helper>
 			<div class=apply-helper-no-js>

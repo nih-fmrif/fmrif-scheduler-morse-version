@@ -1130,6 +1130,7 @@ def device_tmpl(the_device):
         "warn": warn,
         "templates": templates,
         "no_templates": no_templates,
+        "start": start,
         **template_breadcrumb(device),
         **template_subpage_nav(device),
     }
