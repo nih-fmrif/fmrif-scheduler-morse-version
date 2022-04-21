@@ -629,6 +629,7 @@ input[list]::-webkit-list-button {
 
 :is(.device-groups-form, .group-membership-form>fieldset) fieldset:not(:last-of-type) {
 	border-bottom: 1px solid currentColor;
+	border-radius: 0;
 }
 
 :is(.device-groups-form, .group-membership-form>fieldset) fieldset legend {
