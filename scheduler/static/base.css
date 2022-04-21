@@ -203,6 +203,7 @@ fieldset {
 
 .validation-icons>:first-child,
 .edit-icons svg:not(:nth-child(2)),
+input-error svg,
 .legend .red {
 	color: var(--err);
 }
