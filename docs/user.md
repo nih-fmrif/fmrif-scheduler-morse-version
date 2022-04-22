@@ -117,4 +117,96 @@ The PI field selects an active user to be made the initial PI of the group. This
 \pagebreak
 # devices
 
-TODO
+The devices page lists all active devices. Each is linked to the relevant [*device*](#device-schedule)
+
+## inactive devices
+
+This tab lists all archived devices.
+
+## add device
+
+This tab allows creation of a new device.
+
+The scannercode is the id used on the schedule and the label is the friendlier name listed on the device page. The optional description is listed below the label.
+
+The email is the device mailing list where updates to the schedule are posted.
+
+The technologist, medical, and training emails are for support requests. They may be left blank if there are no support users for that category.
+
+The active checkmark determines whether the device will be active or inactive.
+
+# device schedule
+
+TODO 
+
+The remainder of this document applies to users with additional privileges (PI, admins, and device group members) and users without may end here.
+
+## device groups
+
+This tab lists the groups assigned to this device. Groups assigned to this device may be scheduled on this device and members of those groups may modify the schedule for this device following the regular rules.
+
+Each device listed has an option to be removed from the device.
+
+## add group to device
+
+Add group provides an autocomplete for adding an existing group to the device. Once added that group is listed under [*groups*](#add-group-to-device).
+
+## device users
+
+The users tab consists of two lists:
+- users in the DEV group assigned to this device
+- users in the DEV group not assigned to this device
+
+In either case you can click the user's name to modify their relation to the device.
+
+If the user is assigned to the device at least one checkmark will be checked and there will be a button to "remove from device".
+
+If the user is not assigned no checkmarks will be checked. To assign an unassigned user check at least one checkmark and save.
+
+The meaning of each checkmark is as follows:
+
+**use and apply templates**: this user will have access to the templates subsection on this device and be able to manage and apply templates on this device.
+
+**edit any slot**: this user will be able to edit slots in the past, in the off hours, and for groups that they do not belong to.
+
+**respond to medical requests**: this user will be a valid handler for medical requests. Medical requests will not be an option on this device unless at least one user has this permission.
+
+**respond to training requests**: this user will be a valid handler for training requests. Training requests will not be an option on this device unless at least one user has this permission. 
+
+**respond to technologist requests**: this user will be a valid handler for technologist requests. Technologist requests will not be an option on this device unless at least one user has this permission. This option is only available for users that have completed the [*technologist join form*](#join-form).
+
+
+## device edit
+
+The device edit page is the same as the [*add device*](#add-device) page except that the scannercode may not be edited.
+
+\pagebreak
+# templates
+
+## template application
+
+The templates field takes an ordered list of template codes. As a convenience above this field there are buttons for each active template. Clicking one of these buttons appends that templatecode to the end of the templates field, but this is no different than typing the same code in the field. Template codes may be repeated.
+
+Applying the templates will in turn append a copy of each template to the schedule, starting at the end of the current schedule whose date is noted on the page. For example, if the templates listed as "apple", then the entries of template "a" will be applied to the schedule, then the entries of "p", then the entries of "p" again, then the entries of "l", then the entries of "e".
+
+Before they are applied all the templates are checked for validity. A template is valid if all the groups on the template are groups of device and all members in the template are members of the respective groups. If this check fails, no templates will be applied. Before trying again the invalid templates must be updated using the [*schedule*](#schedule) tab to correct the errors.
+
+## active and inactive templates
+
+These tabs list the active and inactive templates, respectively, of the device.
+
+### schedule
+
+The schedule tab edits the entries of the template. It is very similar to the [*device schedule*](#device-schedule) editor. The major differences are that it is for a fixed one week period, there is an institute field, and there are no support requests.
+
+### metadata
+
+The metadata tab allows you to edit the information about this template. The label and description are those listed in the active/inactive tabs. The archived checkbox makes the template inactive.
+
+## add template
+
+Add template allows you to create new templates. It is similar to [*metadata*](#metadata) with two additional fields.
+
+The templatecode is the code used in [*template application*](#template-application).
+
+The other is an optional clone field. If left blank, the new template will have all blank fields for every entry. If given the templatecode to another template (active or inactive), the newly created template will have a copy of that template's entries.
