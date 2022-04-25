@@ -99,7 +99,7 @@ def get_departments_for_join_form(user: model.User) -> Datalist:
     q = model.db.session.execute(
         """
         select D.deptcode, D.dept from tlkpdept D
-        where D.iscurrent and (D.department or D.deptcode = 'Dev') and deptcode not in (
+        where D.iscurrent and (D.department or D.deptcode = 'DEV') and deptcode not in (
             select M."group" from membership M where M."user" = :user
         ) order by 2;
     """,
