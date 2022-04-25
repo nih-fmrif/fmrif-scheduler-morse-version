@@ -194,7 +194,7 @@ Before they are applied all the templates are checked for validity. A template i
 
 ## active and inactive templates
 
-These tabs list the active and inactive templates, respectively, of the device.
+These tabs list the active and inactive templates, respectively, of the device. Following a link takes you to the [*schedule*](#schedule) of the template and offers the [*metadata*](#metadata) tab.
 
 ### schedule
 
