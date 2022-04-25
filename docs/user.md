@@ -125,6 +125,8 @@ This tab lists all archived devices.
 
 ## add device
 
+![device add form](device-add.png){ width=100% }
+
 This tab allows creation of a new device.
 
 The scannercode is the id used on the schedule and the label is the friendlier name listed on the device page. The optional description is listed below the label.
@@ -135,13 +137,17 @@ The technologist, medical, and training emails are for support requests. They ma
 
 The active checkmark determines whether the device will be active or inactive.
 
+\pagebreak
 # device schedule
 
 TODO 
 
 The remainder of this document applies to users with additional privileges (PI, admins, and device group members) and users without may end here.
 
+\pagebreak
 ## device groups
+
+![device groups](device-groups.png){ width=25% }
 
 This tab lists the groups assigned to this device. Groups assigned to this device may be scheduled on this device and members of those groups may modify the schedule for this device following the regular rules.
 
@@ -149,9 +155,14 @@ Each device listed has an option to be removed from the device.
 
 ## add group to device
 
+![device group add form](device-group-add.png){ width=100% }
+
 Add group provides an autocomplete for adding an existing group to the device. Once added that group is listed under [*groups*](#add-group-to-device).
 
+\pagebreak
 ## device users
+
+![device users list](device-users.png){ width=100% }
 
 The users tab consists of two lists:
 
@@ -159,6 +170,8 @@ The users tab consists of two lists:
 - users in the DEV group not assigned to this device
 
 In either case you can click the user's name to modify their relation to the device.
+
+![User assigned to device (left) and user not assigned to device (right)](device-user.png){ width=100% }
 
 If the user is assigned to the device at least one checkmark will be checked and there will be a button to "remove from device".
 
@@ -186,6 +199,8 @@ The device edit page is the same as the [*add device*](#add-device) page except 
 
 ## template application
 
+![template application form](template-apply.png){ width=100% }
+
 The templates field takes an ordered list of template codes. As a convenience above this field there are buttons for each active template. Clicking one of these buttons appends that templatecode to the end of the templates field, but this is no different than typing the same code in the field. Template codes may be repeated.
 
 Applying the templates will in turn append a copy of each template to the schedule, starting at the end of the current schedule whose date is noted on the page. For example, if the templates listed as "apple", then the entries of template "a" will be applied to the schedule, then the entries of "p", then the entries of "p" again, then the entries of "l", then the entries of "e".
@@ -198,13 +213,20 @@ These tabs list the active and inactive templates, respectively, of the device. 
 
 ### schedule
 
+![template schedule](template-schedule.png){ width=100% }
+
 The schedule tab edits the entries of the template. It is very similar to the [*device schedule*](#device-schedule) editor. The major differences are that it is for a fixed one week period, there is an institute field, and there are no support requests.
 
 ### metadata
 
+![template metadata](template-metadata.png){ width=100% }
+
 The metadata tab allows you to edit the information about this template. The label and description are those listed in the active/inactive tabs. The archived checkbox makes the template inactive.
 
+\pagebreak
 ## add template
+
+![add a template](template-add.png){ width=100% }
 
 Add template allows you to create new templates. It is similar to [*metadata*](#metadata) with two additional fields.
 
