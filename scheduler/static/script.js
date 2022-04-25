@@ -1215,6 +1215,8 @@ class Cell {
 		this.update_list();
 		this.update_swatch();
 		this.fire_change();
+		this.elm.dataset.changed = this.changed;
+		this.elm.dataset.error = this.changed && this.invalid;
 	}
 	resetAndLock() {
 		// this cell was submitted to and rejected by the server
