@@ -140,6 +140,52 @@ The active checkmark determines whether the device will be active or inactive.
 \pagebreak
 # device schedule
 
+![the schedule](schedule.png){ width=100% }
+
+There are several pieces of the schedule
+
+- At the top is the [*date selector*](#the-data-selector)
+- Next, is the [*caption*](#the-caption)
+- Then, the [*grid*](#the-grid) of [*entries*](#the-entries)
+- Then, the legend of icons used by the grid and caption
+- Finally, the save button
+
+If any hours are hidden by default but you have the privilege to edit them anyway, a toggle button will be shown allowing you to open them up for editing.
+
+You can press the save button at any time. If you have no changes, it will show a dialog telling you this. If you have changes with errors it will display a dialog, letting you know so that you can fix them. If you have changes without errors, it will show a dialog with a summary of the changes and, if there are any optional notifications, a checkbox to send those notifications.
+
+No changes will be reflected on the server until you submit this dialog.
+
+If all the changes can be processed, the page will reload and your changes will be displayed. In some cases a change cannot be processed. When this happens, no changes are applied. Any entries that cannot be processed are locked. This allows you to see which entries have failed and to resubmit any unlocked entries. You can do this by pressing save again.
+
+## the data selector
+
+When you first go to the device schedule the page defaults to the current date and shows 7 days of entries.
+
+Any other dates may be selected. The starting date is in YYYY-MM-DD format. The number of days may be between 1 and 31. Upon submitting this form the URL will be updated to include the starting date and number of days to save, allowing you to share a permanent link to a particular time period for a particular device.
+
+Submitting the data selector form without changing anything will show the same page but add the default dates to the URL, allowing you to share the link.
+
+## the caption
+
+The caption includes the name of the device and the start and end days shown. After the caption there may be some status icons. If there are any unsaved edits to any entry, a pencil icon is displayed to denote "edits to schedule". If there are any errors in the schedule (whether they were made by you or were the result of external changes) a red exclamation point in a triangle will be displayed to denote "errors in schedule".
+
+## the grid
+
+The grid allows you to navigate and, if you have sufficient permission, to edit the entries. It is very similar to a spreadsheet except that each cell has multiple form elements instead of a single field.
+
+The columns are marked by the date they apply to and the day of the week of that date. The rows are marked by the hour of the day.
+
+You can scroll the grid with a mouse or swipe and select a cell by click or tap. If you use a keyboard the entire grid is a single tab stop and when focused on the grid you can use the following keys:
+
+- arrow keys to move around the grid
+- Home, End, PageUp, PageDown to jump to the extremes of the respective row or column
+- Enter to select a cell for editing
+
+When a cell is selected for editing, focus moves to the first focusable item. It behaves like an ordinary form and you can go back to the grid by tabbing out of the form or pressing the ESC key.
+
+## the entries
+
 TODO 
 
 The remainder of this document applies to users with additional privileges (PI, admins, and device group members) and users without may end here.
