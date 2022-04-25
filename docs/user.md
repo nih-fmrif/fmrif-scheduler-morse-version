@@ -154,6 +154,7 @@ Add group provides an autocomplete for adding an existing group to the device. O
 ## device users
 
 The users tab consists of two lists:
+
 - users in the DEV group assigned to this device
 - users in the DEV group not assigned to this device
 
