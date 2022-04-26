@@ -212,7 +212,19 @@ The log button opens a dialog displaying all changes made to this entry that hav
 
 ### support requests
 
-TODO 
+There are multiple kinds of support requests. The kinds available vary per device. With the exception of technologist requests which have an additional scan/cover selector, they all behave identically.
+
+Support requests have a requested checkbox and a handler text field.
+
+If requested is checked, the support request is open. If requested is checked and the handler field is set, the request is filled.
+
+To make a request as an ordinary user, check the requested box and save. To cancel a request, uncheck it.
+
+Support staff can fill a support request by entering a name in the handler field or reject the request by unchecking the requested checkbox.
+
+Support staff may both check the requested checkbox and set the handler field in one edit, to record an agreement made outside of the schedule editor.
+
+Changes to support requests involve mandatory emails to the appropriate mailing lists. The only exception to this is when editing entries of past dates by an admin or privileged user as this is for correcting the record not assigning work.
 
 The remainder of this document applies to users with additional privileges (PI, admins, and device group members) and users without may end here.
 
