@@ -152,6 +152,8 @@ There are several pieces of the schedule
 
 If any hours are hidden by default but you have the privilege to edit them anyway, a toggle button will be shown allowing you to open them up for editing.
 
+The schedule is a snapshot of the database at the time the page is loaded. Changes made to the schedule by others will not be reflected until page load. Changes made to this local copy will not be reflected in the database until the save button is pressed.
+
 You can press the save button at any time. If you have no changes, it will show a dialog telling you this. If you have changes with errors it will display a dialog, letting you know so that you can fix them. If you have changes without errors, it will show a dialog with a summary of the changes and, if there are any optional notifications, a checkbox to send those notifications.
 
 No changes will be reflected on the server until you submit this dialog.
