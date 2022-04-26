@@ -188,7 +188,29 @@ You can scroll the grid with a mouse or swipe and select a cell by click or tap.
 
 When a cell is selected for editing, focus moves to the first focusable item. It behaves like an ordinary form and you can go back to the grid by tabbing out of the form or pressing the ESC key.
 
+\pagebreak
 ## the entries
+
+![a single entry with annotations and focus in the membership field](entry.png){ width=25% }
+
+There are several parts of an entry. The list below corresponds to the annotations of the previous image and, except where noted, the order the elements will be announced by screen readers.
+
+1. the colored stripe along the side is the color assigned to the group presently in the group field (Note: this is redundant and not announced by screen readers)
+2. the status icons for the current entry, explained in the grid legend (Note: this is presented as the last item in the entry to screen readers)
+3. the main fields of the entry
+4. the [*support requests*](#support-requests) of the entry, if any
+5. the reset button
+6. the log button
+
+Depending on access rights and state of the entry, some fields may be disabled. If this is the case, text fields are displayed without a border.
+
+The membership field and the group field are bound. A name is valid in the membership field if that name is a member of the group in the group field. Valid groups are groups that have been assigned to the device.
+
+The reset button reverts any unsaved changes to an entry (including its support requests) to their original state when the page was loaded. If there are no changes to the entry, it does nothing.
+
+The log button opens a dialog displaying all changes made to this entry that have been recorded in the database. This sends a new request to the database each time so it may include changes not reflected in the local snapshot of the schedule. New changes being observed like this do not update the local snapshot in any way.
+
+### support requests
 
 TODO 
 
