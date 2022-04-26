@@ -144,7 +144,7 @@ The active checkmark determines whether the device will be active or inactive.
 
 There are several pieces of the schedule
 
-- At the top is the [*date selector*](#the-data-selector)
+- At the top is the [*date selector*](#the-date-selector)
 - Next, is the [*caption*](#the-caption)
 - Then, the [*grid*](#the-grid) of [*entries*](#the-entries)
 - Then, the legend of icons used by the grid and caption
@@ -158,13 +158,13 @@ No changes will be reflected on the server until you submit this dialog.
 
 If all the changes can be processed, the page will reload and your changes will be displayed. In some cases a change cannot be processed. When this happens, no changes are applied. Any entries that cannot be processed are locked. This allows you to see which entries have failed and to resubmit any unlocked entries. You can do this by pressing save again.
 
-## the data selector
+## the date selector
 
 When you first go to the device schedule the page defaults to the current date and shows 7 days of entries.
 
 Any other dates may be selected. The starting date is in YYYY-MM-DD format. The number of days may be between 1 and 31. Upon submitting this form the URL will be updated to include the starting date and number of days to save, allowing you to share a permanent link to a particular time period for a particular device.
 
-Submitting the data selector form without changing anything will show the same page but add the default dates to the URL, allowing you to share the link.
+Submitting the date selector form without changing anything will show the same page but add the default dates to the URL, allowing you to share the link.
 
 ## the caption
 
