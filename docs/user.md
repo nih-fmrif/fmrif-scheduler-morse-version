@@ -204,7 +204,7 @@ There are several parts of an entry. The list below corresponds to the annotatio
 
 Depending on access rights and state of the entry, some fields may be disabled. If this is the case, text fields are displayed without a border.
 
-The membership field and the group field are bound. A name is valid in the membership field if that name is a member of the group in the group field. Valid groups are groups that have been assigned to the device.
+The membership field and the group field are bound. A name is valid in the membership field if that name is a member of the group in the group field. Valid groups are groups that have been assigned to the device. Edits that result in any of these fields being marked invalid cannot be saved.
 
 The reset button reverts any unsaved changes to an entry (including its support requests) to their original state when the page was loaded. If there are no changes to the entry, it does nothing.
 
