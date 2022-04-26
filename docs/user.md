@@ -162,11 +162,13 @@ If all the changes can be processed, the page will reload and your changes will 
 
 ## the date selector
 
-When you first go to the device schedule the page defaults to the current date and shows 7 days of entries.
+When you first go to the device schedule the page defaults showing 7 days of entries starting from the current date.
 
 Any other dates may be selected. The starting date is in YYYY-MM-DD format. The number of days may be between 1 and 31. Upon submitting this form the URL will be updated to include the starting date and number of days to save, allowing you to share a permanent link to a particular time period for a particular device.
 
 Submitting the date selector form without changing anything will show the same page but add the default dates to the URL, allowing you to share the link.
+
+Changing the date selector requires a page reload so it cannot be done if there are unsaved changes to the schedule.
 
 ## the caption
 
