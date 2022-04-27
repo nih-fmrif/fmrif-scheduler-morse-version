@@ -51,94 +51,15 @@ The home page is a list of the main sections of the site.
 
 The [*groups*](#groups) section will only be shown if your account has access to it.
 
-These sections will be explored from bottom to top. Many have subsections that only apply to users with higher administrative rights. If you do not see the links to an area being discussed, you can skip that portion of the documentation.
-
-\pagebreak
-# list action form
-![list action form](list-action-form.png){ width=100% }
-
-The list action form allows you to subscribe or unsubscribe from mailing lists relevant to this domain.
-
-Your name and email will be populated from your login, but can be edited. Check the boxes in the lists to subscribe to/unsubscribe from (at least one must be selected). Then select the desired action.
-
-\pagebreak
-# join form
-
-This form has a single autocomplete for all groups that you are not a member of currently. To request joining a group, use the autocomplete to select it and submit the form. Upon submission of this form, the primary investigator (**PI**) of the department will be emailed to confirm your membership.
-
-The admin group has special protections and can only have members added by someone with direct access to the server. See cli.pdf for more information.
-
-If you are a member of the DEV group but not a technologist, there will be a second page listed in the tabs. This page lets you attest to your qualification to be a technologist. However, the DEV PI must also assign you to devices as a technologist for you to be able to handle technology requests on those devices.
-
-\pagebreak
-# groups
-
-Once you have been approved for at least one group, you can see the groups page. It will list all groups that you are a member of. Admins will see all groups as well as an option to see a list of groups that are no longer active and an option to add new groups.
-
-A regular user will only be able to see basic information about the group and a list of fellow members. PI and admin will see additional tabs to alter membership, change the PI, and edit the group. These will be discussed in the following subsections. Regular users should skip ahead to the section on [*devices*](#devices).
-
-\pagebreak
-## membership
-
-![membership alteration page](membership-list.png){ width=100% }
-
-This page allows PI to remove members from their group. The PI is not listed on this page as the PI cannot be removed from the group. If there are pending members, they can be approved or denied from here (or from links in the notification email sent when the user submits the join form).
-
-## change PI
-
-This page has an autocomplete for approved members who are not currently the PI. If submitted, the designated member is the new PI and the old PI is a regular member, who can then be removed by the new PI if necessary.
-
-## edit
-
-![group edit (PI)](group-edit-pi.png){ width=100% }
-
-![group edit (admin)](group-edit-admin.png){ width=100% }
-
-The edit form has extra fields for admins.
-
-The labels are used to describe the group to humans. The computer will always used the *deptcode* which is not editable.
-
-The email or emails are used for any group notifications. The link is for other group members.
-
-The legend color is the color this group will use in the scheduler. The color selection box is provided by the browser.
-
-Admins can additionally change the institute associated with a group and uncheck the active box to make the group inactive.
-
-## add group
-
-![group add form](group-add.png){ width=100% }
-
-The add group form is much like the group edit form but with two additional fields:
-
-The deptcode field sets the id that this device will use for internal references.
-
-The PI field selects an active user to be made the initial PI of the group. This is not an autocomplete as there are too many candidates. The username selected to be the PI must have been logged into the site at least once to be considered valid. An admin can always choose to make themselves PI and then use the change PI form later once the actual PI has joined the group.
+These sections will be explored top to bottom. If a section has subsections they will in turn be explored in order and so on for subsections. Many areas only apply to users with higher administrative rights. If you do not see the links to an area being discussed, you can skip that portion of the documentation.
 
 \pagebreak
 # devices
 
-The devices page lists all active devices. Each is linked to the relevant [*device*](#device-schedule)
-
-## inactive devices
-
-This tab lists all archived devices.
-
-## add device
-
-![device add form](device-add.png){ width=100% }
-
-This tab allows creation of a new device.
-
-The scannercode is the id used on the schedule and the label is the friendlier name listed on the device page. The optional description is listed below the label.
-
-The email is the device mailing list where updates to the schedule are posted.
-
-The technologist, medical, and training emails are for support requests. They may be left blank if there are no support users for that category.
-
-The active checkmark determines whether the device will be active or inactive.
+The devices page lists all active devices. Each is linked to the relevant [*device*](#devices---schedule)
 
 \pagebreak
-# device schedule
+## devices - schedule
 
 ![the schedule](schedule.png){ width=100% }
 
@@ -160,7 +81,7 @@ No changes will be reflected on the server until you submit this dialog.
 
 If all the changes can be processed, the page will reload and your changes will be displayed. In some cases a change cannot be processed. When this happens, no changes are applied. Any entries that cannot be processed are locked. This allows you to see which entries have failed and to resubmit any unlocked entries. You can do this by pressing save again.
 
-## the date selector
+### the date selector
 
 When you first go to the device schedule the page defaults showing 7 days of entries starting from the current date.
 
@@ -170,11 +91,11 @@ Submitting the date selector form without changing anything will show the same p
 
 Changing the date selector requires a page reload so it cannot be done if there are unsaved changes to the schedule.
 
-## the caption
+### the caption
 
 The caption includes the name of the device and the start and end days shown. After the caption there may be some status icons. If there are any unsaved edits to any entry, a pencil icon is displayed to denote "edits to schedule". If there are any errors in the schedule (whether they were made by you or were the result of external changes) a red exclamation point in a triangle will be displayed to denote "errors in schedule".
 
-## the grid
+### the grid
 
 The grid allows you to navigate and, if you have sufficient permission, to edit the entries. It is very similar to a spreadsheet except that each cell has multiple form elements instead of a single field.
 
@@ -189,7 +110,7 @@ You can scroll the grid with a mouse or swipe and select a cell by click or tap.
 When a cell is selected for editing, focus moves to the first focusable item. It behaves like an ordinary form and you can go back to the grid by tabbing out of the form or pressing the ESC key.
 
 \pagebreak
-## the entries
+### the entries
 
 ![a single entry with annotations and focus in the membership field](entry.png){ width=25% }
 
@@ -210,7 +131,7 @@ The reset button reverts any unsaved changes to an entry (including its support 
 
 The log button opens a dialog displaying all changes made to this entry that have been recorded in the database. This sends a new request to the database each time so it may include changes not reflected in the local snapshot of the schedule. New changes being observed like this do not update the local snapshot in any way.
 
-### support requests
+#### support requests
 
 There are multiple kinds of support requests. The kinds available vary per device. With the exception of technologist requests which have an additional scan/cover selector, they all behave identically.
 
@@ -226,7 +147,64 @@ Support staff may both check the requested checkbox and set the handler field in
 
 Changes to support requests involve mandatory emails to the appropriate mailing lists. The only exception to this is when editing entries of past dates by an admin or privileged user as this is for correcting the record not assigning work.
 
-The remainder of this document applies to users with additional privileges (PI, admins, and device group members) and users without may end here.
+\pagebreak
+## templates
+
+### template application
+
+![template application form](template-apply.png){ width=100% }
+
+The templates field takes an ordered list of template codes. As a convenience above this field there are buttons for each active template. Clicking one of these buttons appends that templatecode to the end of the templates field, but this is no different than typing the same code in the field. Template codes may be repeated.
+
+Applying the templates will in turn append a copy of each template to the schedule, starting at the end of the current schedule whose date is noted on the page. For example, if the templates listed as "apple", then the entries of template "a" will be applied to the schedule, then the entries of "p", then the entries of "p" again, then the entries of "l", then the entries of "e".
+
+Before they are applied all the templates are checked for validity. A template is valid if all the groups on the template are groups of device and all members in the template are members of the respective groups. If this check fails, no templates will be applied. Before trying again the invalid templates must be updated using the [*schedule*](#schedule) tab to correct the errors.
+
+### active and inactive templates
+
+These tabs list the active and inactive templates, respectively, of the device. Following a link takes you to the [*schedule*](#schedule) of the template and offers the [*metadata*](#metadata) tab.
+
+#### schedule
+
+![template schedule](template-schedule.png){ width=100% }
+
+The schedule tab edits the entries of the template. It is very similar to the [*device schedule*](#device-schedule) editor. The major differences are that it is for a fixed one week period, there is an institute field, and there are no support requests.
+
+#### metadata
+
+![template metadata](template-metadata.png){ width=100% }
+
+The metadata tab allows you to edit the information about this template. The label and description are those listed in the active/inactive tabs. The archived checkbox makes the template inactive.
+
+\pagebreak
+### add template
+
+![add a template](template-add.png){ width=100% }
+
+Add template allows you to create new templates. It is similar to [*metadata*](#metadata) with two additional fields.
+
+The templatecode is the code used in [*template application*](#template-application).
+
+The other is an optional clone field. If left blank, the new template will have all blank fields for every entry. If given the templatecode to another template (active or inactive), the newly created template will have a copy of that template's entries.
+
+## inactive devices
+
+This tab lists all archived devices.
+
+## add device
+
+![device add form](device-add.png){ width=100% }
+
+This tab allows creation of a new device.
+
+The scannercode is the id used on the schedule and the label is the friendlier name listed on the device page. The optional description is listed below the label.
+
+The email is the device mailing list where updates to the schedule are posted.
+
+The technologist, medical, and training emails are for support requests. They may be left blank if there are no support users for that category.
+
+The active checkmark determines whether the device will be active or inactive.
+
 
 \pagebreak
 ## device groups
@@ -279,41 +257,64 @@ The meaning of each checkmark is as follows:
 The device edit page is the same as the [*add device*](#add-device) page except that the scannercode may not be edited.
 
 \pagebreak
-# templates
+# groups
 
-## template application
+Once you have been approved for at least one group, you can see the groups page. It will list all groups that you are a member of. Admins will see all groups as well as an option to see a list of groups that are no longer active and an option to add new groups.
 
-![template application form](template-apply.png){ width=100% }
-
-The templates field takes an ordered list of template codes. As a convenience above this field there are buttons for each active template. Clicking one of these buttons appends that templatecode to the end of the templates field, but this is no different than typing the same code in the field. Template codes may be repeated.
-
-Applying the templates will in turn append a copy of each template to the schedule, starting at the end of the current schedule whose date is noted on the page. For example, if the templates listed as "apple", then the entries of template "a" will be applied to the schedule, then the entries of "p", then the entries of "p" again, then the entries of "l", then the entries of "e".
-
-Before they are applied all the templates are checked for validity. A template is valid if all the groups on the template are groups of device and all members in the template are members of the respective groups. If this check fails, no templates will be applied. Before trying again the invalid templates must be updated using the [*schedule*](#schedule) tab to correct the errors.
-
-## active and inactive templates
-
-These tabs list the active and inactive templates, respectively, of the device. Following a link takes you to the [*schedule*](#schedule) of the template and offers the [*metadata*](#metadata) tab.
-
-### schedule
-
-![template schedule](template-schedule.png){ width=100% }
-
-The schedule tab edits the entries of the template. It is very similar to the [*device schedule*](#device-schedule) editor. The major differences are that it is for a fixed one week period, there is an institute field, and there are no support requests.
-
-### metadata
-
-![template metadata](template-metadata.png){ width=100% }
-
-The metadata tab allows you to edit the information about this template. The label and description are those listed in the active/inactive tabs. The archived checkbox makes the template inactive.
+A regular user will only be able to see basic information about the group and a list of fellow members. PI and admin will see additional tabs to alter membership, change the PI, and edit the group. These will be discussed in the following subsections.
 
 \pagebreak
-## add template
+## membership
 
-![add a template](template-add.png){ width=100% }
+![membership alteration page](membership-list.png){ width=100% }
 
-Add template allows you to create new templates. It is similar to [*metadata*](#metadata) with two additional fields.
+This page allows PI to remove members from their group. The PI is not listed on this page as the PI cannot be removed from the group. If there are pending members, they can be approved or denied from here (or from links in the notification email sent when the user submits the join form).
 
-The templatecode is the code used in [*template application*](#template-application).
+## change PI
 
-The other is an optional clone field. If left blank, the new template will have all blank fields for every entry. If given the templatecode to another template (active or inactive), the newly created template will have a copy of that template's entries.
+This page has an autocomplete for approved members who are not currently the PI. If submitted, the designated member is the new PI and the old PI is a regular member, who can then be removed by the new PI if necessary.
+
+## edit
+
+![group edit (PI)](group-edit-pi.png){ width=100% }
+
+![group edit (admin)](group-edit-admin.png){ width=100% }
+
+The edit form has extra fields for admins.
+
+The labels are used to describe the group to humans. The computer will always used the *deptcode* which is not editable.
+
+The email or emails are used for any group notifications. The link is for other group members.
+
+The legend color is the color this group will use in the scheduler. The color selection box is provided by the browser.
+
+Admins can additionally change the institute associated with a group and uncheck the active box to make the group inactive.
+
+## add group
+
+![group add form](group-add.png){ width=100% }
+
+The add group form is much like the group edit form but with two additional fields:
+
+The deptcode field sets the id that this device will use for internal references.
+
+The PI field selects an active user to be made the initial PI of the group. This is not an autocomplete as there are too many candidates. The username selected to be the PI must have been logged into the site at least once to be considered valid. An admin can always choose to make themselves PI and then use the change PI form later once the actual PI has joined the group.
+
+\pagebreak
+# join form
+
+This form has a single autocomplete for all groups that you are not a member of currently. To request joining a group, use the autocomplete to select it and submit the form. Upon submission of this form, the primary investigator (**PI**) of the department will be emailed to confirm your membership.
+
+The admin group has special protections and can only have members added by someone with direct access to the server. See cli.pdf for more information.
+
+## join form - technologist join form
+
+If you are a member of the DEV group but not a technologist, there will be a second page listed in the tabs. This page lets you attest to your qualification to be a technologist. However, the DEV PI must also assign you to devices as a technologist for you to be able to handle technology requests on those devices.
+
+\pagebreak
+# list action form
+![list action form](list-action-form.png){ width=100% }
+
+The list action form allows you to subscribe or unsubscribe from mailing lists relevant to this domain.
+
+Your name and email will be populated from your login, but can be edited. Check the boxes in the lists to subscribe to/unsubscribe from (at least one must be selected). Then select the desired action.
