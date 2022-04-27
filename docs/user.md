@@ -51,15 +51,23 @@ The home page is a list of the main sections of the site.
 
 The [*groups*](#groups) section will only be shown if your account has access to it.
 
-These sections will be explored top to bottom. If a section has subsections they will in turn be explored in order and so on for subsections. Many areas only apply to users with higher administrative rights. If you do not see the links to an area being discussed, you can skip that portion of the documentation.
+These sections will be explored top to bottom. If a section has subsections they will in turn be explored in order and so on for subsections.
+
+Section names that follow a "title - subtitle" pattern are for the "subtitle" tab of the "title" section. Some sections only apply to a particular item and for these X and Y are used in the title to fill in for the unknown item or items. Some pages have many pieces and will contain headings that do not follow this pattern.
+
+Many areas only apply to users with higher administrative rights. If you do not see the links to an area being discussed, you can skip that portion of the documentation.
 
 \pagebreak
 # devices
 
-The devices page lists all active devices. Each is linked to the relevant [*device*](#devices---schedule)
+The devices page lists all active devices. Each is linked to the relevant [*device*](#devices---x)
+
+## devices - inactive
+
+This tab lists all archived devices.
 
 \pagebreak
-## devices - schedule
+## devices - X
 
 ![the schedule](schedule.png){ width=100% }
 
@@ -148,9 +156,7 @@ Support staff may both check the requested checkbox and set the handler field in
 Changes to support requests involve mandatory emails to the appropriate mailing lists. The only exception to this is when editing entries of past dates by an admin or privileged user as this is for correcting the record not assigning work.
 
 \pagebreak
-## templates
-
-### template application
+## devices - X - templates
 
 ![template application form](template-apply.png){ width=100% }
 
@@ -158,56 +164,41 @@ The templates field takes an ordered list of template codes. As a convenience ab
 
 Applying the templates will in turn append a copy of each template to the schedule, starting at the end of the current schedule whose date is noted on the page. For example, if the templates listed as "apple", then the entries of template "a" will be applied to the schedule, then the entries of "p", then the entries of "p" again, then the entries of "l", then the entries of "e".
 
-Before they are applied all the templates are checked for validity. A template is valid if all the groups on the template are groups of device and all members in the template are members of the respective groups. If this check fails, no templates will be applied. Before trying again the invalid templates must be updated using the [*schedule*](#schedule) tab to correct the errors.
+Before they are applied all the templates are checked for validity. A template is valid if all the groups on the template are groups of device and all members in the template are members of the respective groups. If this check fails, no templates will be applied. Before trying again the invalid templates must be updated using the [*schedule*](#devices---x---templates---y) tab to correct the errors.
 
-### active and inactive templates
+### devices - X - templates - active
 
-These tabs list the active and inactive templates, respectively, of the device. Following a link takes you to the [*schedule*](#schedule) of the template and offers the [*metadata*](#metadata) tab.
+This tab lists the active templates of the device. Following one of the linked template names takes you to the [*schedule*](#devices---x---templates---y) subsection.
 
-#### schedule
+### devices - X - templates - inactive
+
+This is identical to the active list except archived templates are listed.
+
+### devices - X - templates - Y
 
 ![template schedule](template-schedule.png){ width=100% }
 
-The schedule tab edits the entries of the template. It is very similar to the [*device schedule*](#device-schedule) editor. The major differences are that it is for a fixed one week period, there is an institute field, and there are no support requests.
+The schedule tab edits the entries of the template. It is very similar to the [*device schedule*](#devices---x) editor. The major differences are that it is for a fixed one week period, there is an institute field, and there are no support requests.
 
-#### metadata
+#### devices - X - templates - Y - metadata
 
 ![template metadata](template-metadata.png){ width=100% }
 
 The metadata tab allows you to edit the information about this template. The label and description are those listed in the active/inactive tabs. The archived checkbox makes the template inactive.
 
 \pagebreak
-### add template
+### devices - X - templates - add template
 
 ![add a template](template-add.png){ width=100% }
 
-Add template allows you to create new templates. It is similar to [*metadata*](#metadata) with two additional fields.
+Add template allows you to create new templates. It is similar to [*metadata*](#devices---x---templates---y---metadata) with two additional fields.
 
-The templatecode is the code used in [*template application*](#template-application).
+The templatecode is the code used in [*template application*](#devices---x---templates).
 
 The other is an optional clone field. If left blank, the new template will have all blank fields for every entry. If given the templatecode to another template (active or inactive), the newly created template will have a copy of that template's entries.
 
-## inactive devices
-
-This tab lists all archived devices.
-
-## add device
-
-![device add form](device-add.png){ width=100% }
-
-This tab allows creation of a new device.
-
-The scannercode is the id used on the schedule and the label is the friendlier name listed on the device page. The optional description is listed below the label.
-
-The email is the device mailing list where updates to the schedule are posted.
-
-The technologist, medical, and training emails are for support requests. They may be left blank if there are no support users for that category.
-
-The active checkmark determines whether the device will be active or inactive.
-
-
 \pagebreak
-## device groups
+## devices - X - groups
 
 ![device groups](device-groups.png){ width=25% }
 
@@ -215,14 +206,14 @@ This tab lists the groups assigned to this device. Groups assigned to this devic
 
 Each device listed has an option to be removed from the device.
 
-## add group to device
+## devices - X - add group
 
 ![device group add form](device-group-add.png){ width=100% }
 
-Add group provides an autocomplete for adding an existing group to the device. Once added that group is listed under [*groups*](#add-group-to-device).
+Add group provides an autocomplete for adding an existing group to the device. Once added that group is listed under [*groups*](#devices---x---groups).
 
 \pagebreak
-## device users
+## devices - X - users
 
 ![device users list](device-users.png){ width=100% }
 
@@ -232,6 +223,8 @@ The users tab consists of two lists:
 - users in the DEV group not assigned to this device
 
 In either case you can click the user's name to modify their relation to the device.
+
+### devices - X - users - Y
 
 ![User assigned to device (left) and user not assigned to device (right)](device-user.png){ width=100% }
 
@@ -252,29 +245,51 @@ The meaning of each checkmark is as follows:
 **respond to technologist requests**: this user will be a valid handler for technologist requests. Technologist requests will not be an option on this device unless at least one user has this permission. This option is only available for users that have completed the [*technologist join form*](#join-form).
 
 
-## device edit
+## devices - X - edit
 
-The device edit page is the same as the [*add device*](#add-device) page except that the scannercode may not be edited.
+The device edit page is the same as the [*add device*](#devices---add-device) page except that the scannercode may not be edited.
+
+## devices - add device
+
+![device add form](device-add.png){ width=100% }
+
+This tab allows creation of a new device.
+
+The scannercode is the id used on the schedule and the label is the friendlier name listed on the device page. The optional description is listed below the label.
+
+The email is the device mailing list where updates to the schedule are posted.
+
+The technologist, medical, and training emails are for support requests. They may be left blank if there are no support users for that category.
+
+The active checkmark determines whether the device will be active or inactive.
+
 
 \pagebreak
 # groups
 
 Once you have been approved for at least one group, you can see the groups page. It will list all groups that you are a member of. Admins will see all groups as well as an option to see a list of groups that are no longer active and an option to add new groups.
 
-A regular user will only be able to see basic information about the group and a list of fellow members. PI and admin will see additional tabs to alter membership, change the PI, and edit the group. These will be discussed in the following subsections.
+## groups - inactive
+
+This page lists inactive groups.
+
+## groups - X
+
+This page displays basic information about the group, including a roster of current members with the PI highlighted.
 
 \pagebreak
-## membership
+### groups - X - membership
 
 ![membership alteration page](membership-list.png){ width=100% }
 
 This page allows PI to remove members from their group. The PI is not listed on this page as the PI cannot be removed from the group. If there are pending members, they can be approved or denied from here (or from links in the notification email sent when the user submits the join form).
 
-## change PI
+### groups - X - change PI
 
 This page has an autocomplete for approved members who are not currently the PI. If submitted, the designated member is the new PI and the old PI is a regular member, who can then be removed by the new PI if necessary.
 
-## edit
+\pagebreak
+### groups - X - edit
 
 ![group edit (PI)](group-edit-pi.png){ width=100% }
 
@@ -290,7 +305,7 @@ The legend color is the color this group will use in the scheduler. The color se
 
 Admins can additionally change the institute associated with a group and uncheck the active box to make the group inactive.
 
-## add group
+## groups - add group
 
 ![group add form](group-add.png){ width=100% }
 
