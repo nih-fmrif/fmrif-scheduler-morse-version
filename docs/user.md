@@ -37,7 +37,7 @@ Not all errors can be checked before the form is submitted to the server. If the
 \pagebreak
 ![Autocomplete Inputs](common-form-3.png){ width=100% }
 
-Many fields autocomplete. Depending on the browser, clicking or double clicking a field will open the autocomplete. Otherwise begin typing and relevant options will be displayed and winnowed as you continue. The options in these fields will be of the form "human label (computer id)" and while both can be used in the autocomplete only the computer id portion is valid. For example, in the autocomplete pictured above you could start to type "pol" and "Bipolar Spectrum Disorder (BSD)" would be shown in the autocomplete. Selecting it will fill the field with "BSD". You could also have typed "BSD" directly and ignored the autocomplete's drop down.
+Many fields autocomplete. Depending on the browser, clicking or double clicking a field will open the autocomplete. Otherwise begin typing and relevant options will be displayed and winnowed as you continue. The options in these fields will be of the form "human label (computer id)" and while both can be used in the autocomplete only the computer id portion is a valid value for the field. For example, in the autocomplete pictured above you could start to type "pol" and "Bipolar Spectrum Disorder (BSD)" would be shown in the autocomplete. Selecting it will fill the field with "BSD". You could also have typed "BSD" directly and ignored the autocomplete's drop down.
 
 \pagebreak
 # The home page
@@ -53,7 +53,7 @@ The [*groups*](#groups) section will only be shown if your account has access to
 
 These sections will be explored top to bottom. If a section has subsections they will in turn be explored in order and so on for subsections.
 
-Section names that follow a "title - subtitle" pattern are for the "subtitle" tab of the "title" section. Some sections only apply to a particular item and for these X and Y are used in the title to fill in for the unknown item or items. Some pages have many pieces and will contain headings that do not follow this pattern.
+Section names that follow a "title - subtitle" pattern are for the "subtitle" tab of the "title" section. Some sections only apply to a particular item and for these X and Y are used in the title to fill in for the unknown item or items. Some pages have many pieces and will contain subheadings that do not follow this pattern.
 
 Many areas only apply to users with higher administrative rights. If you do not see the links to an area being discussed, you can skip that portion of the documentation.
 
@@ -244,7 +244,7 @@ The meaning of each checkmark is as follows:
 
 **respond to technologist requests**: this user will be a valid handler for technologist requests. Technologist requests will not be an option on this device unless at least one user has this permission. This option is only available for users that have completed the [*technologist join form*](#join-form).
 
-
+\pagebreak
 ## devices - X - edit
 
 The device edit page is the same as the [*add device*](#devices---add-device) page except that the scannercode may not be edited.
@@ -317,7 +317,7 @@ The PI field selects an active user to be made the initial PI of the group. This
 \pagebreak
 # join form
 
-This form has a single autocomplete for all groups that you are not a member of currently. To request joining a group, use the autocomplete to select it and submit the form. Upon submission of this form, the primary investigator (**PI**) of the department will be emailed to confirm your membership.
+This form has a single autocomplete for all groups that you are not a member of currently. To request joining a group, use the autocomplete to select it and submit the form. Upon submission of this form, the primary investigator (**PI**) of the department will be emailed and will confirm or deny your membership.
 
 The admin group has special protections and can only have members added by someone with direct access to the server. See cli.pdf for more information.
 
