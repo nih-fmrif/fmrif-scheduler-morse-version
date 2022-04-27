@@ -277,10 +277,9 @@ This page lists inactive groups.
 
 This page displays basic information about the group, including a roster of current members with the PI highlighted.
 
-\pagebreak
 ### groups - X - membership
 
-![membership alteration page](membership-list.png){ width=100% }
+![membership alteration page](membership-list.png){ width=50% }
 
 This page allows PI to remove members from their group. The PI is not listed on this page as the PI cannot be removed from the group. If there are pending members, they can be approved or denied from here (or from links in the notification email sent when the user submits the join form).
 
