@@ -10,13 +10,14 @@ flask-sqlalchemy = "*"
 flask-session = "*"
 flask-mail = "*"
 flask-wtf = "*"
+erd = "*"
 
 [dev-packages]
 mypy = "*"
 black = "*"
 
 [requires]
-python_full_version = "3.8.11"
+python_full_version = "3.8.10"
 
 [pipenv]
 allow_prereleases = true
