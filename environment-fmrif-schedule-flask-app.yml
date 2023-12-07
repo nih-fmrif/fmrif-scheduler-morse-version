@@ -1,0 +1,23 @@
+name: fmrif_schedule_app_2023_py38
+channels:
+- conda-forge
+- defaults
+dependencies:
+- python=3.8.10
+- pipenv
+- flask
+- psycopg2
+- flask-sqlalchemy
+- flask-session
+- flask-mail
+- flask-wtf
+
+- mypy
+- black
+- pandoc
+
+- pip:
+   - erd
+   - mdpdf
+#    - context  # unable to install this package, likely due to age
+
