@@ -1,9 +1,13 @@
+
 #!/bin/bash
 
 set -e
 
 for doc in schema config cli running-locally user; do
-	pandoc --metadata-file=metadata.yml -f markdown-smart --toc -t context -s -o ${doc}.pdf -s ${doc}.md
+   # Re-enable if possible to install 'context' package
+   # pandoc --metadata-file=metadata.yml -f markdown-smart --toc -t context -s -o ${doc}.pdf -s ${doc}.md
+   # Use mdpdf package instead
+   mdpdf -o ${doc}.pdf ${doc}.md
 done
 
 # misc notes for working with generated pdf:
@@ -20,3 +24,4 @@ done
 # include list of figures
 # 	lof: true
 # (include iff there are tables/figures or it will create an empty ToC)
+
