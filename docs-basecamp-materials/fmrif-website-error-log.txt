@@ -1,0 +1,249 @@
+ * Tip: There are .env or .flaskenv files present. Do "pip install python-dotenv" to use them.
+ * Environment: development
+ * Debug mode: on
+ * Running on all addresses.
+   WARNING: This is a development server. Do not use it in a production deployment.
+ * Running on http://172.17.0.2:5000/ (Press CTRL+C to quit)
+ * Restarting with stat
+ * Tip: There are .env or .flaskenv files present. Do "pip install python-dotenv" to use them.
+ * Debugger is active!
+ * Debugger PIN: 784-871-029
+2022-03-14 12:32:31,463 INFO sqlalchemy.engine.Engine select pg_catalog.version()
+2022-03-14 12:32:31,465 INFO sqlalchemy.engine.Engine [raw sql] {}
+2022-03-14 12:32:31,485 INFO sqlalchemy.engine.Engine select current_schema()
+2022-03-14 12:32:31,487 INFO sqlalchemy.engine.Engine [raw sql] {}
+2022-03-14 12:32:31,509 INFO sqlalchemy.engine.Engine show standard_conforming_strings
+2022-03-14 12:32:31,512 INFO sqlalchemy.engine.Engine [raw sql] {}
+2022-03-14 12:32:31,522 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:31,529 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:31,533 INFO sqlalchemy.engine.Engine [generated in 0.00427s] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:31,650 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:31,671 INFO sqlalchemy.engine.Engine SELECT tlkpresearcher.researchercode AS tlkpresearcher_researchercode, tlkpresearcher.name AS tlkpresearcher_name, tlkpresearcher.chg_at AS tlkpresearcher_chg_at, tlkpresearcher.email AS tlkpresearcher_email, tlkpresearcher.active AS tlkpresearcher_active 
+FROM tlkpresearcher 
+WHERE tlkpresearcher.researchercode = %(pk_1)s
+2022-03-14 12:32:31,673 INFO sqlalchemy.engine.Engine [generated in 0.00980s] {'pk_1': 'roopchansinghv'}
+2022-03-14 12:32:31,708 INFO sqlalchemy.engine.Engine SELECT membership."group" AS membership_group, membership."user" AS membership_user, membership.pi AS membership_pi, membership.approved AS membership_approved, membership.group_active AS membership_group_active, membership.user_active AS membership_user_active 
+FROM membership 
+WHERE membership."user" = %(user_1)s AND membership.user_active AND membership.group_active AND membership.approved ORDER BY membership."group"
+2022-03-14 12:32:31,709 INFO sqlalchemy.engine.Engine [generated in 0.00231s] {'user_1': 'roopchansinghv'}
+/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/sessions.py:228: UserWarning: The session cookie domain is an IP address. This may not work as intended in some browsers. Add an entry to your hosts file, for example "localhost.localdomain", and use that instead.
+  warnings.warn(
+2022-03-14 12:32:32,193 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,195 INFO sqlalchemy.engine.Engine [cached since 0.6658s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,208 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:32,209 INFO sqlalchemy.engine.Engine [generated in 0.00251s] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 32, 203917), 'site_sessions_id': 1}
+2022-03-14 12:32:32,214 INFO sqlalchemy.engine.Engine COMMIT
+2022-03-14 12:32:32,228 INFO sqlalchemy.engine.Engine ROLLBACK
+172.17.0.1 - - [14/Mar/2022 12:32:32] "GET / HTTP/1.1" 200 -
+2022-03-14 12:32:32,369 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:32,379 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:32,392 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,397 INFO sqlalchemy.engine.Engine [cached since 0.868s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,395 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,408 INFO sqlalchemy.engine.Engine [cached since 0.8788s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,487 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,489 INFO sqlalchemy.engine.Engine [cached since 0.9593s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,494 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:32,497 INFO sqlalchemy.engine.Engine [cached since 0.2908s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 32, 493673), 'site_sessions_id': 1}
+2022-03-14 12:32:32,509 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,513 INFO sqlalchemy.engine.Engine [cached since 0.9839s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,512 INFO sqlalchemy.engine.Engine COMMIT
+2022-03-14 12:32:32,525 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:32,528 INFO sqlalchemy.engine.Engine [cached since 0.3215s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 32, 523078), 'site_sessions_id': 1}
+172.17.0.1 - - [14/Mar/2022 12:32:32] "[36mGET /static/base.css HTTP/1.1[0m" 304 -
+2022-03-14 12:32:32,556 INFO sqlalchemy.engine.Engine COMMIT
+172.17.0.1 - - [14/Mar/2022 12:32:32] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2022-03-14 12:32:32,758 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:32,764 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:32,772 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,783 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,796 INFO sqlalchemy.engine.Engine [cached since 1.267s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,788 INFO sqlalchemy.engine.Engine [cached since 1.259s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,878 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,881 INFO sqlalchemy.engine.Engine [cached since 1.352s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,890 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:32,894 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:32,895 INFO sqlalchemy.engine.Engine [cached since 1.366s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:32,896 INFO sqlalchemy.engine.Engine [cached since 0.6902s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 32, 892417), 'site_sessions_id': 1}
+2022-03-14 12:32:32,907 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:32,910 INFO sqlalchemy.engine.Engine COMMIT
+2022-03-14 12:32:32,913 INFO sqlalchemy.engine.Engine [cached since 0.7063s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 32, 906345), 'site_sessions_id': 1}
+2022-03-14 12:32:32,927 INFO sqlalchemy.engine.Engine COMMIT
+172.17.0.1 - - [14/Mar/2022 12:32:32] "[36mGET /static/scroll-lock/body-scroll-lock.js HTTP/1.1[0m" 304 -
+172.17.0.1 - - [14/Mar/2022 12:32:32] "[36mGET /static/a11y-dialog/dialog.js HTTP/1.1[0m" 304 -
+2022-03-14 12:32:37,454 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:37,461 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,464 INFO sqlalchemy.engine.Engine [cached since 5.968s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,476 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:37,480 INFO sqlalchemy.engine.Engine SELECT tlkpresearcher.researchercode AS tlkpresearcher_researchercode, tlkpresearcher.name AS tlkpresearcher_name, tlkpresearcher.chg_at AS tlkpresearcher_chg_at, tlkpresearcher.email AS tlkpresearcher_email, tlkpresearcher.active AS tlkpresearcher_active 
+FROM tlkpresearcher 
+WHERE tlkpresearcher.researchercode = %(pk_1)s
+2022-03-14 12:32:37,483 INFO sqlalchemy.engine.Engine [cached since 5.853s ago] {'pk_1': 'roopchansinghv'}
+2022-03-14 12:32:37,495 INFO sqlalchemy.engine.Engine SELECT membership."group" AS membership_group, membership."user" AS membership_user, membership.pi AS membership_pi, membership.approved AS membership_approved, membership.group_active AS membership_group_active, membership.user_active AS membership_user_active 
+FROM membership 
+WHERE membership."user" = %(user_1)s AND membership."group" = %(group_1)s AND membership.user_active AND membership.approved 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,496 INFO sqlalchemy.engine.Engine [generated in 0.00182s] {'user_1': 'roopchansinghv', 'group_1': 'admin', 'param_1': 1}
+2022-03-14 12:32:37,502 INFO sqlalchemy.engine.Engine SELECT tlkpscanner.scannercode AS tlkpscanner_scannercode, tlkpscanner.scanner AS tlkpscanner_scanner, tlkpscanner.descrip AS tlkpscanner_descrip, tlkpscanner.mailinglist AS tlkpscanner_mailinglist, tlkpscanner.techaddr AS tlkpscanner_techaddr, tlkpscanner.medaddr AS tlkpscanner_medaddr, tlkpscanner.trainaddr AS tlkpscanner_trainaddr, tlkpscanner.active AS tlkpscanner_active 
+FROM tlkpscanner 
+WHERE tlkpscanner.active = true ORDER BY tlkpscanner.scanner
+2022-03-14 12:32:37,503 INFO sqlalchemy.engine.Engine [generated in 0.00116s] {}
+2022-03-14 12:32:37,619 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,620 INFO sqlalchemy.engine.Engine [cached since 6.124s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,625 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:37,626 INFO sqlalchemy.engine.Engine [cached since 5.454s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 37, 625050), 'site_sessions_id': 1}
+2022-03-14 12:32:37,630 INFO sqlalchemy.engine.Engine COMMIT
+2022-03-14 12:32:37,636 INFO sqlalchemy.engine.Engine ROLLBACK
+172.17.0.1 - - [14/Mar/2022 12:32:37] "GET /devices HTTP/1.1" 200 -
+2022-03-14 12:32:37,751 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:37,764 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:37,766 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,767 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,769 INFO sqlalchemy.engine.Engine [cached since 6.273s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,770 INFO sqlalchemy.engine.Engine [cached since 6.275s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,806 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,809 INFO sqlalchemy.engine.Engine [cached since 6.314s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,814 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,818 INFO sqlalchemy.engine.Engine [cached since 6.323s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,818 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:37,824 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:37,825 INFO sqlalchemy.engine.Engine [cached since 5.652s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 37, 817581), 'site_sessions_id': 1}
+2022-03-14 12:32:37,826 INFO sqlalchemy.engine.Engine [cached since 5.654s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 37, 821756), 'site_sessions_id': 1}
+2022-03-14 12:32:37,830 INFO sqlalchemy.engine.Engine COMMIT
+2022-03-14 12:32:37,839 INFO sqlalchemy.engine.Engine COMMIT
+172.17.0.1 - - [14/Mar/2022 12:32:37] "[36mGET /static/base.css HTTP/1.1[0m" 304 -
+172.17.0.1 - - [14/Mar/2022 12:32:37] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2022-03-14 12:32:37,935 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:37,941 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:37,943 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,954 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,955 INFO sqlalchemy.engine.Engine [cached since 6.459s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,959 INFO sqlalchemy.engine.Engine [cached since 6.464s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:37,995 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:37,997 INFO sqlalchemy.engine.Engine [cached since 6.502s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:38,000 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:38,004 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:38,004 INFO sqlalchemy.engine.Engine [cached since 6.509s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:38,006 INFO sqlalchemy.engine.Engine [cached since 5.834s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 38, 3625), 'site_sessions_id': 1}
+2022-03-14 12:32:38,018 INFO sqlalchemy.engine.Engine UPDATE site_sessions SET expiry=%(expiry)s WHERE site_sessions.id = %(site_sessions_id)s
+2022-03-14 12:32:38,022 INFO sqlalchemy.engine.Engine [cached since 5.849s ago] {'expiry': datetime.datetime(2022, 3, 15, 0, 32, 38, 11908), 'site_sessions_id': 1}
+2022-03-14 12:32:38,020 INFO sqlalchemy.engine.Engine COMMIT
+2022-03-14 12:32:38,036 INFO sqlalchemy.engine.Engine COMMIT
+172.17.0.1 - - [14/Mar/2022 12:32:38] "[36mGET /static/scroll-lock/body-scroll-lock.js HTTP/1.1[0m" 304 -
+172.17.0.1 - - [14/Mar/2022 12:32:38] "[36mGET /static/a11y-dialog/dialog.js HTTP/1.1[0m" 304 -
+2022-03-14 12:32:41,179 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:41,187 INFO sqlalchemy.engine.Engine SELECT site_sessions.id AS site_sessions_id, site_sessions.session_id AS site_sessions_session_id, site_sessions.data AS site_sessions_data, site_sessions.expiry AS site_sessions_expiry 
+FROM site_sessions 
+WHERE site_sessions.session_id = %(session_id_1)s 
+ LIMIT %(param_1)s
+2022-03-14 12:32:41,189 INFO sqlalchemy.engine.Engine [cached since 9.693s ago] {'session_id_1': 'session:adb5971b-9c02-4202-85d2-519b0c80eaf9', 'param_1': 1}
+2022-03-14 12:32:41,196 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2022-03-14 12:32:41,204 INFO sqlalchemy.engine.Engine SELECT tlkpresearcher.researchercode AS tlkpresearcher_researchercode, tlkpresearcher.name AS tlkpresearcher_name, tlkpresearcher.chg_at AS tlkpresearcher_chg_at, tlkpresearcher.email AS tlkpresearcher_email, tlkpresearcher.active AS tlkpresearcher_active 
+FROM tlkpresearcher 
+WHERE tlkpresearcher.researchercode = %(pk_1)s
+2022-03-14 12:32:41,206 INFO sqlalchemy.engine.Engine [cached since 9.576s ago] {'pk_1': 'roopchansinghv'}
+2022-03-14 12:32:41,227 INFO sqlalchemy.engine.Engine SELECT tlkpscanner.scannercode AS tlkpscanner_scannercode, tlkpscanner.scanner AS tlkpscanner_scanner, tlkpscanner.descrip AS tlkpscanner_descrip, tlkpscanner.mailinglist AS tlkpscanner_mailinglist, tlkpscanner.techaddr AS tlkpscanner_techaddr, tlkpscanner.medaddr AS tlkpscanner_medaddr, tlkpscanner.trainaddr AS tlkpscanner_trainaddr, tlkpscanner.active AS tlkpscanner_active 
+FROM tlkpscanner 
+WHERE tlkpscanner.scannercode = %(pk_1)s
+2022-03-14 12:32:41,257 INFO sqlalchemy.engine.Engine [generated in 0.03143s] {'pk_1': 'f'}
+2022-03-14 12:32:41,272 INFO sqlalchemy.engine.Engine SELECT membership."group" AS membership_group, membership."user" AS membership_user, membership.pi AS membership_pi, membership.approved AS membership_approved, membership.group_active AS membership_group_active, membership.user_active AS membership_user_active 
+FROM membership 
+WHERE membership."user" = %(user_1)s AND membership.user_active AND membership.approved AND (membership."group" = %(group_1)s AND membership.pi OR membership."group" = %(group_2)s)
+2022-03-14 12:32:41,274 INFO sqlalchemy.engine.Engine [generated in 0.00286s] {'user_1': 'roopchansinghv', 'group_1': 'DEV', 'group_2': 'admin'}
+2022-03-14 12:32:41,307 INFO sqlalchemy.engine.Engine 
+            select count(G.deptcode) from devicegroup G where scannercode = %(device)s and exists (
+                select * from membership M where M."user" = %(user)s and M.approved and M."group" = G.deptcode
+            )
+        
+2022-03-14 12:32:41,308 INFO sqlalchemy.engine.Engine [generated in 0.00154s] {'device': 'f', 'user': 'roopchansinghv'}
+172.17.0.1 - - [14/Mar/2022 12:32:41] "[35m[1mGET /device/f HTTP/1.1[0m" 500 -
+Traceback (most recent call last):
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 2091, in __call__
+    return self.wsgi_app(environ, start_response)
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 2076, in wsgi_app
+    response = self.handle_exception(e)
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 2073, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 1518, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 1516, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 1502, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**req.view_args)
+  File "/home/roopchansinghv/my_root/tmp/fmrif-website/scheduler/scheduler/app.py", line 117, in protect
+    return f(*args, **kwargs)
+  File "/home/roopchansinghv/my_root/tmp/fmrif-website/scheduler/scheduler/app.py", line 308, in decorated_function
+    ctx = f(*args, **kwargs)
+  File "/home/roopchansinghv/my_root/tmp/fmrif-website/scheduler/scheduler/app.py", line 869, in device
+    perms = logic.get_dev_perms(g.user, device)
+  File "/home/roopchansinghv/my_root/tmp/fmrif-website/scheduler/scheduler/logic.py", line 882, in get_dev_perms
+    can_edit = q.first() > 0
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/row.py", line 307, in __gt__
+    return self._op(other, operator.gt)
+  File "/var/lib/postgresql/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/row.py", line 292, in _op
+    else op(tuple(self), other)
+TypeError: '>' not supported between instances of 'tuple' and 'int'
+172.17.0.1 - - [14/Mar/2022 12:32:41] "GET /device/f?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+172.17.0.1 - - [14/Mar/2022 12:32:41] "GET /device/f?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+172.17.0.1 - - [14/Mar/2022 12:32:42] "GET /device/f?__debugger__=yes&cmd=resource&f=ubuntu.ttf HTTP/1.1" 200 -
+172.17.0.1 - - [14/Mar/2022 12:32:42] "GET /device/f?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -

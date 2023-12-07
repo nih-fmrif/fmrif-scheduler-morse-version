@@ -1,0 +1,120 @@
+
+172.17.0.1 - - [14/Mar/2022 11:14:58] "GET / HTTP/1.1" 500 -
+Traceback (most recent call last):
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/base.py", line 3256, in _wrap_pool_connect
+    return fn()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 310, in connect
+    return _ConnectionFairy._checkout(self)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 868, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 476, in checkout
+    rec = pool._do_get()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/impl.py", line 146, in _do_get
+    self._dec_overflow()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/langhelpers.py", line 70, in __exit__
+    compat.raise_(
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/compat.py", line 207, in raise_
+    raise exception
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/impl.py", line 143, in _do_get
+    return self._create_connection()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 256, in _create_connection
+    return _ConnectionRecord(self)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 371, in __init__
+    self.__connect()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 666, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/langhelpers.py", line 70, in __exit__
+    compat.raise_(
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/compat.py", line 207, in raise_
+    raise exception
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 661, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/create.py", line 590, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/default.py", line 597, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  role "root" does not exist
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 2091, in __call__
+    return self.wsgi_app(environ, start_response)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 2076, in wsgi_app
+    response = self.handle_exception(e)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 2073, in wsgi_app
+    response = self.full_dispatch_request()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 1518, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 1514, in full_dispatch_request
+    rv = self.preprocess_request()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/flask/app.py", line 1857, in preprocess_request
+    rv = self.ensure_sync(before_func)()
+  File "~/my_root/tmp/fmrif-website/scheduler/scheduler/app.py", line 97, in setup_user
+    g.user = logic.upsert_user(login_as, mail, name)
+  File "~/my_root/tmp/fmrif-website/scheduler/scheduler/logic.py", line 324, in upsert_user
+    model.db.session.execute(
+  File "<string>", line 2, in execute
+    
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/orm/session.py", line 1691, in execute
+    conn = self._connection_for_bind(bind)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/orm/session.py", line 1532, in _connection_for_bind
+    return self._transaction._connection_for_bind(
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/orm/session.py", line 747, in _connection_for_bind
+    conn = bind.connect()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/base.py", line 3210, in connect
+    return self._connection_cls(self, close_with_result=close_with_result)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/base.py", line 96, in __init__
+    else engine.raw_connection()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/base.py", line 3289, in raw_connection
+    return self._wrap_pool_connect(self.pool.connect, _connection)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/base.py", line 3259, in _wrap_pool_connect
+    Connection._handle_dbapi_exception_noconnection(
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/base.py", line 2106, in _handle_dbapi_exception_noconnection
+    util.raise_(
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/compat.py", line 207, in raise_
+    raise exception
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/base.py", line 3256, in _wrap_pool_connect
+    return fn()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 310, in connect
+    return _ConnectionFairy._checkout(self)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 868, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 476, in checkout
+    rec = pool._do_get()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/impl.py", line 146, in _do_get
+    self._dec_overflow()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/langhelpers.py", line 70, in __exit__
+    compat.raise_(
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/compat.py", line 207, in raise_
+    raise exception
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/impl.py", line 143, in _do_get
+    return self._create_connection()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 256, in _create_connection
+    return _ConnectionRecord(self)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 371, in __init__
+    self.__connect()
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 666, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/langhelpers.py", line 70, in __exit__
+    compat.raise_(
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/util/compat.py", line 207, in raise_
+    raise exception
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/pool/base.py", line 661, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/create.py", line 590, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/sqlalchemy/engine/default.py", line 597, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "~/.local/share/virtualenvs/scheduler-kT5HCB1z/lib/python3.8/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  role "root" does not exist
+
+(Background on this error at: https://sqlalche.me/e/14/e3q8)
+172.17.0.1 - - [14/Mar/2022 11:14:58] "GET /?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+172.17.0.1 - - [14/Mar/2022 11:14:58] "GET /?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+172.17.0.1 - - [14/Mar/2022 11:14:58] "GET /?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+172.17.0.1 - - [14/Mar/2022 11:14:58] "GET /?__debugger__=yes&cmd=resource&f=ubuntu.ttf HTTP/1.1" 200 -
+
