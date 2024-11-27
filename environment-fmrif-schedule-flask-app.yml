@@ -3,14 +3,16 @@ channels:
 - conda-forge
 - defaults
 dependencies:
-- python=3.8.10
+- python
 - pipenv
-- flask
+- flask=2.0.2
 - psycopg2
-- flask-sqlalchemy
+- flask-sqlalchemy=2.5.1
 - flask-session
 - flask-mail
 - flask-wtf
+- sqlalchemy=1.4.26
+- werkzeug=2.0.2
 
 - mypy
 - black
