@@ -1,7 +1,5 @@
 
----
-title: Installing / boot-strapping application
-...
+# Installing / boot-strapping application
 
 To use Python's virtual environments, run:
 
