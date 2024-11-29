@@ -4,22 +4,19 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-flask = "==2.0.2"
+flask = "*"
 psycopg2 = "*"
-flask-sqlalchemy = "==2.5.1"
+flask-sqlalchemy = "*"
 flask-session = "*"
 flask-mail = "*"
 flask-wtf = "*"
-erd = "*"
-sqlalchemy = "==1.4.26"
-werkzeug = "==2.0.2"
 
 [dev-packages]
 mypy = "*"
 black = "*"
 
 [requires]
-python_full_version = "*"
+python_full_version = "3.8.11"
 
 [pipenv]
 allow_prereleases = true
