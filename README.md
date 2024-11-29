@@ -19,11 +19,5 @@ To use pipenv to create the environment that supports this application, run:
 
 which will use the contents of `Pipfile` to generate the `Pipfile.lock` manifest of versions and dependencies, after which pipenv will use this file to install and environment.  Like with virtual environments, this environment can be accessed by running the `activate` command within it.
 
-Problems were encountered with finding `pipenv` on Debian 12, so it is unclear how robust this option would be.
+Problems were encountered with finding `pipenv` and `pyenv` on Debian 12, so it is unclear how robust this option would be.
 
-Finally, there's also a .yml file to allow creation of a conda environment with all dependencies.  This can be accomplished by running the command:
-
-```sh
-   $ conda env create -f environment-fmrif-schedule-flask-app.yml
-```
- 
