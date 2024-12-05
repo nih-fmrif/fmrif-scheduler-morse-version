@@ -2,6 +2,12 @@
 
 set -e
 
+# Set environment variables for Postgres connection
+export PGHOST=127.0.0.1
+export PGPORT=5432
+export PGUSER=postgres
+export PGPASSWORD=postgres
+container_name=$(docker ps -q --filter "ancestor=postgres" --format "{{.Names}}")
 fatal() {
 	echo "$@" 1>&2
 	exit 2
@@ -30,8 +36,8 @@ for sql in $(echo "[0-9][0-9][0-9]-*.sql" | sort); do
 	psql -X -q -f "$sql" -d scheduler
 done
 
-pg_dump -s -O --no-acl -f new-schema.sql scheduler
+# docker exec -i "$container_name" pg_dump -s -O --no-acl -d scheduler -U postgres > new-schema.sql
 
-vacuumdb -f -d scheduler
+# vacuumdb -f -d scheduler
 
-./generate-schemapdf.sh
+# ./generate-schemapdf.sh
