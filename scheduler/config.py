@@ -1,20 +1,17 @@
+# config.py
 import ipaddress
 import json
 import os
 from typing import Any, Dict, Optional
 
-
 def env(s: str) -> str:
     return os.environ[s]
-
 
 def env_or(s: str, default: str) -> str:
     return os.environ.get(s, default)
 
-
 def bool_env(s: str) -> bool:
     return env_or(s, "").lower() not in ("", "false")
-
 
 def basic_settings(debug: bool) -> Dict[str, Any]:
     cfg: Dict[str, Any] = {}
@@ -36,6 +33,10 @@ def basic_settings(debug: bool) -> Dict[str, Any]:
         SESSION_TYPE="sqlalchemy",
         SESSION_USE_SIGNER=True,
         SESSION_SQLALCHEMY_TABLE="site_sessions",
+        #-------------------------------------------------------------------------------------------------------
+        # Superuser mode configuration
+        SUPERUSER_MODE=bool_env("MMSCHED_SUPERUSER_MODE")
+        #-------------------------------------------------------------------------------------------------------
     )
 
     # only set if APPLICATION_ROOT iff there is a nonempty value
@@ -55,6 +56,8 @@ def basic_settings(debug: bool) -> Dict[str, Any]:
         )
 
     return cfg
+
+# Rest of the file remains unchanged...
 
 
 def proxy_count() -> Optional[Dict[str, int]]:

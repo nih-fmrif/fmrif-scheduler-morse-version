@@ -7,6 +7,12 @@ sql/*.csv
 # do not save local config
 scheduler/config.json
 
+.DS_Store
+node_modules/
+scheduler/.DS_Store
+scheduler/static/.DS_Store
+scheduler/templates/.DS_Store
+
 # docs
 *.pdf
 *.svg

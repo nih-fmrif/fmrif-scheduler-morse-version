@@ -1,0 +1,30 @@
+{
+  "name": "scheduler-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for the scheduler application",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "codegen": "playwright codegen http://localhost:5000"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^20.10.0"
+  },
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "dependencies": {
+    "fsevents": "^2.3.2",
+    "playwright": "^1.49.1",
+    "playwright-core": "^1.49.1",
+    "typescript": "^5.7.2",
+    "undici-types": "^6.19.8"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

@@ -4,7 +4,7 @@ set -e
 
 # Set environment variables for Postgres connection
 export PGHOST=127.0.0.1
-export PGPORT=5432
+export PGPORT=5050
 export PGUSER=postgres
 export PGPASSWORD=postgres
 container_name=$(docker ps -q --filter "ancestor=postgres" --format "{{.Names}}")

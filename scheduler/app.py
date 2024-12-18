@@ -3,7 +3,7 @@ from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union
 
 import click
-from flask import Flask, abort, g, jsonify, redirect, request, session
+from flask import Flask, abort, g, jsonify, redirect, request, session, current_app
 from flask.helpers import flash, url_for
 from flask.templating import render_template
 from flask.wrappers import Response
@@ -64,7 +64,17 @@ def setup_user():
     # the logged in user to this site or ""
     user_name = session.get("user_name", "")
     # the logged in user to AD or ""
-    sm_user_name = request.headers.get("HTTP_SM_USER", "roopchansinghv")
+
+    #-------------------------------------------------------------------------------------------------------
+    # Use superuser if enabled, otherwise use the provided user or default
+    if current_app.config.get("SUPERUSER_MODE", False):
+        sm_user_name = "superuser"
+        # Create superuser if it doesn't exist
+        logic.get_or_create_superuser()
+    else:
+        sm_user_name = request.headers.get("HTTP_SM_USER", "roopchansinghv")
+
+    #-------------------------------------------------------------------------------------------------------    
 
     if sm_user_name == "" and user_name == "":
         # there is no user to load

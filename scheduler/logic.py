@@ -29,6 +29,43 @@ from wtforms import Form, fields, validators, widgets
 import message
 import model
 
+#-------------------------------------------------------------------------------------------------------
+
+# For Superuser mode
+def get_or_create_superuser():
+    """Create or get a superuser account with all permissions"""
+    superuser_id = "superuser"
+    user = get_user(superuser_id)
+    if user is None:
+        user = model.User(
+            id=superuser_id,
+            label="Superuser",  # Changed from name to label
+            addr="superuser@example.com",  # Changed from email to addr
+            active=True
+        )
+        model.db.session.add(user)
+        
+        # Add to admin group
+        admin_group = get_group("admin")
+        if admin_group:
+            member = model.GroupMember(
+                group=admin_group.id,
+                user=user.id,
+                approved=func.now()  # Add approved timestamp
+            )
+            model.db.session.add(member)
+            
+            # Make superuser the PI
+            pi = model.PrimaryGroupMember(
+                group=admin_group.id,
+                user=user.id
+            )
+            model.db.session.add(pi)
+        
+        model.db.session.commit()
+    return user
+
+#-------------------------------------------------------------------------------------------------------
 
 def constraint_of(ex: IntegrityError) -> Tuple[str, str]:
     prefix, name = ex.orig.diag.constraint_name.split("_", maxsplit=1)
