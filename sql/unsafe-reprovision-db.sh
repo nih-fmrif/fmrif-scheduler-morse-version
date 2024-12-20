@@ -19,13 +19,13 @@ fi
 
 # these files need to exist but they do not need to contain anything other than the appropriate header
 if ! test -f user-dept.csv; then
-	cat "usr,dept,pi" >user-dept.csv
+    echo "usr,dept,pi" > user-dept.csv
 fi
 if ! test -f dev-dept.csv; then
-	cat "dev,dept" >dev-dept.csv
+    echo "dev,dept" > dev-dept.csv
 fi
 if ! test -f devperm.csv; then
-	cat "usr,dev,templates,slot,technologist,medical,training" >devperm.csv
+    echo "usr,dev,templates,slot,technologist,medical,training" > devperm.csv
 fi
 
 dropdb --if-exists scheduler

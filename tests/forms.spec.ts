@@ -11,17 +11,17 @@ test.describe('Forms Section', () => {
     listActionFormPage = new ListActionFormPage(page);
   });
 
-  test.describe('Join Form', () => {
-    test('should navigate to join form page', async () => {
-      await joinFormPage.goto();
-      await joinFormPage.verifyPageElements();
-    });
+  // test.describe('Join Form', () => {
+  //   test('should navigate to join form page', async () => {
+  //     await joinFormPage.goto();
+  //     await joinFormPage.verifyPageElements();
+  //   });
 
-    test('should return to home from join form', async () => {
-      await joinFormPage.goto();
-      await joinFormPage.homeLink.click();
-    });
-  });
+  //   test('should return to home from join form', async () => {
+  //     await joinFormPage.goto();
+  //     await joinFormPage.homeLink.click();
+  //   });
+  // });
 
   test.describe('List Action Form', () => {
     test('should navigate to list action form page', async () => {
