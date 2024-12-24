@@ -67,7 +67,7 @@ jobs:
     - name: Start Flask server
       run: |
         cd scheduler
-        flask run &
+        FLASK_ENV=development flask run &
         sleep 5
     - name: Run Playwright tests
       run: npm run test

@@ -38,7 +38,7 @@ app.config["URL_SIGNER"] = signer
 
 # Validate configuration in production
 if not app.debug:
-    error = config.validate()
+    error = settings.validate()
     if error:
         raise RuntimeError(f"Invalid configuration: {error}")
 
