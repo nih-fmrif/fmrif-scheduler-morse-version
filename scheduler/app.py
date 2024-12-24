@@ -10,40 +10,37 @@ from flask.wrappers import Response
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
-import config
+from config import config, settings
 import logic
 import message
 import model
 
 ## Configuration
-
 app = Flask(__name__)
 
-app.config.update(**config.basic_settings(app.debug))
-
+# Load configuration from settings
+app.config.update(**config)
 
 def proxy_fix(app):
-    # load info about proxies so we can get correct remote addr
-    # see: https://werkzeug.palletsprojects.com/en/2.0.x/middleware/proxy_fix/
-
-    counts = config.proxy_count()
+    counts = settings.get_proxy_count()
     if counts is not None:
         from werkzeug.middleware.proxy_fix import ProxyFix
-
         app.wsgi_app = ProxyFix(app.wsgi_app, **counts)
-
 
 proxy_fix(app)
 
-with app.open_resource("config.json", "r") as f:
-    app.config.update(**config.load_user_settings(app.debug, f))
-
-
+# Initialize extensions
 model.db.init_app(app)
 Session(app)
 message.mailer.init_app(app)
 signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
 app.config["URL_SIGNER"] = signer
+
+# Validate configuration in production
+if not app.debug:
+    error = config.validate()
+    if error:
+        raise RuntimeError(f"Invalid configuration: {error}")
 
 ## Authentication
 
@@ -128,15 +125,13 @@ def login_required(f):
 
     return protect
 
-
 def in_network_required(f):
     @wraps(f)
     def protect(*args, **kwargs):
         ip = ipaddress.ip_address(request.access_route[-1])
-        if not any(ip in addr for addr in app.config["nih_networks"]):
+        if not any(ip in network for network in app.config["NIH_NETWORKS"]):
             abort(403, "Access denied: this page is limited to the NIH network")
         return f(*args, **kwargs)
-
     return protect
 
 

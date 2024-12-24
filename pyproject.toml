@@ -33,15 +33,15 @@ dependencies = [
     "SQLAlchemy",
     "sync>=1.0.0",
     "Werkzeug",
-    # Add other dependencies as needed
     "WTForms",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0"
 ]
 
 [project.optional-dependencies]
 dev = [
     "mypy>=0.910",
     "black>=21.5b0"
-    # Add other dev dependencies if needed
 ]
 
 [project.urls]

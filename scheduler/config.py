@@ -1,148 +1,182 @@
-# config.py
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, validator
+from pydantic_settings import BaseSettings
 import ipaddress
-import json
-import os
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
 
-def env(s: str) -> str:
-    return os.environ[s]
+class DatabaseConfig(BaseModel):
+    url: str = Field(
+        default="postgresql://postgres:postgres@localhost:5050/scheduler",
+        env='MMSCHED_DB_URL'
+    )
+    echo: bool = Field(default=False)
+    track_modifications: bool = Field(default=False)
 
-def env_or(s: str, default: str) -> str:
-    return os.environ.get(s, default)
+class MailConfig(BaseModel):
+    server: str = Field("localhost", env='MMSCHED_MAIL_SERVER')
+    port: int = Field(25, env='MMSCHED_MAIL_PORT')
+    use_tls: bool = Field(False, env='MMSCHED_MAIL_USE_TLS')
+    use_ssl: bool = Field(False, env='MMSCHED_MAIL_USE_SSL')
+    username: str = Field("", env='MMSCHED_MAIL_USERNAME')
+    password: str = Field("", env='MMSCHED_MAIL_PASSWORD')
+    suppress_send: bool = False
 
-def bool_env(s: str) -> bool:
-    return env_or(s, "").lower() not in ("", "false")
+class SessionConfig(BaseModel):
+    cookie_name: str = "dsid"
+    permanent_lifetime: int = 8 * 60 * 60  # 8 hours
+    type: str = "sqlalchemy"
+    use_signer: bool = True
+    sqlalchemy_table: str = "site_sessions"
 
-def basic_settings(debug: bool) -> Dict[str, Any]:
-    cfg: Dict[str, Any] = {}
-    cfg.update(
-        SERVER_NAME=env("MMSCHED_SERVER_NAME"),
-        # config for Flask-Mail
-        MAIL_SERVER=env_or("MMSCHED_MAIL_SERVER", "localhost"),
-        MAIL_PORT=int(env_or("MMSCHED_MAIL_PORT", "25")),
-        MAIL_USE_TLS=bool_env("MMSCHED_MAIL_USE_TLS"),
-        MAIL_USE_SSL=bool_env("MMSCHED_MAIL_USE_SSL"),
-        MAIL_USERNAME=env("MMSCHED_MAIL_USERNAME"),
-        MAIL_PASSWORD=env("MMSCHED_MAIL_PASSWORD"),
-        # config for Flask-SQLAlchemy
-        SQLALCHEMY_DATABASE_URI=env("MMSCHED_DB_URL"),
-        SQLALCHEMY_TRACK_MODIFICATIONS=False,
-        # config for Flask-Session
-        SESSION_COOKIE_NAME="dsid",
-        PERMANENT_SESSION_LIFETIME=8 * 60 * 60,  # 8 hours in seconds
-        SESSION_TYPE="sqlalchemy",
-        SESSION_USE_SIGNER=True,
-        SESSION_SQLALCHEMY_TABLE="site_sessions",
-        #-------------------------------------------------------------------------------------------------------
-        # Superuser mode configuration
-        SUPERUSER_MODE=bool_env("MMSCHED_SUPERUSER_MODE")
-        #-------------------------------------------------------------------------------------------------------
+class Settings(BaseSettings):
+    # Core settings
+    debug: bool = True
+    secret_key: str = Field(default="dev-key-change-in-prod", env='SCHEDULER_SECRET_KEY')
+    site_sender: str = Field(default="noreply@example.com", env='SCHEDULER_SITE_SENDER')
+    listserv: str = Field(default="listserv@example.com", env='SCHEDULER_LISTSERV')
+    sm_login_url_prefix: str = Field(
+        default='https://auth.example.com/login?TYPE=33554433&GUID=&SMAUTHREASON=0&METHOD=GET&SMAGENTNAME=dummyAgent&TARGET=-SM-',
+        env='SCHEDULER_SITEMINDER_PREFIX'
+    )
+    
+    # Server settings
+    server_name: str = Field(default="127.0.0.1:5000", env='MMSCHED_SERVER_NAME')  # Make this optional with default
+    application_root: str = Field("", env='MMSCHED_APPLICATION_ROOT')
+    
+    # Network settings
+    nih_networks: List[str] = Field(
+        default_factory=lambda: [
+            "127.0.0.1/32",  # Include localhost in debug mode
+            "::1/128",       # IPv6 localhost
+            "192.168.0.0/16",
+            "10.10.0.0/16", 
+            "172.16.0.0/12"
+        ],
+        env='SCHEDULER_NIH_NETWORKS' 
     )
 
-    # only set if APPLICATION_ROOT iff there is a nonempty value
-    root = env_or("MMSCHED_APPLICATION_ROOT", "")
-    if root != "":
-        cfg["APPLICATION_ROOT"] = root
+    # Database settings
+    database: DatabaseConfig = DatabaseConfig()
+    
+    # Mail settings  
+    mail: MailConfig = MailConfig()
 
-    if debug:
-        cfg.update(
-            SQLALCHEMY_ECHO=True,
-            MAIL_SUPPRESS_SEND=True,
-        )
-    else:
-        cfg.update(
-            SESSION_COOKIE_SECURE=True,  # no https on dev server
-            PREFERRED_URL_SCHEME="https",
-        )
+    # Session settings
+    session: SessionConfig = SessionConfig()
 
-    return cfg
+    # Default mappings (previously in CSV files)
+    device_departments: Dict[str, List[str]] = Field(
+        default_factory=lambda: {
+            'TEST': ['TEST', 'DEV']
+        }
+    )
 
-# Rest of the file remains unchanged...
+    user_departments: Dict[str, Dict[str, bool]] = Field(
+        default_factory=lambda: {
+            'testuser': {
+                'TEST': False,
+                'DEV': True
+            }
+        }
+    )
 
+    device_permissions: Dict[str, Dict[str, Dict[str, bool]]] = Field(
+        default_factory=lambda: {
+            'testuser': {
+                'TEST': {
+                    'templates': True,
+                    'slot': True,
+                    'tech': False,
+                    'medical': False,
+                    'training': False
+                }
+            }
+        }
+    )
 
-def proxy_count() -> Optional[Dict[str, int]]:
-    total, count = 0, {
-        "For": 0,
-        "Proto": 0,
-        "Host": 0,
-        "Port": 0,
-        "Prefix": 0,
-    }
+    # Mailing lists configuration
+    mailing_lists: Dict[str, str] = Field(
+        default_factory=lambda: {
+            "list 1": "Description of list 1",
+            "list 2": "Description of list 2"
+        }
+    )
 
-    for ev in count.keys():
-        nm = f"MMSCHED_X_FORWARDED_{ev.upper()}"
-        n = int(os.environ.get(nm, 0))
-        if n < 0:
-            raise Exception(f"{nm} must be nonnegative integer")
-        total += n
-        count[ev] = n
+    @validator('nih_networks', pre=True)
+    def parse_networks(cls, v):
+        if isinstance(v, str):
+            return v.split(',')
+        return v
 
-    if total > 0:
-        return {
-            "x_for": count["For"],
-            "x_proto": count["Proto"],
-            "x_host": count["Host"],
-            "x_port": count["Port"],
-            "x_prefix": count["Prefix"],
+    def get_proxy_count(self) -> Optional[Dict[str, int]]:
+        """Get proxy configuration counts"""
+        total, count = 0, {
+            "For": 0,
+            "Proto": 0,
+            "Host": 0,
+            "Port": 0,
+            "Prefix": 0,
         }
 
-    return None
+        for ev in count.keys():
+            nm = f"MMSCHED_X_FORWARDED_{ev.upper()}"
+            n = int(self.dict().get(nm, 0))
+            if n < 0:
+                raise ValueError(f"{nm} must be nonnegative integer")
+            total += n
+            count[ev] = n
 
+        if total > 0:
+            return {
+                "x_for": count["For"],
+                "x_proto": count["Proto"],
+                "x_host": count["Host"],
+                "x_port": count["Port"],
+                "x_prefix": count["Prefix"],
+            }
 
-def load_user_settings(debug: bool, resource) -> Dict[str, Any]:
-    # we let any error here crash the app as these all must be set
-    out: Dict[str, Any] = {}
-    cfg = json.loads(resource.read())
-    if not isinstance(cfg, dict):
-        raise Exception("config.json needs to be {}")
-    if len(cfg) != 6:
-        raise Exception("config.json unexpected number of keys, must be 6")
+        return None
 
-    key = cfg["secret_key"]
-    if not isinstance(key, str):
-        raise Exception("config.json: secret_key must be string")
-    if key == "":
-        raise Exception("config.json: secret key must not be empty")
-    out["SECRET_KEY"] = key
+    def validate(self) -> Optional[str]:
+        """Validate required configuration values"""
+        if not self.secret_key or self.secret_key == 'dev-key-change-in-prod':
+            return "SECRET_KEY must be set in production"
+        if not self.site_sender or '@' not in self.site_sender:
+            return "SITE_DEFAULT_SENDER must be a valid email"
+        if not self.listserv or '@' not in self.listserv:
+            return "LISTSERV must be a valid email"
+        return None
 
-    # get NIH subnets for checking that remote addr is in the network
-    netspec = cfg["nih_networks"]
-    if not isinstance(netspec, list):
-        raise Exception("config.json: nih_networks needs to be []")
-    if len(netspec) == 0:
-        raise Exception("config.json: nih_network cannot be empty")
-    subnets = [ipaddress.ip_network(sn) for sn in netspec]
-    if debug:  # allow localhost in debug mode
-        subnets.append(ipaddress.ip_network("127.0.0.1"))
-    out["nih_networks"] = subnets
+    class Config:
+        env_file = '.env'
+        case_sensitive = True
+        extra = 'allow'
 
-    login_prefix = cfg["siteminder_login_url_prefix"]
-    if not isinstance(login_prefix, str):
-        raise Exception("config.json: siteminder_login_url_prefix must be string")
-    out["SM_LOGIN_URL_PREFIX"] = login_prefix
+# Global settings instance
+settings = Settings()
 
-    sender = cfg["site_default_sender"]
-    if not isinstance(sender, str):
-        raise Exception("config.json: site_default_sender must be string")
-    if "@" not in sender:
-        raise Exception("config.json: site_default_sender must be valid email address")
-    out["MAIL_DEFAULT_SENDER"] = sender
-
-    ls_addr = cfg["listserv"]
-    if not isinstance(ls_addr, str):
-        raise Exception("config.json: listserv must be string")
-    if "@" not in ls_addr:
-        raise Exception("config.json: listserv must be valid email address")
-    out["nih_listserv"] = ls_addr
-
-    ml = cfg["mailing_lists"]
-    if not isinstance(ml, dict):
-        raise Exception("config.js: mailing_lists must be {}")
-    for v in ml.values():
-        if not isinstance(v, str):
-            raise Exception(
-                'config.js: mailing_list entries must be "name": "description" pairs'
-            )
-    out["nih_mailing_lists"] = ml
-
-    return out
+# Make settings available to Flask config
+config = {
+    'SECRET_KEY': settings.secret_key,
+    'SERVER_NAME': settings.server_name,
+    'APPLICATION_ROOT': settings.application_root,
+    'SQLALCHEMY_DATABASE_URI': settings.database.url,
+    'SQLALCHEMY_TRACK_MODIFICATIONS': settings.database.track_modifications,
+    'MAIL_SERVER': settings.mail.server,
+    'MAIL_PORT': settings.mail.port,
+    'MAIL_USE_TLS': settings.mail.use_tls,
+    'MAIL_USE_SSL': settings.mail.use_ssl,
+    'MAIL_USERNAME': settings.mail.username,
+    'MAIL_PASSWORD': settings.mail.password,
+    'SESSION_COOKIE_NAME': settings.session.cookie_name,
+    'PERMANENT_SESSION_LIFETIME': settings.session.permanent_lifetime,
+    'SESSION_TYPE': settings.session.type,
+    'SESSION_USE_SIGNER': settings.session.use_signer,
+    'SESSION_SQLALCHEMY_TABLE': settings.session.sqlalchemy_table,
+    'NIH_NETWORKS': [ipaddress.ip_network(net) for net in settings.nih_networks],
+    'NIH_MAILING_LISTS': settings.mailing_lists,
+    'nih_mailing_lists': settings.mailing_lists,
+    'SM_LOGIN_URL_PREFIX': settings.sm_login_url_prefix,
+    'SITE_DEFAULT_SENDER': settings.site_sender,
+    'SUPERUSER_MODE': True if settings.debug else False
+}

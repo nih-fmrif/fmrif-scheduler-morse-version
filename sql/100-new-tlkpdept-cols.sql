@@ -45,12 +45,25 @@ update tlkpdept set iscurrent = false where deptcode in (
 	'SIEM'
 );
 
--- add a training institute to allow resource tracking
-insert into tlkpinst (instcode, inst) values ('TRAIN', 'Training');
-update tlkpdept set (inst, joinable) = ('TRAIN', false) where deptcode = 'training';
+-- -- add a training institute to allow resource tracking
+-- insert into tlkpinst (instcode, inst) values ('TRAIN', 'Training');
+-- update tlkpdept set (inst, joinable) = ('TRAIN', false) where deptcode = 'training';
 
--- add admin and the new maintenance group
+-- -- add admin and the new maintenance group
 
-insert into tlkpdept (deptcode, dept, dept_short, ismain, inst, color, joinable, archivable, scheduleable) values
-	('admin', 'admin', 'admin', true, null, '#000000', false, false, false),
-	('maint', 'maintenance', 'maint', false, 'MAINT', '#000000', false, false, true);
+-- insert into tlkpdept (deptcode, dept, dept_short, ismain, inst, color, joinable, archivable, scheduleable) values
+-- 	('admin', 'admin', 'admin', true, null, '#000000', false, false, false),
+-- 	('maint', 'maintenance', 'maint', false, 'MAINT', '#000000', false, false, true);
+
+	-- Add TRAIN institute if not exists
+INSERT INTO tlkpinst (instcode, inst) 
+SELECT 'TRAIN', 'Training'
+WHERE NOT EXISTS (SELECT 1 FROM tlkpinst WHERE instcode = 'TRAIN');
+
+-- Add admin and maint groups if not exist
+INSERT INTO tlkpdept (deptcode, dept, dept_short, ismain, inst, color, joinable, archivable, scheduleable)
+SELECT t.* FROM (VALUES
+    ('admin', 'admin', 'admin', true, null, '#000000', false, false, false),
+    ('maint', 'maintenance', 'maint', false, 'MAINT', '#000000', false, false, true)
+) AS t(deptcode, dept, dept_short, ismain, inst, color, joinable, archivable, scheduleable)
+WHERE NOT EXISTS (SELECT 1 FROM tlkpdept WHERE deptcode = t.deptcode);
