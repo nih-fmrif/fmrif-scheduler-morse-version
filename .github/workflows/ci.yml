@@ -11,9 +11,12 @@ jobs:
     services:
       postgres:
         image: postgres:15
-        env_file: .env
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
         ports:
-          - "${POSTGRES_PORT}:5432"
+          - "5050:5432"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -49,7 +52,11 @@ jobs:
       run: |
         cd sql
         ./unsafe-reprovision-db.sh
-      env_file: .env
+      env:
+        PGHOST: localhost
+        PGPORT: 5050
+        PGUSER: ${{ secrets.POSTGRES_USER }}
+        PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
     - name: Start Flask server
       run: |
         cd scheduler
