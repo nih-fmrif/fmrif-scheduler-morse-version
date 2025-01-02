@@ -1,3 +1,14 @@
+"""
+Application configuration management.
+
+This module provides two main configuration interfaces:
+1. AppConfig: Settings loaded directly into Flask app.config
+2. Settings: Global application settings used throughout the codebase
+
+The separation allows for clear distinction between Flask-specific config
+and general application settings while maintaining a single source of truth.
+"""
+
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from pydantic_settings import BaseSettings
@@ -5,14 +16,21 @@ import ipaddress
 from dataclasses import dataclass
 
 class DatabaseConfig(BaseModel):
-    url: str = Field(
-        default="postgresql://postgres:postgres@localhost:5050/scheduler",
-        env='MMSCHED_DB_URL'
-    )
+    """Database connection and behavior settings"""
+    user: str = Field(default="postgres", env='POSTGRES_USER')
+    password: str = Field(default="postgres", env='POSTGRES_PASSWORD') 
+    db: str = Field(default="scheduler", env='POSTGRES_DB')
+    host: str = Field(default="localhost", env='POSTGRES_HOST')
+    port: int = Field(default=5050, env='POSTGRES_PORT')
     echo: bool = Field(default=False)
     track_modifications: bool = Field(default=False)
 
+    @property
+    def url(self) -> str:
+        return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.db}"
+
 class MailConfig(BaseModel):
+    """Email server configuration"""
     server: str = Field("localhost", env='MMSCHED_MAIL_SERVER')
     port: int = Field(25, env='MMSCHED_MAIL_PORT')
     use_tls: bool = Field(False, env='MMSCHED_MAIL_USE_TLS')
@@ -22,14 +40,15 @@ class MailConfig(BaseModel):
     suppress_send: bool = False
 
 class SessionConfig(BaseModel):
+    """Flask session configuration"""
     cookie_name: str = "dsid"
     permanent_lifetime: int = 8 * 60 * 60  # 8 hours
     type: str = "sqlalchemy"
     use_signer: bool = True
     sqlalchemy_table: str = "site_sessions"
 
-class Settings(BaseSettings):
-    # Core settings
+class CoreConfig(BaseModel):
+    """Core application settings"""
     debug: bool = True
     secret_key: str = Field(default="dev-key-change-in-prod", env='SCHEDULER_SECRET_KEY')
     site_sender: str = Field(default="noreply@example.com", env='SCHEDULER_SITE_SENDER')
@@ -38,11 +57,23 @@ class Settings(BaseSettings):
         default='https://auth.example.com/login?TYPE=33554433&GUID=&SMAUTHREASON=0&METHOD=GET&SMAGENTNAME=dummyAgent&TARGET=-SM-',
         env='SCHEDULER_SITEMINDER_PREFIX'
     )
-    
-    # Server settings
-    server_name: str = Field(default="127.0.0.1:5000", env='MMSCHED_SERVER_NAME')  # Make this optional with default
+
+class ServerConfig(BaseModel):
+    """Server configuration settings"""
+    server_name: str = Field(default="127.0.0.1:5000", env='MMSCHED_SERVER_NAME')
     application_root: str = Field("", env='MMSCHED_APPLICATION_ROOT')
     
+class Settings(BaseSettings):
+    """
+    Main settings container that coordinates all configuration.
+    Instantiates and provides access to all config components.
+    """
+    core: CoreConfig = CoreConfig()
+    server: ServerConfig = ServerConfig()
+    database: DatabaseConfig = DatabaseConfig()
+    mail: MailConfig = MailConfig()
+    session: SessionConfig = SessionConfig()
+
     # Network settings
     nih_networks: List[str] = Field(
         default_factory=lambda: [
@@ -54,15 +85,6 @@ class Settings(BaseSettings):
         ],
         env='SCHEDULER_NIH_NETWORKS' 
     )
-
-    # Database settings
-    database: DatabaseConfig = DatabaseConfig()
-    
-    # Mail settings  
-    mail: MailConfig = MailConfig()
-
-    # Session settings
-    session: SessionConfig = SessionConfig()
 
     # Default mappings (previously in CSV files)
     device_departments: Dict[str, List[str]] = Field(
@@ -94,7 +116,7 @@ class Settings(BaseSettings):
         }
     )
 
-    # Mailing lists configuration
+    # Mailing lists configuration  
     mailing_lists: Dict[str, str] = Field(
         default_factory=lambda: {
             "list 1": "Description of list 1",
@@ -139,15 +161,19 @@ class Settings(BaseSettings):
 
     def validate(self) -> Optional[str]:
         """Validate required configuration values"""
-        if not self.secret_key or self.secret_key == 'dev-key-change-in-prod':
+        if not self.core.secret_key or self.core.secret_key == 'dev-key-change-in-prod':
             return "SECRET_KEY must be set in production"
-        if not self.site_sender or '@' not in self.site_sender:
+        if not self.core.site_sender or '@' not in self.core.site_sender:
             return "SITE_DEFAULT_SENDER must be a valid email"
-        if not self.listserv or '@' not in self.listserv:
+        if not self.core.listserv or '@' not in self.core.listserv:
             return "LISTSERV must be a valid email"
         return None
 
     class Config:
+        """
+        Pydantic model configuration.
+        This class is used implicitly by Pydantic for model configuration.
+        """
         env_file = '.env'
         case_sensitive = True
         extra = 'allow'
@@ -155,28 +181,42 @@ class Settings(BaseSettings):
 # Global settings instance
 settings = Settings()
 
-# Make settings available to Flask config
-config = {
-    'SECRET_KEY': settings.secret_key,
-    'SERVER_NAME': settings.server_name,
-    'APPLICATION_ROOT': settings.application_root,
-    'SQLALCHEMY_DATABASE_URI': settings.database.url,
-    'SQLALCHEMY_TRACK_MODIFICATIONS': settings.database.track_modifications,
-    'MAIL_SERVER': settings.mail.server,
-    'MAIL_PORT': settings.mail.port,
-    'MAIL_USE_TLS': settings.mail.use_tls,
-    'MAIL_USE_SSL': settings.mail.use_ssl,
-    'MAIL_USERNAME': settings.mail.username,
-    'MAIL_PASSWORD': settings.mail.password,
-    'SESSION_COOKIE_NAME': settings.session.cookie_name,
-    'PERMANENT_SESSION_LIFETIME': settings.session.permanent_lifetime,
-    'SESSION_TYPE': settings.session.type,
-    'SESSION_USE_SIGNER': settings.session.use_signer,
-    'SESSION_SQLALCHEMY_TABLE': settings.session.sqlalchemy_table,
-    'NIH_NETWORKS': [ipaddress.ip_network(net) for net in settings.nih_networks],
-    'NIH_MAILING_LISTS': settings.mailing_lists,
-    'nih_mailing_lists': settings.mailing_lists,
-    'SM_LOGIN_URL_PREFIX': settings.sm_login_url_prefix,
-    'SITE_DEFAULT_SENDER': settings.site_sender,
-    'SUPERUSER_MODE': True if settings.debug else False
-}
+class AppConfig(dict):
+    """
+    Flask application configuration with both dictionary and attribute access.
+    Allows both config['KEY'] and config.KEY access patterns.
+    """
+    def __init__(self, settings: 'Settings'):
+        super().__init__()
+        self.update({
+            # Core settings - UPPERCASE for Flask compatibility
+            'SECRET_KEY': settings.core.secret_key,
+            'SERVER_NAME': settings.server.server_name,
+            'APPLICATION_ROOT': settings.server.application_root,
+            'SQLALCHEMY_DATABASE_URI': settings.database.url,
+            'SQLALCHEMY_TRACK_MODIFICATIONS': settings.database.track_modifications,
+            'MAIL_SERVER': settings.mail.server,
+            'MAIL_PORT': settings.mail.port,
+            'MAIL_USE_TLS': settings.mail.use_tls,
+            'MAIL_USE_SSL': settings.mail.use_ssl,
+            'MAIL_USERNAME': settings.mail.username,
+            'MAIL_PASSWORD': settings.mail.password,
+            'SESSION_COOKIE_NAME': settings.session.cookie_name,
+            'PERMANENT_SESSION_LIFETIME': settings.session.permanent_lifetime,
+            'SESSION_TYPE': settings.session.type,
+            'SESSION_USE_SIGNER': settings.session.use_signer,
+            'SESSION_SQLALCHEMY_TABLE': settings.session.sqlalchemy_table,
+            'SUPERUSER_MODE': True if settings.core.debug else False,
+            'nih_networks': [ipaddress.ip_network(net) for net in settings.nih_networks],
+            'nih_mailing_lists': settings.mailing_lists,
+            'SM_LOGIN_URL_PREFIX': settings.core.sm_login_url_prefix,
+            'SITE_DEFAULT_SENDER': settings.core.site_sender,
+            })
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(f"'AppConfig' has no attribute '{name}'")
+
+app_config = AppConfig(settings)

@@ -30,7 +30,16 @@ import message
 import model
 
 #-------------------------------------------------------------------------------------------------------
-
+"""
+    DEVELOPMENT ONLY: Create or get a superuser account with all permissions.
+    
+    This is a development/testing hack that should NOT be used in production.
+    It creates a superuser with full system access for local development and testing.
+    
+    ToDo: Remove this function before deploying to production.
+    In production, proper user authentication and authorization should be handled
+    via SiteMinder and the regular permission system.
+    """
 # For Superuser mode
 def get_or_create_superuser():
     """Create or get a superuser account with all permissions"""

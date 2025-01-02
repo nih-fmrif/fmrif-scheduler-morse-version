@@ -10,7 +10,7 @@ from flask.wrappers import Response
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
-from config import config, settings
+from config import settings, app_config
 import logic
 import message
 import model
@@ -19,7 +19,7 @@ import model
 app = Flask(__name__)
 
 # Load configuration from settings
-app.config.update(**config)
+app.config.update(**app_config)
 
 def proxy_fix(app):
     counts = settings.get_proxy_count()
@@ -63,15 +63,16 @@ def setup_user():
     # the logged in user to AD or ""
 
     #-------------------------------------------------------------------------------------------------------
-    # Use superuser if enabled, otherwise use the provided user or default
+    # DEVELOPMENT ONLY: Superuser mode for testing
+    # ToDo: Remove this block in production. This is a development hack for testing purposes.
+    # In production, always use proper authentication via SiteMinder.
     if current_app.config.get("SUPERUSER_MODE", False):
         sm_user_name = "superuser"
         # Create superuser if it doesn't exist
         logic.get_or_create_superuser()
     else:
         sm_user_name = request.headers.get("HTTP_SM_USER", "roopchansinghv")
-
-    #-------------------------------------------------------------------------------------------------------    
+    #-------------------------------------------------------------------------------------------------------
 
     if sm_user_name == "" and user_name == "":
         # there is no user to load

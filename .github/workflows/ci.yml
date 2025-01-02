@@ -11,12 +11,9 @@ jobs:
     services:
       postgres:
         image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: scheduler
+        env_file: .env
         ports:
-          - 5050:5432
+          - "${POSTGRES_PORT}:5432"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -32,6 +29,14 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
+    - name: Setup environment
+      run: |
+        cp .env.sample .env
+        echo "SCHEDULER_SECRET_KEY=${{ secrets.SCHEDULER_SECRET_KEY }}" >> .env
+        echo "SCHEDULER_SITE_SENDER=${{ secrets.SCHEDULER_SITE_SENDER }}" >> .env
+        echo "SCHEDULER_LISTSERV=${{ secrets.SCHEDULER_LISTSERV }}" >> .env
+        echo "SCHEDULER_SITEMINDER_PREFIX=${{ secrets.SCHEDULER_SITEMINDER_PREFIX }}" >> .env
+        echo "SCHEDULER_NIH_NETWORKS=${{ secrets.SCHEDULER_NIH_NETWORKS }}" >> .env
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
@@ -40,30 +45,11 @@ jobs:
       run: npm ci --no-optional
     - name: Install Playwright browsers
       run: npx playwright install --with-deps
-    - name: Create .env file
-      run: |
-        cat << EOF > .env
-        SCHEDULER_SECRET_KEY=${{ secrets.SCHEDULER_SECRET_KEY }}
-        SCHEDULER_SITE_SENDER=${{ secrets.SCHEDULER_SITE_SENDER }}
-        SCHEDULER_LISTSERV=${{ secrets.SCHEDULER_LISTSERV }}
-        SCHEDULER_SITEMINDER_PREFIX=${{ secrets.SCHEDULER_SITEMINDER_PREFIX }}
-        SCHEDULER_NIH_NETWORKS=${{ secrets.SCHEDULER_NIH_NETWORKS }}
-        MMSCHED_SUPERUSER_MODE=true
-        MMSCHED_SERVER_NAME=127.0.0.1:5000
-        MMSCHED_MAIL_USERNAME=${{ secrets.MMSCHED_MAIL_USERNAME }}
-        MMSCHED_MAIL_PASSWORD=${{ secrets.MMSCHED_MAIL_PASSWORD }}
-        MMSCHED_DB_URL=postgresql+psycopg2://postgres:postgres@localhost:5050/scheduler
-        EOF
     - name: Initialize database
       run: |
         cd sql
         ./unsafe-reprovision-db.sh
-      env:
-        PGHOST: localhost
-        PGPORT: 5050
-        PGUSER: postgres
-        PGPASSWORD: postgres
-      continue-on-error: true
+      env_file: .env
     - name: Start Flask server
       run: |
         cd scheduler
