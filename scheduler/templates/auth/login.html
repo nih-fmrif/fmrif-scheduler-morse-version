@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% import "macros.html" as macros %}
+
+{% block title %}Login{% endblock %}
+
+{% block body %}
+<form class="login-form" method="post" action="{{ url_for('auth.login') }}">
+    {{ macros.form(form) }}
+    <button type="submit">Login</button>
+</form>
+{% endblock %}

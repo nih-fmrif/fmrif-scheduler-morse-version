@@ -15,6 +15,20 @@ from pydantic_settings import BaseSettings
 import ipaddress
 from dataclasses import dataclass
 
+class LDAPConfig(BaseModel):
+    """LDAP connection and authentication settings"""
+    host: str = Field(default="ldap.forumsys.com", env='LDAP_HOST')
+    port: int = Field(default=389, env='LDAP_PORT')
+    use_ssl: bool = Field(default=False, env='LDAP_USE_SSL')
+    bind_dn: str = Field(default="cn=read-only-admin,dc=example,dc=com", env='LDAP_BIND_DN')
+    bind_password: str = Field(default="password", env='LDAP_BIND_PASSWORD')
+    base_dn: str = Field(default="dc=example,dc=com", env='LDAP_BASE_DN')
+    user_dn_template: str = Field(default="uid={username},dc=example,dc=com", env='LDAP_USER_DN_TEMPLATE')
+    group_dn: str = Field(default="ou=groups,dc=example,dc=com", env='LDAP_GROUP_DN')
+    user_search_filter: str = Field(default="(objectClass=person)", env='LDAP_USER_FILTER')
+    group_search_filter: str = Field(default="(objectClass=groupOfUniqueNames)", env='LDAP_GROUP_FILTER')
+    token_lifetime: int = Field(default=28800, env='LDAP_TOKEN_LIFETIME') # 8 hours in seconds
+
 class DatabaseConfig(BaseModel):
     """Database connection and behavior settings"""
     user: str = Field(default="postgres", env='POSTGRES_USER')
@@ -73,6 +87,7 @@ class Settings(BaseSettings):
     database: DatabaseConfig = DatabaseConfig()
     mail: MailConfig = MailConfig()
     session: SessionConfig = SessionConfig()
+    ldap: LDAPConfig = LDAPConfig()
 
     # Network settings
     nih_networks: List[str] = Field(
@@ -207,7 +222,7 @@ class AppConfig(dict):
             'SESSION_USE_SIGNER': settings.session.use_signer,
             'SESSION_SQLALCHEMY_TABLE': settings.session.sqlalchemy_table,
             'SUPERUSER_MODE': True if settings.core.debug else False,
-            'nih_networks': [ipaddress.ip_network(net) for net in settings.nih_networks],
+            'NIH_NETWORKS': [ipaddress.ip_network(net) for net in settings.nih_networks],
             'nih_mailing_lists': settings.mailing_lists,
             'SM_LOGIN_URL_PREFIX': settings.core.sm_login_url_prefix,
             'SITE_DEFAULT_SENDER': settings.core.site_sender,

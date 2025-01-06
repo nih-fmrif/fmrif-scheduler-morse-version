@@ -15,6 +15,9 @@ import logic
 import message
 import model
 
+from auth.views import auth
+from auth.session import get_user_from_session
+
 ## Configuration
 app = Flask(__name__)
 
@@ -36,6 +39,9 @@ message.mailer.init_app(app)
 signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
 app.config["URL_SIGNER"] = signer
 
+# Register blueprints
+app.register_blueprint(auth, url_prefix='/auth')
+
 # Validate configuration in production
 if not app.debug:
     error = settings.validate()
@@ -47,6 +53,7 @@ if not app.debug:
 
 @app.before_request
 def setup_user():
+    """Load user from session if available"""
     # user already loaded
     if "user" in g:
         return
@@ -58,72 +65,22 @@ def setup_user():
     if request.endpoint == "static":
         return
 
-    # the logged in user to this site or ""
-    user_name = session.get("user_name", "")
-    # the logged in user to AD or ""
-
-    #-------------------------------------------------------------------------------------------------------
     # DEVELOPMENT ONLY: Superuser mode for testing
     # ToDo: Remove this block in production. This is a development hack for testing purposes.
-    # In production, always use proper authentication via SiteMinder.
+    # In production, always use proper authentication via LDAP.
     if current_app.config.get("SUPERUSER_MODE", False):
-        sm_user_name = "superuser"
-        # Create superuser if it doesn't exist
-        logic.get_or_create_superuser()
-    else:
-        sm_user_name = request.headers.get("HTTP_SM_USER", "roopchansinghv")
-    #-------------------------------------------------------------------------------------------------------
-
-    if sm_user_name == "" and user_name == "":
-        # there is no user to load
+        g.user = get_user_from_session() or logic.get_or_create_superuser()
         return
-
-    # the user to login as, if needed
-    login_as = ""
-
-    if sm_user_name != "" and user_name != "":
-        # if the SM user name is different than the user we have on file,
-        # we log out the old user and log the new one in;
-        # otherwise we're still logged in
-        if user_name != sm_user_name:
-            login_as = sm_user_name
-    elif sm_user_name != "" and user_name == "":
-        # we're not logged into the site but we are logged into AD
-        # so login to the site
-        login_as = sm_user_name
-    elif sm_user_name == "" and user_name != "":
-        # we're logged into the site but AD credentials have gone away.
-        # we want to stay logged in, so there's nothing to do here
-        # except to continue and load user_name
-        pass
-
-    if login_as != "":
-        mail = request.headers.get("HTTP_USER_EMAIL", "")
-        name = request.headers.get("HTTP_NIH_DISPLAYNAME", "")
-        name = logic.discard_user_titles(name)
-        session["user_name"] = login_as
-        g.user = logic.upsert_user(login_as, mail, name)
-        model.db.session.commit()  # ensure these changes even if the rest of the request fails
-        app.logger.info("new login for user: %s", login_as)
-    else:
-        # we are an existing login, just fetch the user object
-        g.user = logic.get_user(user_name)
-        # it's possible that this can fail if the user record
-        # gets deleted while the session is ongoing but then
-        # this would return None so it would be the same as being
-        # logged out, still avoid inconsistent state by
-        # cleaning up the session.
-        if g.user is None:
-            del session["user_name"]
-
+        
+    # Try to get user from session
+    g.user = get_user_from_session()
 
 def login_required(f):
     @wraps(f)
     def protect(*args, **kwargs):
         if g.user is None:
-            abort(403, "Access denied: AD login required")
+            abort(403, "Access denied: Authentication required")
         return f(*args, **kwargs)
-
     return protect
 
 def in_network_required(f):
@@ -135,18 +92,15 @@ def in_network_required(f):
         return f(*args, **kwargs)
     return protect
 
-
 def active_user_required(f):
     @wraps(f)
     def protect(*args, **kwargs):
         if g.user is None:
-            abort(403, "Access denied: AD login required")
+            abort(403, "Access denied: Authentication required")
         if not g.user.active:
             abort(403, "Access denied: this page is limited to active users")
         return f(*args, **kwargs)
-
     return protect
-
 
 def admin_only(f):
     @wraps(f)
@@ -154,9 +108,7 @@ def admin_only(f):
         if not (g.user is not None and g.user.active and logic.is_admin(g.user)):
             abort(403, "Access denied: this page is admin only")
         return f(*args, **kwargs)
-
     return protect
-
 
 ## Error handlers
 
