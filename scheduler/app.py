@@ -10,13 +10,13 @@ from flask.wrappers import Response
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
-from config import settings, app_config
-import logic
-import message
-import model
+from .config import settings, app_config
+from . import logic
+from . import message
+from . import model
 
-from auth.views import auth
-from auth.session import get_user_from_session
+from scheduler.auth.views import auth
+from scheduler.auth.session import get_user_from_session
 
 ## Configuration
 app = Flask(__name__)

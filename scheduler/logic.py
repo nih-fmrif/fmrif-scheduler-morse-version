@@ -26,8 +26,8 @@ from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import func
 from wtforms import Form, fields, validators, widgets
 
-import message
-import model
+from . import message
+from . import model
 
 #-------------------------------------------------------------------------------------------------------
 """

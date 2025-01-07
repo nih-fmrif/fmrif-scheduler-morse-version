@@ -83,7 +83,7 @@ class LDAPClient:
             current_app.logger.error(f"LDAP authentication error: {str(e)}")
             return False, None
             
-    def _get_user_groups(self, username: str) -> List[str]:
+    def _get_user_groups(self, username: str) -> list[str]:
         """Get list of groups user belongs to"""
         conn = self._get_connection()
         if not conn.bind():
