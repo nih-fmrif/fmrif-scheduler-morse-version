@@ -5,9 +5,19 @@ from flask import session, g
 from .models import LDAPUser
 from .token_store import TokenStore
 from .ldap import LDAPClient
+from ..logic import upsert_user  # Import the existing user creation function
+from ..model import db
 
 def login_user(user: LDAPUser) -> None:
     """Log in a user by creating session and token"""
+    # Create/update local user record
+    local_user = upsert_user(
+        user.username,
+        user.email, 
+        user.display_name
+    )
+    db.session.commit()
+    
     # Store token
     token = TokenStore.create_token(user.username, user.token_expiry)
     user.token = token
@@ -16,8 +26,8 @@ def login_user(user: LDAPUser) -> None:
     session["user_name"] = user.username
     session["token"] = token
     
-    # Store user in request context
-    g.user = user
+    # Store user in request context 
+    g.user = local_user
 
 def logout_user() -> None:
     """Log out current user"""

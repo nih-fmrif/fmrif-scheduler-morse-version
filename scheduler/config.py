@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     mail: MailConfig = MailConfig()
     session: SessionConfig = SessionConfig()
     ldap: LDAPConfig = LDAPConfig()
+    # Add superuser mode setting
+    superuser_mode: bool = Field(default=False, env='MMSCHED_SUPERUSER_MODE')
 
     # Network settings
     nih_networks: List[str] = Field(
@@ -221,7 +223,7 @@ class AppConfig(dict):
             'SESSION_TYPE': settings.session.type,
             'SESSION_USE_SIGNER': settings.session.use_signer,
             'SESSION_SQLALCHEMY_TABLE': settings.session.sqlalchemy_table,
-            'SUPERUSER_MODE': True if settings.core.debug else False,
+            'SUPERUSER_MODE': settings.dict().get('MMSCHED_SUPERUSER_MODE', False),
             'NIH_NETWORKS': [ipaddress.ip_network(net) for net in settings.nih_networks],
             'nih_mailing_lists': settings.mailing_lists,
             'SM_LOGIN_URL_PREFIX': settings.core.sm_login_url_prefix,

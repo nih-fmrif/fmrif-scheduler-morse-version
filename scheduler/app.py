@@ -125,9 +125,10 @@ def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[st
 
 @app.errorhandler(403)
 def access_denied(e):
-    # show login if no user object loaded
-    show_login = g.user is None
-    return render_error_page(403, e.description, show_login=show_login)
+    # Redirect to login page instead of showing SiteMinder message
+    if g.user is None:
+        return redirect(url_for('auth.login'))
+    return render_error_page(403, e.description)
 
 
 @app.errorhandler(404)

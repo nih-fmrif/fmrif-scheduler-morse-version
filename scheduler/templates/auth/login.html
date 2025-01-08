@@ -1,11 +1,32 @@
-{% extends "base.html" %}
-{% import "macros.html" as macros %}
+{% extends "auth/base.html" %}
 
 {% block title %}Login{% endblock %}
 
 {% block body %}
-<form class="login-form" method="post" action="{{ url_for('auth.login') }}">
-    {{ macros.form(form) }}
-    <button type="submit">Login</button>
-</form>
+<div class="login-container">
+    <h1>Login</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <form method="post" action="{{ url_for('auth.login') }}">
+        {{ form.csrf_token }}
+        <div class="form-group">
+            <label for="{{ form.username.id }}">Username</label>
+            {{ form.username(class="form-control") }}
+        </div>
+        <div class="form-group">
+            <label for="{{ form.password.id }}">Password</label>
+            {{ form.password(class="form-control") }}
+        </div>
+        <button type="submit">Login</button>
+    </form>
+</div>
 {% endblock %}
