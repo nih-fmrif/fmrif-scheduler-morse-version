@@ -11,43 +11,54 @@ from .models import LDAPUser
 from ..config import settings
 
 class LDAPClient:
-    """Client for LDAP authentication and user management"""
-    
     def __init__(self):
-        """Initialize LDAP client with config settings"""
         self.config = settings.ldap
+        self._connection = None
         
     def _get_connection(self, user_dn: Optional[str] = None, password: Optional[str] = None) -> Optional[ldap3.Connection]:
         """Get LDAP connection using either bind DN or user credentials"""
         try:
-            server = ldap3.Server(
-                self.config.host,
-                port=self.config.port,
-                use_ssl=self.config.use_ssl,
-                get_info=ALL
-            )
-            
+            # For authentication, always create a new connection
             if user_dn and password:
-                conn = ldap3.Connection(
+                server = ldap3.Server(
+                    self.config.host,
+                    port=self.config.port,
+                    use_ssl=self.config.use_ssl,
+                    get_info=ALL
+                )
+                return ldap3.Connection(
                     server,
                     user=user_dn,
                     password=password,
-                    authentication='SIMPLE'
+                    authentication='SIMPLE',
+                    auto_bind=True
                 )
-            else:
-                conn = ldap3.Connection(
+            
+            # For session validation, use/create persistent connection
+            if self._connection is None or not self._connection.bound:
+                server = ldap3.Server(
+                    self.config.host,
+                    port=self.config.port,
+                    use_ssl=self.config.use_ssl,
+                    get_info=ALL
+                )
+                self._connection = ldap3.Connection(
                     server,
                     user=self.config.bind_dn,
                     password=self.config.bind_password,
-                    authentication='SIMPLE'
+                    authentication='SIMPLE',
+                    auto_bind=True,
+                    auto_referrals=False,
+                    client_strategy=ldap3.SYNC,
+                    pool_name='ldap_pool',
+                    pool_size=5,
+                    pool_lifetime=300
                 )
-
-            if not conn.bind():
-                return None
+            return self._connection
             
-            return conn
-            
-        except (LDAPSocketOpenError, LDAPBindError, LDAPException, Exception):
+        except Exception as e:
+            current_app.logger.error(f"LDAP connection error: {str(e)}")
+            self._connection = None
             raise
 
     def authenticate(self, username: str, password: str) -> Tuple[bool, Optional[LDAPUser]]:

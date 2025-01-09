@@ -21,11 +21,12 @@ def login():
         if success and user:
             login_user(user)
             flash('Successfully logged in', 'success')
-            return redirect(url_for('home'))
+            return redirect(url_for('home'))  # Redirect to home page
             
         flash('Invalid username or password', 'error')
         
     return render_template('auth/login.html', form=form)
+
 
 @auth.route('/logout')
 def logout():
