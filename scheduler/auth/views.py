@@ -3,7 +3,7 @@ from flask import Blueprint, request, redirect, url_for, flash, render_template
 from flask import current_app as app
 
 from .ldap import LDAPClient
-from .session import login_user, logout_user
+from .session import get_ldap_client, login_user, logout_user
 from .forms import LoginForm
 
 # Create blueprint
@@ -15,13 +15,13 @@ def login():
     form = LoginForm()
     
     if form.validate_on_submit():
-        ldap = LDAPClient()
+        ldap = get_ldap_client()
         success, user = ldap.authenticate(form.username.data, form.password.data)
         
         if success and user:
             login_user(user)
             flash('Successfully logged in', 'success')
-            return redirect(url_for('home'))  # Redirect to home page
+            return redirect(url_for('home'))
             
         flash('Invalid username or password', 'error')
         

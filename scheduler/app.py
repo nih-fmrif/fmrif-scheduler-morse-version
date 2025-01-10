@@ -17,12 +17,21 @@ from . import model
 
 from scheduler.auth.views import auth
 from scheduler.auth.session import get_user_from_session
+from datetime import timedelta
 
 ## Configuration
 app = Flask(__name__)
 
 # Load configuration from settings
 app.config.update(**app_config)
+
+# Add session security settings
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True, 
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8)
+)
 
 def proxy_fix(app):
     counts = settings.get_proxy_count()
