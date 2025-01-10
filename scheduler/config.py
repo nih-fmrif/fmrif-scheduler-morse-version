@@ -178,7 +178,7 @@ class Settings(BaseSettings):
 
     def validate(self) -> Optional[str]:
         """Validate required configuration values"""
-        if not self.core.secret_key or self.core.secret_key == 'dev-key-change-in-prod':
+        if not self.core.secret_key:
             return "SECRET_KEY must be set in production"
         if not self.core.site_sender or '@' not in self.core.site_sender:
             return "SITE_DEFAULT_SENDER must be a valid email"

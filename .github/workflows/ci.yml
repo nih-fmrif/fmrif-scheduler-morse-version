@@ -8,29 +8,7 @@ jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }} 
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-        ports:
-          - "5050:5432"
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      ldap:
-        image: bitnami/openldap:latest
-        env:
-          LDAP_ADMIN_USERNAME: admin
-          LDAP_ADMIN_PASSWORD: adminpassword
-          LDAP_USERS: euler,gauss,euclid
-          LDAP_PASSWORDS: password,password,password
-        ports:
-          - "1389:1389"
+
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python
@@ -44,19 +22,8 @@ jobs:
     - name: Setup environment
       run: |
         cp .env.sample .env
-        echo "SCHEDULER_SECRET_KEY=${{ secrets.SCHEDULER_SECRET_KEY }}" >> .env
-        echo "SCHEDULER_SITE_SENDER=${{ secrets.SCHEDULER_SITE_SENDER }}" >> .env
-        echo "SCHEDULER_LISTSERV=${{ secrets.SCHEDULER_LISTSERV }}" >> .env
-        echo "SCHEDULER_SITEMINDER_PREFIX=${{ secrets.SCHEDULER_SITEMINDER_PREFIX }}" >> .env
-        echo "SCHEDULER_NIH_NETWORKS=${{ secrets.SCHEDULER_NIH_NETWORKS }}" >> .env
-        echo "LDAP_HOST=localhost" >> .env
-        echo "LDAP_PORT=1389" >> .env
-        echo "LDAP_BIND_DN=cn=admin" >> .env
-        echo "LDAP_BIND_PASSWORD=adminpassword" >> .env
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements-venv.txt
+        docker compose up --build -d
+
     - name: Install Node.js dependencies  
       run: npm ci --no-optional
     - name: Install Playwright browsers
@@ -65,16 +32,7 @@ jobs:
       run: |
         cd sql
         ./unsafe-reprovision-db.sh
-      env:
-        PGHOST: localhost
-        PGPORT: 5050
-        PGUSER: ${{ secrets.POSTGRES_USER }}
-        PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-    - name: Start Flask server
-      run: |
-        cd scheduler
-        FLASK_ENV=development flask run &
-        sleep 5
+
     - name: Run Playwright tests
       run: npm run test
     - uses: actions/upload-artifact@v3
