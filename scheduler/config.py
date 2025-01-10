@@ -10,38 +10,141 @@ and general application settings while maintaining a single source of truth.
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 from pydantic_settings import BaseSettings
 import ipaddress
 from dataclasses import dataclass
+import os
+import warnings
 
 class LDAPConfig(BaseModel):
     """LDAP connection and authentication settings"""
-    host: str = Field(default="ldap.forumsys.com", env='LDAP_HOST')
+    # Required settings with development defaults
+    host: str = Field(
+        default="ldap.forumsys.com" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='LDAP_HOST'
+    )
+    bind_dn: str = Field(
+        default="cn=read-only-admin,dc=example,dc=com" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='LDAP_BIND_DN'
+    )
+    bind_password: str = Field(
+        default="password" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='LDAP_BIND_PASSWORD'
+    )
+    base_dn: str = Field(
+        default="dc=example,dc=com" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='LDAP_BASE_DN'
+    )
+    
+    # Optional settings with sensible defaults
     port: int = Field(default=389, env='LDAP_PORT')
     use_ssl: bool = Field(default=False, env='LDAP_USE_SSL')
-    bind_dn: str = Field(default="cn=read-only-admin,dc=example,dc=com", env='LDAP_BIND_DN')
-    bind_password: str = Field(default="password", env='LDAP_BIND_PASSWORD')
-    base_dn: str = Field(default="dc=example,dc=com", env='LDAP_BASE_DN')
     user_dn_template: str = Field(default="uid={username},dc=example,dc=com", env='LDAP_USER_DN_TEMPLATE')
     group_dn: str = Field(default="ou=groups,dc=example,dc=com", env='LDAP_GROUP_DN')
     user_search_filter: str = Field(default="(objectClass=person)", env='LDAP_USER_FILTER')
     group_search_filter: str = Field(default="(objectClass=groupOfUniqueNames)", env='LDAP_GROUP_FILTER')
-    token_lifetime: int = Field(default=28800, env='LDAP_TOKEN_LIFETIME') # 8 hours in seconds
+    token_lifetime: int = Field(default=28800, env='LDAP_TOKEN_LIFETIME')
+
+    @model_validator(mode='after')
+    def warn_default_values(cls, values: Any) -> Any:
+        if os.getenv('FLASK_ENV') != 'production':
+            default_values = {
+                'host': "ldap.forumsys.com",
+                'bind_dn': "cn=read-only-admin,dc=example,dc=com",
+                'bind_password': "password",
+                'base_dn': "dc=example,dc=com"
+            }
+            
+            for field_name, default_value in default_values.items():
+                if getattr(values, field_name) == default_value:
+                    warnings.warn(
+                        f"Using default LDAP {field_name}: {default_value}. "
+                        "This is okay for development but must be changed in production."
+                    )
+        
+        return values
 
 class DatabaseConfig(BaseModel):
     """Database connection and behavior settings"""
-    user: str = Field(default="postgres", env='POSTGRES_USER')
-    password: str = Field(default="postgres", env='POSTGRES_PASSWORD') 
-    db: str = Field(default="scheduler", env='POSTGRES_DB')
+    # Required credentials with development defaults
+    user: str = Field(
+        default="postgres" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='POSTGRES_USER'
+    )
+    password: str = Field(
+        default="postgres" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='POSTGRES_PASSWORD'
+    )
+    db: str = Field(
+        default="scheduler" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='POSTGRES_DB'
+    )
+    # Optional with development-friendly defaults
     host: str = Field(default="localhost", env='POSTGRES_HOST')
     port: int = Field(default=5050, env='POSTGRES_PORT')
     echo: bool = Field(default=False)
     track_modifications: bool = Field(default=False)
 
+    @model_validator(mode='after')
+    def warn_default_values(cls, values: Any) -> Any:
+        if os.getenv('FLASK_ENV') != 'production':
+            default_values = {
+                'user': "postgres",
+                'password': "postgres",
+                'db': "scheduler"
+            }
+            
+            for field_name, default_value in default_values.items():
+                if getattr(values, field_name) == default_value:
+                    warnings.warn(
+                        f"Using default database {field_name}: {default_value}. "
+                        "This is okay for development but must be changed in production."
+                    )
+        
+        return values
+
     @property
     def url(self) -> str:
         return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.db}"
+    
+class CoreConfig(BaseModel):
+    """Core application settings"""
+    debug: bool = True
+    secret_key: str = Field(
+        default="dev-key-change-in-prod" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='SCHEDULER_SECRET_KEY'
+    )
+    site_sender: str = Field(
+        default="noreply@example.com" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='SCHEDULER_SITE_SENDER'
+    )
+    listserv: str = Field(
+        default="listserv@example.com" if not os.getenv('FLASK_ENV') == 'production' else ...,
+        env='SCHEDULER_LISTSERV'
+    )
+    sm_login_url_prefix: str = Field(
+        default='https://auth.example.com/login?TYPE=33554433&GUID=&SMAUTHREASON=0&METHOD=GET&SMAGENTNAME=dummyAgent&TARGET=-SM-',
+        env='SCHEDULER_SITEMINDER_PREFIX'
+    )
+
+    @model_validator(mode='after')
+    def warn_default_values(cls, values: Any) -> Any:
+        if os.getenv('FLASK_ENV') != 'production':
+            default_values = {
+                'secret_key': "dev-key-change-in-prod",
+                'site_sender': "noreply@example.com",
+                'listserv': "listserv@example.com"
+            }
+            
+            for field_name, default_value in default_values.items():
+                if getattr(values, field_name) == default_value:
+                    warnings.warn(
+                        f"Using default value for {field_name}. "
+                        "This is okay for development but must be changed in production."
+                    )
+        
+        return values
 
 class MailConfig(BaseModel):
     """Email server configuration"""
@@ -60,17 +163,6 @@ class SessionConfig(BaseModel):
     type: str = "sqlalchemy"
     use_signer: bool = True
     sqlalchemy_table: str = "site_sessions"
-
-class CoreConfig(BaseModel):
-    """Core application settings"""
-    debug: bool = True
-    secret_key: str = Field(default="dev-key-change-in-prod", env='SCHEDULER_SECRET_KEY')
-    site_sender: str = Field(default="noreply@example.com", env='SCHEDULER_SITE_SENDER')
-    listserv: str = Field(default="listserv@example.com", env='SCHEDULER_LISTSERV')
-    sm_login_url_prefix: str = Field(
-        default='https://auth.example.com/login?TYPE=33554433&GUID=&SMAUTHREASON=0&METHOD=GET&SMAGENTNAME=dummyAgent&TARGET=-SM-',
-        env='SCHEDULER_SITEMINDER_PREFIX'
-    )
 
 class ServerConfig(BaseModel):
     """Server configuration settings"""
@@ -177,13 +269,18 @@ class Settings(BaseSettings):
         return None
 
     def validate(self) -> Optional[str]:
-        """Validate required configuration values"""
-        if not self.core.secret_key:
-            return "SECRET_KEY must be set in production"
-        if not self.core.site_sender or '@' not in self.core.site_sender:
-            return "SITE_DEFAULT_SENDER must be a valid email"
-        if not self.core.listserv or '@' not in self.core.listserv:
-            return "LISTSERV must be a valid email"
+        required_settings = [
+            ('core.secret_key', 'SECRET_KEY'),
+            ('core.site_sender', 'SITE_SENDER'),
+            ('core.listserv', 'LISTSERV')
+        ]
+        for attr, name in required_settings:
+            value = getattr(self, attr)
+            if not value:
+                return f"{name} must be set"
+            # Email validation for site_sender and listserv
+            if name in ['SITE_SENDER', 'LISTSERV'] and '@' not in value:
+                return f"{name} must be a valid email address"
         return None
 
     class Config:
@@ -194,9 +291,6 @@ class Settings(BaseSettings):
         env_file = '.env'
         case_sensitive = True
         extra = 'allow'
-
-# Global settings instance
-settings = Settings()
 
 class AppConfig(dict):
     """
@@ -223,7 +317,7 @@ class AppConfig(dict):
             'SESSION_TYPE': settings.session.type,
             'SESSION_USE_SIGNER': settings.session.use_signer,
             'SESSION_SQLALCHEMY_TABLE': settings.session.sqlalchemy_table,
-            'SUPERUSER_MODE': settings.dict().get('MMSCHED_SUPERUSER_MODE', False),
+            'SUPERUSER_MODE': False,
             'NIH_NETWORKS': [ipaddress.ip_network(net) for net in settings.nih_networks],
             'nih_mailing_lists': settings.mailing_lists,
             'SM_LOGIN_URL_PREFIX': settings.core.sm_login_url_prefix,
@@ -235,5 +329,8 @@ class AppConfig(dict):
             return self[name]
         except KeyError:
             raise AttributeError(f"'AppConfig' has no attribute '{name}'")
+        
+# Global settings instance
+settings = Settings()
 
 app_config = AppConfig(settings)
