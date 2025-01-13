@@ -17,25 +17,32 @@ from dataclasses import dataclass
 import os
 import warnings
 
-class LDAPConfig(BaseModel):
+class BaseAppSettings(BaseSettings):
+    """Base settings class with common configuration"""
+    class Config:
+        env_file = '.env'
+        env_file_encoding = 'utf-8'
+        case_sensitive = True
+        extra = 'allow'
+
+    def warn_if_default(self, field_name: str, default_value: Any, context: str = ""):
+        """Utility method to warn about default values in development"""
+        if os.getenv('FLASK_ENV') != 'production':
+            current_value = getattr(self, field_name)
+            if current_value == default_value:
+                prefix = f"{context} " if context else ""
+                warnings.warn(
+                    f"Using default {prefix}{field_name}: {default_value}. "
+                    "This is okay for development but must be changed in production."
+                )
+
+class LDAPConfig(BaseAppSettings):
     """LDAP connection and authentication settings"""
     # Required settings with development defaults
-    host: str = Field(
-        default="ldap.forumsys.com" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='LDAP_HOST'
-    )
-    bind_dn: str = Field(
-        default="cn=read-only-admin,dc=example,dc=com" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='LDAP_BIND_DN'
-    )
-    bind_password: str = Field(
-        default="password" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='LDAP_BIND_PASSWORD'
-    )
-    base_dn: str = Field(
-        default="dc=example,dc=com" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='LDAP_BASE_DN'
-    )
+    host: str = Field(default="ldap.forumsys.com", env='LDAP_HOST')
+    bind_dn: str = Field(default="cn=read-only-admin,dc=example,dc=com", env='LDAP_BIND_DN')
+    bind_password: str = Field(default="password", env='LDAP_BIND_PASSWORD')
+    base_dn: str = Field(default="dc=example,dc=com", env='LDAP_BASE_DN')
     
     # Optional settings with sensible defaults
     port: int = Field(default=389, env='LDAP_PORT')
@@ -48,21 +55,8 @@ class LDAPConfig(BaseModel):
 
     @model_validator(mode='after')
     def warn_default_values(cls, values: Any) -> Any:
-        if os.getenv('FLASK_ENV') != 'production':
-            default_values = {
-                'host': "ldap.forumsys.com",
-                'bind_dn': "cn=read-only-admin,dc=example,dc=com",
-                'bind_password': "password",
-                'base_dn': "dc=example,dc=com"
-            }
-            
-            for field_name, default_value in default_values.items():
-                if getattr(values, field_name) == default_value:
-                    warnings.warn(
-                        f"Using default LDAP {field_name}: {default_value}. "
-                        "This is okay for development but must be changed in production."
-                    )
-        
+        for field in ['host', 'bind_dn', 'bind_password', 'base_dn']:
+            values.warn_if_default(field, getattr(values, field), "LDAP")
         return values
 
 class DatabaseConfig(BaseModel):
@@ -108,21 +102,12 @@ class DatabaseConfig(BaseModel):
     def url(self) -> str:
         return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.db}"
     
-class CoreConfig(BaseModel):
+class CoreConfig(BaseAppSettings):
     """Core application settings"""
-    debug: bool = True
-    secret_key: str = Field(
-        default="dev-key-change-in-prod" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='SCHEDULER_SECRET_KEY'
-    )
-    site_sender: str = Field(
-        default="noreply@example.com" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='SCHEDULER_SITE_SENDER'
-    )
-    listserv: str = Field(
-        default="listserv@example.com" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='SCHEDULER_LISTSERV'
-    )
+    debug: bool = Field(default=True, env='FLASK_DEBUG')
+    secret_key: str = Field(default="dev-key-change-in-prod", env='SCHEDULER_SECRET_KEY')
+    site_sender: str = Field(default="noreply@example.com", env='SCHEDULER_SITE_SENDER')
+    listserv: str = Field(default="listserv@example.com", env='SCHEDULER_LISTSERV')
     sm_login_url_prefix: str = Field(
         default='https://auth.example.com/login?TYPE=33554433&GUID=&SMAUTHREASON=0&METHOD=GET&SMAGENTNAME=dummyAgent&TARGET=-SM-',
         env='SCHEDULER_SITEMINDER_PREFIX'
@@ -130,89 +115,65 @@ class CoreConfig(BaseModel):
 
     @model_validator(mode='after')
     def warn_default_values(cls, values: Any) -> Any:
-        if os.getenv('FLASK_ENV') != 'production':
-            default_values = {
-                'secret_key': "dev-key-change-in-prod",
-                'site_sender': "noreply@example.com",
-                'listserv': "listserv@example.com"
-            }
-            
-            for field_name, default_value in default_values.items():
-                if getattr(values, field_name) == default_value:
-                    warnings.warn(
-                        f"Using default value for {field_name}. "
-                        "This is okay for development but must be changed in production."
-                    )
-        
+        for field in ['secret_key', 'site_sender', 'listserv']:
+            values.warn_if_default(field, getattr(values, field))
         return values
 
-class MailConfig(BaseModel):
-    """Email server configuration"""
-    server: str = Field("localhost", env='MMSCHED_MAIL_SERVER')
-    port: int = Field(25, env='MMSCHED_MAIL_PORT')
-    use_tls: bool = Field(False, env='MMSCHED_MAIL_USE_TLS')
-    use_ssl: bool = Field(False, env='MMSCHED_MAIL_USE_SSL')
-    username: str = Field("", env='MMSCHED_MAIL_USERNAME')
-    password: str = Field("", env='MMSCHED_MAIL_PASSWORD')
-    suppress_send: bool = False
-
-class SessionConfig(BaseModel):
-    """Flask session configuration"""
-    cookie_name: str = "dsid"
-    permanent_lifetime: int = 8 * 60 * 60  # 8 hours
-    type: str = "sqlalchemy"
-    use_signer: bool = True
-    sqlalchemy_table: str = "site_sessions"
-
-class ServerConfig(BaseModel):
+class ServerConfig(BaseAppSettings):
     """Server configuration settings"""
     server_name: str = Field(default="127.0.0.1:5000", env='MMSCHED_SERVER_NAME')
-    application_root: str = Field("", env='MMSCHED_APPLICATION_ROOT')
-    
-class Settings(BaseSettings):
-    """
-    Main settings container that coordinates all configuration.
-    Instantiates and provides access to all config components.
-    """
-    core: CoreConfig = CoreConfig()
-    server: ServerConfig = ServerConfig()
-    database: DatabaseConfig = DatabaseConfig()
-    mail: MailConfig = MailConfig()
-    session: SessionConfig = SessionConfig()
-    ldap: LDAPConfig = LDAPConfig()
-    # Add superuser mode setting
-    superuser_mode: bool = Field(default=False, env='MMSCHED_SUPERUSER_MODE')
+    application_root: str = Field(default="", env='MMSCHED_APPLICATION_ROOT')
 
-    # Network settings
+class MailConfig(BaseAppSettings):
+    """Email server configuration"""
+    server: str = Field(default="localhost", env='MMSCHED_MAIL_SERVER')
+    port: int = Field(default=25, env='MMSCHED_MAIL_PORT')
+    use_tls: bool = Field(default=False, env='MMSCHED_MAIL_USE_TLS')
+    use_ssl: bool = Field(default=False, env='MMSCHED_MAIL_USE_SSL')
+    username: str = Field(default="", env='MMSCHED_MAIL_USERNAME')
+    password: str = Field(default="", env='MMSCHED_MAIL_PASSWORD')
+    suppress_send: bool = Field(default=False)
+
+class SessionConfig(BaseAppSettings):
+    """Flask session configuration"""
+    cookie_name: str = Field(default="dsid")
+    permanent_lifetime: int = Field(default=8 * 60 * 60)  # 8 hours
+    type: str = Field(default="sqlalchemy")
+    use_signer: bool = Field(default=True)
+    sqlalchemy_table: str = Field(default="site_sessions")
+    
+class Settings(BaseAppSettings):
+    """Main settings container that coordinates all configuration"""
+    # Nested configs
+    core: CoreConfig = Field(default_factory=CoreConfig)
+    server: ServerConfig = Field(default_factory=ServerConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    mail: MailConfig = Field(default_factory=MailConfig)
+    session: SessionConfig = Field(default_factory=SessionConfig)
+    ldap: LDAPConfig = Field(default_factory=LDAPConfig)
+
+    # Direct settings
+    superuser_mode: bool = Field(default=False, env='MMSCHED_SUPERUSER_MODE')
     nih_networks: List[str] = Field(
-        default_factory=lambda: [
-            "127.0.0.1/32",  # Include localhost in debug mode
-            "::1/128",       # IPv6 localhost
+        default=[
+            "127.0.0.1/32",
+            "::1/128",
             "192.168.0.0/16",
             "10.10.0.0/16", 
             "172.16.0.0/12"
         ],
-        env='SCHEDULER_NIH_NETWORKS' 
+        env='SCHEDULER_NIH_NETWORKS'
     )
 
-    # Default mappings (previously in CSV files)
+    # Default mappings
     device_departments: Dict[str, List[str]] = Field(
-        default_factory=lambda: {
-            'TEST': ['TEST', 'DEV']
-        }
+        default={'TEST': ['TEST', 'DEV']}
     )
-
     user_departments: Dict[str, Dict[str, bool]] = Field(
-        default_factory=lambda: {
-            'testuser': {
-                'TEST': False,
-                'DEV': True
-            }
-        }
+        default={'testuser': {'TEST': False, 'DEV': True}}
     )
-
     device_permissions: Dict[str, Dict[str, Dict[str, bool]]] = Field(
-        default_factory=lambda: {
+        default={
             'testuser': {
                 'TEST': {
                     'templates': True,
@@ -224,10 +185,8 @@ class Settings(BaseSettings):
             }
         }
     )
-
-    # Mailing lists configuration  
     mailing_lists: Dict[str, str] = Field(
-        default_factory=lambda: {
+        default={
             "list 1": "Description of list 1",
             "list 2": "Description of list 2"
         }
@@ -241,66 +200,47 @@ class Settings(BaseSettings):
 
     def get_proxy_count(self) -> Optional[Dict[str, int]]:
         """Get proxy configuration counts"""
-        total, count = 0, {
-            "For": 0,
-            "Proto": 0,
-            "Host": 0,
-            "Port": 0,
-            "Prefix": 0,
-        }
+        count = {key: 0 for key in ["For", "Proto", "Host", "Port", "Prefix"]}
+        
+        for key in count:
+            env_var = f"MMSCHED_X_FORWARDED_{key.upper()}"
+            value = int(self.dict().get(env_var, 0))
+            if value < 0:
+                raise ValueError(f"{env_var} must be nonnegative integer")
+            count[key] = value
 
-        for ev in count.keys():
-            nm = f"MMSCHED_X_FORWARDED_{ev.upper()}"
-            n = int(self.dict().get(nm, 0))
-            if n < 0:
-                raise ValueError(f"{nm} must be nonnegative integer")
-            total += n
-            count[ev] = n
-
+        total = sum(count.values())
         if total > 0:
             return {
-                "x_for": count["For"],
-                "x_proto": count["Proto"],
-                "x_host": count["Host"],
-                "x_port": count["Port"],
-                "x_prefix": count["Prefix"],
+                f"x_{k.lower()}": v 
+                for k, v in count.items()
             }
-
         return None
 
     def validate(self) -> Optional[str]:
+        """Validate critical settings"""
         required_settings = [
             ('core.secret_key', 'SECRET_KEY'),
             ('core.site_sender', 'SITE_SENDER'),
             ('core.listserv', 'LISTSERV')
         ]
-        for attr, name in required_settings:
-            value = getattr(self, attr)
+        for attr_path, name in required_settings:
+            parts = attr_path.split('.')
+            value = self
+            for part in parts:
+                value = getattr(value, part)
+            
             if not value:
                 return f"{name} must be set"
-            # Email validation for site_sender and listserv
             if name in ['SITE_SENDER', 'LISTSERV'] and '@' not in value:
                 return f"{name} must be a valid email address"
         return None
 
-    class Config:
-        """
-        Pydantic model configuration.
-        This class is used implicitly by Pydantic for model configuration.
-        """
-        env_file = '.env'
-        case_sensitive = True
-        extra = 'allow'
-
 class AppConfig(dict):
-    """
-    Flask application configuration with both dictionary and attribute access.
-    Allows both config['KEY'] and config.KEY access patterns.
-    """
-    def __init__(self, settings: 'Settings'):
+    """Flask application configuration with dictionary and attribute access"""
+    def __init__(self, settings: Settings):
         super().__init__()
         self.update({
-            # Core settings - UPPERCASE for Flask compatibility
             'SECRET_KEY': settings.core.secret_key,
             'SERVER_NAME': settings.server.server_name,
             'APPLICATION_ROOT': settings.server.application_root,
@@ -317,7 +257,7 @@ class AppConfig(dict):
             'SESSION_TYPE': settings.session.type,
             'SESSION_USE_SIGNER': settings.session.use_signer,
             'SESSION_SQLALCHEMY_TABLE': settings.session.sqlalchemy_table,
-            'SUPERUSER_MODE': False,
+            'SUPERUSER_MODE': settings.superuser_mode,
             'NIH_NETWORKS': [ipaddress.ip_network(net) for net in settings.nih_networks],
             'nih_mailing_lists': settings.mailing_lists,
             'SM_LOGIN_URL_PREFIX': settings.core.sm_login_url_prefix,
@@ -329,8 +269,8 @@ class AppConfig(dict):
             return self[name]
         except KeyError:
             raise AttributeError(f"'AppConfig' has no attribute '{name}'")
-        
-# Global settings instance
+   
+# Global instances
 settings = Settings()
 
 app_config = AppConfig(settings)

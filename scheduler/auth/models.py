@@ -12,7 +12,7 @@ class LDAPUser:
     groups: List[str]
     token: Optional[str] = None
     token_expiry: Optional[datetime] = None
-    active: bool = True  # Add active attribute with default True
+    active: bool = True
     
     @property
     def is_authenticated(self) -> bool:

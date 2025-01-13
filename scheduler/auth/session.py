@@ -1,18 +1,14 @@
 # scheduler/auth/session.py
 
 from typing import Optional
-from datetime import datetime
-from flask import session, g, current_app
 from .models import LDAPUser
 from .token_store import TokenStore
 from .ldap import LDAPClient
 from ..logic import upsert_user
 from ..model import db
-from datetime import datetime, timedelta  # Add timedelta import
+from datetime import datetime, timedelta
 from flask import session, g, current_app, redirect, url_for
-
-# Global LDAP client instance
-_ldap_client = None
+from scheduler.config import settings
 
 def get_ldap_client() -> LDAPClient:
     """Get LDAP client from application context"""
@@ -30,10 +26,15 @@ def login_user(user: LDAPUser) -> None:
     )
     db.session.commit()
     
-    # Store token
-    token = TokenStore.create_token(user.username, user.token_expiry)
+    # Store token with LDAP-configured expiry
+    token_expiry = datetime.utcnow() + timedelta(seconds=settings.ldap.token_lifetime)
+    token = TokenStore.create_token(user.username, token_expiry)
     user.token = token
+    user.token_expiry = token_expiry
     
+    # Make session permanent and set its expiry
+    session.permanent = True
+
     # Update session with all user info
     session["user_name"] = user.username
     session["display_name"] = user.display_name
@@ -56,7 +57,6 @@ def logout_user() -> None:
     if hasattr(g, "user"):
         delattr(g, "user")
 
-# scheduler/auth/session.py
 def get_user_from_session() -> Optional[LDAPUser]:
     """Get user from current session if valid"""
     try:
