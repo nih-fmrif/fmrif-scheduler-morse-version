@@ -59,48 +59,29 @@ class LDAPConfig(BaseAppSettings):
             values.warn_if_default(field, getattr(values, field), "LDAP")
         return values
 
-class DatabaseConfig(BaseModel):
+class DatabaseConfig(BaseAppSettings):
     """Database connection and behavior settings"""
     # Required credentials with development defaults
-    user: str = Field(
-        default="postgres" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='POSTGRES_USER'
-    )
-    password: str = Field(
-        default="postgres" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='POSTGRES_PASSWORD'
-    )
-    db: str = Field(
-        default="scheduler" if not os.getenv('FLASK_ENV') == 'production' else ...,
-        env='POSTGRES_DB'
-    )
-    # Optional with development-friendly defaults
-    host: str = Field(default="localhost", env='POSTGRES_HOST')
-    port: int = Field(default=5050, env='POSTGRES_PORT')
+    user: str = Field(default="postgres", env='POSTGRES_USER')
+    password: str = Field(default="postgres", env='POSTGRES_PASSWORD')
+    db: str = Field(default="scheduler", env='POSTGRES_DB')
+    host: str = Field(default="postgres", env='POSTGRES_HOST')
+    port: int = Field(default=5432, env='POSTGRES_PORT')
     echo: bool = Field(default=False)
     track_modifications: bool = Field(default=False)
 
     @model_validator(mode='after')
     def warn_default_values(cls, values: Any) -> Any:
-        if os.getenv('FLASK_ENV') != 'production':
-            default_values = {
-                'user': "postgres",
-                'password': "postgres",
-                'db': "scheduler"
-            }
-            
-            for field_name, default_value in default_values.items():
-                if getattr(values, field_name) == default_value:
-                    warnings.warn(
-                        f"Using default database {field_name}: {default_value}. "
-                        "This is okay for development but must be changed in production."
-                    )
-        
+        print(f"Database Config Values: host={values.host}, port={values.port}, user={values.user}, db={values.db}")
+        for field in ['user', 'password', 'db']:
+            values.warn_if_default(field, getattr(values, field), "database")
         return values
 
     @property
     def url(self) -> str:
-        return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.db}"
+        connection_url = f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.db}"
+        print(f"Generated Database URL: {connection_url}")
+        return connection_url
     
 class CoreConfig(BaseAppSettings):
     """Core application settings"""
