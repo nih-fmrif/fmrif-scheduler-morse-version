@@ -16,6 +16,7 @@ COPY ./scheduler ./scheduler
 COPY ./migrations ./migrations
 COPY ./wsgi.py ./wsgi.py
 COPY ./entrypoint.sh ./entrypoint.sh
+COPY ./alembic.ini ./alembic.ini
 RUN uv sync
 
 # Make entrypoint executable
