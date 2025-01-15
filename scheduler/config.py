@@ -102,7 +102,7 @@ class CoreConfig(BaseAppSettings):
 
 class ServerConfig(BaseAppSettings):
     """Server configuration settings"""
-    server_name: str = Field(default="127.0.0.1:5000", env='MMSCHED_SERVER_NAME')
+    server_name: str = Field(default="localhost:5051", env='MMSCHED_SERVER_NAME')
     application_root: str = Field(default="", env='MMSCHED_APPLICATION_ROOT')
 
 class MailConfig(BaseAppSettings):

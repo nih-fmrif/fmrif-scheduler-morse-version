@@ -11,9 +11,9 @@ INSERT INTO tlkpdept (deptcode, dept, dept_short, grp, color_wkday_day, ismain, 
 ('admin', 'Administration', 'admin', 'ADMIN', '000000', true, true);
 
 -- Add test researchers
-INSERT INTO tlkpresearcher (researchercode, lname, fname, researchershort, chg_at, active) VALUES
-('testuser', 'User', 'Test', 'testuser', CURRENT_TIMESTAMP, true),
-('testuser1', 'User1', 'Test1', 'testuser1', CURRENT_TIMESTAMP, true);
+INSERT INTO tlkpresearcher (researchercode, lname, fname, researchershort, chg_at) VALUES
+('testuser', 'User', 'Test', 'testuser', CURRENT_TIMESTAMP),
+('testuser1', 'User1', 'Test1', 'testuser1', CURRENT_TIMESTAMP);
 
 -- Add test scanner
 INSERT INTO tlkpscanner (scannercode, scanner, descrip, mailinglist, active) VALUES

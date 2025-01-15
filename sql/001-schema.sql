@@ -17,7 +17,7 @@ COMMENT ON SCHEMA public IS 'Standard public schema';
 -- Name: plpgsql; Type: PROCEDURAL LANGUAGE; Schema: -; Owner: 
 --
 
-CREATE PROCEDURAL LANGUAGE plpgsql;
+CREATE EXTENSION IF NOT EXISTS plpgsql;
 
 
 SET search_path = public, pg_catalog;
@@ -72,7 +72,7 @@ $_$
 
 SET default_tablespace = '';
 
-SET default_with_oids = true;
+SET default_with_oids = false;
 
 --
 -- Name: tlkpdept; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
@@ -382,7 +382,7 @@ CREATE TABLE temp_timelapse (
 );
 
 
-SET default_with_oids = true;
+SET default_with_oids = false;
 
 --
 -- Name: tlkpinst; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 

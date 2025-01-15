@@ -13,7 +13,6 @@ RUN uv sync --python 3.11
 
 # Copy the application code
 COPY ./scheduler ./scheduler
-COPY ./migrations ./migrations
 COPY ./wsgi.py ./wsgi.py
 COPY ./entrypoint.sh ./entrypoint.sh
 COPY ./alembic.ini ./alembic.ini

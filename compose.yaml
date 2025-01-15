@@ -12,7 +12,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+    volumes:
+      # Only mount the migration script, not all SQL files
+      - ./sql/000-run-migrations.sh:/docker-entrypoint-initdb.d/000-run-migrations.sh
+      # Mount the SQL directory separately for the script to access
+      - ./sql:/sql
   ldap:
     image: bitnami/openldap:latest
     env_file:
