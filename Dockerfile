@@ -12,10 +12,14 @@ COPY pyproject.toml .
 RUN uv sync --python 3.11
 
 # Copy the application code
-COPY . .
+COPY ./scheduler ./scheduler
+COPY ./migrations ./migrations
+COPY ./wsgi.py ./wsgi.py
+COPY ./entrypoint.sh ./entrypoint.sh
 RUN uv sync
 
 # Make entrypoint executable
-RUN chmod +x entrypoint.sh
+RUN chmod a+x entrypoint.sh
 
-CMD ["./entrypoint.sh"]
+ENTRYPOINT ["./entrypoint.sh"]
+

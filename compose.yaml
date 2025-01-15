@@ -27,9 +27,9 @@ services:
     env_file:
       - .env
     ports:
-      - "5051:5000"
+      - "5051:5051"
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - .:/app
+      - ./scheduler:/app/scheduler
