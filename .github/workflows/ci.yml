@@ -1,9 +1,9 @@
+# .github/workflows/ci.yml
 name: CI
 on:
   push:
-    branches: [ '*' ]
-  pull_request:
-    branches: [ '*' ]
+    branches: [ '**' ]
+
 jobs:
   test:
     timeout-minutes: 60
@@ -11,33 +11,71 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-         python-version: '3.9'
+         python-version: '3.11'
+         
     - name: Set up Node.js  
       uses: actions/setup-node@v3
       with:
         node-version: '18'
+        
+    - name: Install Python dependencies
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv sync --all-extras
+
     - name: Setup environment
       run: |
-        cp .env.sample .env
+        bash setup-dotenv.sh
         docker compose up --build -d
+
+    - name: Run Python tests
+      run: |
+        uv run pytest tests/python/
 
     - name: Install Node.js dependencies  
       run: npm ci --no-optional
+
+    - name: Cache Playwright browsers
+      id: playwright-cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          playwright-${{ runner.os }}-
+      
     - name: Install Playwright browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: npx playwright install --with-deps
-    - name: Initialize database
-      run: |
-        cd sql
-        ./unsafe-reprovision-db.sh
 
     - name: Run Playwright tests
-      run: npm run test
-    - uses: actions/upload-artifact@v3
+      run: |
+        # Ensure clean state
+        docker compose down -v
+        # Start fresh containers
+        docker compose up -d
+        # Wait for services to be ready
+        sleep 10
+        # Run tests
+        npm run test
+
+    # Update to v4 of upload-artifact
+    - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: playwright-report
         path: playwright-report/
+        retention-days: 30
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: pytest-report
+        path: |
+          .coverage
+          coverage.xml
         retention-days: 30

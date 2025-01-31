@@ -1,8 +1,10 @@
+# tests/python/test_auth.py
 import pytest
 from scheduler import logic
-from scheduler.app import login_required, admin_only, active_user_required
+from scheduler.app import login_required, admin_only
+from flask import g
 
-def test_superuser_creation():
+def test_superuser_creation(app_context):
     superuser = logic.get_or_create_superuser()
     assert superuser.id == "superuser"
     assert superuser.label == "Superuser"
@@ -11,18 +13,22 @@ def test_superuser_creation():
 
 def test_login_required(app, client):
     @app.route('/protected')
-    @login_required
+    @login_required 
     def protected():
         return 'protected'
         
-    response = client.get('/protected')
-    assert response.status_code == 403
+    with app.test_request_context():
+        g.user = None
+        response = client.get('/protected')
+        assert response.status_code == 403
 
 def test_admin_only(app, client):
     @app.route('/admin')
-    @admin_only 
+    @admin_only
     def admin():
         return 'admin only'
         
-    response = client.get('/admin')
-    assert response.status_code == 403 
+    with app.test_request_context():
+        g.user = None
+        response = client.get('/admin')
+        assert response.status_code == 403

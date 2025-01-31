@@ -2,7 +2,7 @@ import pytest
 from scheduler import logic
 from scheduler import model
 
-def test_template_validation():
+def test_template_validation(app_context):
     device = model.Device(id="test_scanner", label="Test Scanner")
     
     # Test empty templates
@@ -12,6 +12,7 @@ def test_template_validation():
     # Test invalid template
     errors = logic.validate_templates_before_application(device, "invalid_template")
     assert "invalid template codes provided" in errors
+
 
 def test_verify_template_diffs():
     institutes = [("inst1", "Institute 1")]

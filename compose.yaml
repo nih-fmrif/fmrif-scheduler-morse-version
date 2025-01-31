@@ -1,10 +1,11 @@
-version: '3.8'
-
+# Used for developer purposes only
+name: scheduler
 services:
   postgres:
+    container_name: scheduler-postgres
     image: postgres:15
     env_file:
-      - .env
+      - sql/.env.docker
     ports:
       - "5050:5432" 
     healthcheck:
@@ -13,23 +14,25 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      # Only mount the migration script, not all SQL files
-      - ./sql/000-run-migrations.sh:/docker-entrypoint-initdb.d/000-run-migrations.sh
-      # Mount the SQL directory separately for the script to access
       - ./sql:/sql
+      - ./sql/000-run-migrations.sh:/docker-entrypoint-initdb.d/000-run-migrations.sh:ro
+      - scheduler_pgdata:/var/lib/postgresql/data
+
   ldap:
+    container_name: ldap
     image: bitnami/openldap:latest
     env_file:
-      - .env
+      - .env.docker
     ports:
       - "1389:1389"
 
   scheduler:
+    container_name: scheduler
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - .env
+      - .env.docker
     ports:
       - "5051:5051"
     depends_on:
@@ -37,3 +40,7 @@ services:
         condition: service_healthy
     volumes:
       - ./scheduler:/app/scheduler
+      - ./.env.docker:/app/.env:ro
+
+volumes:
+  scheduler_pgdata:

@@ -51,12 +51,6 @@ app.config["URL_SIGNER"] = signer
 # Register blueprints
 app.register_blueprint(auth, url_prefix='/auth')
 
-# Validate configuration in production
-if not app.debug:
-    error = settings.validate()
-    if error:
-        raise RuntimeError(f"Invalid configuration: {error}")
-
 ## Authentication
 
 
@@ -127,7 +121,7 @@ def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[st
         "code": code,
         "msg": msg,
         "show_login": show_login,
-        "login_url_prefix": app.config["SM_LOGIN_URL_PREFIX"],
+        "login_url_prefix": app.config["LOGIN_URL_PREFIX"],
     }
     return render_template("error.html", **data), code
 

@@ -19,7 +19,6 @@ def test_group_model():
         id="test_group",
         label="Test Group",
         active=True,
-        created=datetime.now()
     )
     assert group.id == "test_group"
     assert group.label == "Test Group"

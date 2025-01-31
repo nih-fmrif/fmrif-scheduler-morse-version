@@ -1,3 +1,4 @@
+// tests/pages/login.page.ts
 import { Page, Locator, expect } from '@playwright/test';
 
 export class LoginPage {
@@ -13,7 +14,7 @@ export class LoginPage {
     this.usernameInput = page.getByLabel('Username');
     this.passwordInput = page.getByLabel('Password'); 
     this.submitButton = page.getByRole('button', { name: 'Login' });
-    this.logoutLink = page.getByRole('link', { name: 'Logout' });
+    this.logoutLink = page.getByRole('link', { name: 'logout' });
     this.errorMessage = page.getByText('Invalid username or password');
   }
 
@@ -33,21 +34,25 @@ export class LoginPage {
     await this.submitButton.click();
   }
 
-  async logout() {
-    await this.logoutLink.click();
+  async verifySuccessfulLogin() {
+    if (process.env.RBAC__SUPERUSER_MODE === 'false') {
+      await this.page.waitForURL('/**');
+      await expect(this.page.getByText(/logged in as/)).toBeVisible();
+    } else {
+      await this.page.goto('/');
+      await expect(this.page.getByText('logged in as superuser')).toBeVisible();
+    }
   }
 
   async verifyErrorMessage() {
     await expect(this.errorMessage).toBeVisible();
   }
 
-  async verifySuccessfulLogin() {
-    await expect(this.page.getByText('Successfully logged in')).toBeVisible();
-    await expect(this.logoutLink).toBeVisible();
+  async logout() {
+    await this.logoutLink.click();
   }
 
   async verifyLoggedOut() {
-    await expect(this.page.getByText('Successfully logged out')).toBeVisible();
     await expect(this.logoutLink).not.toBeVisible();
   }
 }

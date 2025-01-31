@@ -7,13 +7,15 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 COPY --from=ghcr.io/astral-sh/uv:0.5.10 /uv /bin/uv
 
+# Install postgres client for health check
+RUN apt-get update && apt-get install -y postgresql-client
+
 # Install requirements first
 COPY pyproject.toml .
 RUN uv sync --python 3.11
 
 # Copy the application code
 COPY ./scheduler ./scheduler
-COPY ./wsgi.py ./wsgi.py
 COPY ./entrypoint.sh ./entrypoint.sh
 COPY ./alembic.ini ./alembic.ini
 RUN uv sync
@@ -22,4 +24,3 @@ RUN uv sync
 RUN chmod a+x entrypoint.sh
 
 ENTRYPOINT ["./entrypoint.sh"]
-
