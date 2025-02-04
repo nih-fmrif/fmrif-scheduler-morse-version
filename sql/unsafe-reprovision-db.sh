@@ -4,7 +4,19 @@
 
 # Set environment variables for psql connection
 # NOTE: always uses port 5050. Check other replacement logic in the sed commands
-export $(cat .env | sed 's/^POSTGRES_DB/PGDATABASE/' | sed 's/^POSTGRES_/PG/' | sed 's/^PGPORT=.*/PGPORT=5050/')
+export ENVFILE=../.env
+while IFS= read -r line; do
+    # Skip comments and empty lines
+    [[ $line =~ ^#.*$ || -z $line ]] && continue
+    # Export the variable
+    export "$line"
+done < <(cat "$ENVFILE" | grep -v '#' | \
+    sed 's/^POSTGRES_DB/PGDATABASE/' | \
+    sed 's/^DATABASE__DB/PGDATABASE/' | \
+    sed 's/^DATABASE__/PG/' | \
+    sed 's/^POSTGRES_/PG/' | \
+    sed 's/^PGPORT=.*/PGPORT=5050/' | \
+    grep '^PG.*')
 
 fatal() {
     echo "$@" 1>&2
