@@ -12,7 +12,13 @@ from alembic import context
 # target_metadata = Base.metadata
 from scheduler.config import app_config
 config = context.config
-config.set_main_option("sqlalchemy.url", app_config.SQLALCHEMY_DATABASE_URI)
+
+# Escape % characters in the URL for ConfigParser
+
+db_url = app_config.SQLALCHEMY_DATABASE_URI.replace('%', '%%')
+
+config.set_main_option("sqlalchemy.url", db_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

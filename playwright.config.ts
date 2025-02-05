@@ -18,13 +18,6 @@ const config: PlaywrightTestConfig = {
       },
     }
   ],
-  // Remove webServer config since we're managing Docker separately
-  // webServer: {
-  //   command: 'docker compose up',
-  //   url: 'http://localhost:5051/auth/login',
-  //   reuseExistingServer: true,
-  //   timeout: 120 * 1000,
-  // },
 };
 
 export default config;

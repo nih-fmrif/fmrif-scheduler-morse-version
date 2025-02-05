@@ -98,8 +98,8 @@ def test_database_url_construction():
             "expected": "postgresql+psycopg2://test:pass@localhost:5432/testdb"
         },
         {
-            "config": {"user": "user@domain", "password": "pass:word", "host": "host.com", "port": 5433, "db": "prod"},
-            "expected": f"postgresql+psycopg2://{quote('user@domain')}:{quote('pass:word')}@host.com:5433/prod"
+            "config": {"user": "user@domain", "password": "pass:word!", "host": "host.com", "port": 5433, "db": "prod"},
+            "expected": f"postgresql+psycopg2://{quote('user@domain')}:{quote('pass:word!')}@host.com:5433/prod"
         }
     ]
     
@@ -413,3 +413,16 @@ def test_attribute_access_app_config():
         _ = app_config['NON_EXISTENT']
     with pytest.raises(AttributeError):
         _ = app_config.NON_EXISTENT
+
+def test_database_url_special_chars():
+    """Test database URL construction with special characters"""
+    config = DatabaseConfig(
+        user="test",
+        password="pass!word@123",
+        host="localhost",
+        port=5432,
+        db="testdb"
+    )
+    
+    expected = f"postgresql+psycopg2://test:{quote('pass!word@123')}@localhost:5432/testdb"
+    assert config.url == expected
