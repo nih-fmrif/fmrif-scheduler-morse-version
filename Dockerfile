@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM python:3.11.2-slim
 SHELL ["/bin/bash", "--login", "-c"]
 WORKDIR /app
 
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y postgresql-client
 
 # Install requirements first
 COPY pyproject.toml .
-RUN uv sync --python 3.11
+RUN uv sync
 
 # Copy the application code
 COPY ./scheduler ./scheduler
