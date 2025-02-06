@@ -26,7 +26,7 @@ def temp_env_file() -> Generator[Path, None, None]:
 def clean_env(monkeypatch):
     """Clear relevant environment variables before each test"""
     env_vars = [
-        "DATABASE__HOST", "DATABASE__PORT", "DATABASE__USER", "DATABASE__PASSWORD",
+        "PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE",
         "CORE__SECRET_KEY", "CORE__SITE_SENDER", "CORE__DEBUG",
         "MAIL__SERVER", "MAIL__PORT", "MAIL__USE_TLS",
         "LDAP__HOST", "LDAP__PORT", "LDAP__USE_SSL",
@@ -42,7 +42,6 @@ def clean_env(monkeypatch):
     return monkeypatch
 
 @pytest.mark.parametrize("config_class,field,default,valid_value,invalid_value", [
-    (DatabaseConfig, "port", 5432, 5433, "invalid"),
     (CoreConfig, "site_sender", "noreply@example.com", "test@example.com", "invalid-email"),
     (LDAPConfig, "port", 389, 636, "invalid"),
     (MailConfig, "port", 25, 587, "invalid"),
@@ -64,8 +63,8 @@ def test_config_field_validation(config_class, field, default, valid_value, inva
             config_class(**{field: invalid_value})
 
 @pytest.mark.parametrize("env_var,env_value,config_path,expected", [
-    ("DATABASE__HOST", "env-host", "database.host", "env-host"),
-    ("DATABASE__PORT", "5433", "database.port", 5433),
+    ("PGHOST", "env-host", "PGHOST", "env-host"),
+    ("PGPORT", "5433", "PGPORT", 5433),
     ("CORE__SECRET_KEY", "env-key", "core.secret_key", "env-key"),
     ("MAIL__SERVER", "env-smtp", "mail.server", "env-smtp"),
     ("LDAP__HOST", "env-ldap", "ldap.host", "env-ldap"),
@@ -94,18 +93,30 @@ def test_database_url_construction():
     """Test database URL construction with different configurations"""
     test_cases = [
         {
-            "config": {"user": "test", "password": "pass", "host": "localhost", "port": 5432, "db": "testdb"},
+            "config": {
+                "PGUSER": "test", 
+                "PGPASSWORD": "pass", 
+                "PGHOST": "localhost", 
+                "PGPORT": 5432, 
+                "PGDATABASE": "testdb"
+            },
             "expected": "postgresql+psycopg2://test:pass@localhost:5432/testdb"
         },
         {
-            "config": {"user": "user@domain", "password": "pass:word!", "host": "host.com", "port": 5433, "db": "prod"},
+            "config": {
+                "PGUSER": "user@domain", 
+                "PGPASSWORD": "pass:word!", 
+                "PGHOST": "host.com", 
+                "PGPORT": 5433, 
+                "PGDATABASE": "prod"
+            },
             "expected": f"postgresql+psycopg2://{quote('user@domain')}:{quote('pass:word!')}@host.com:5433/prod"
         }
     ]
     
     for case in test_cases:
-        config = DatabaseConfig(**case["config"])
-        assert config.url == case["expected"]
+        settings = Settings(**case["config"])
+        assert settings.database_url == case["expected"]
 
 @pytest.mark.parametrize("networks,expected_valid", [
     (["192.168.1.0/24", "10.0.0.0/8"], True),
@@ -210,27 +221,52 @@ def test_server_config():
     assert config.application_root == "/app"
 
 def test_database_config_validation():
-    """Test DatabaseConfig validation and URL generation"""
-    # Test default values
-    config = DatabaseConfig()
-    assert config.user == "postgres"
-    assert config.password == "postgres"
-    assert config.db == "scheduler"
-    assert config.host == "postgres"
-    assert config.port == 5432
-    assert config.echo is False
-    assert config.track_modifications is False
+    """Test DatabaseConfig validation"""
+    # Test default values when no environment variables are set
     
-    # Test custom values
-    config = DatabaseConfig(
-        user="test_user",
-        password="test_pass",
-        db="test_db",
-        host="test_host",
-        port=5433
-    )
-    expected_url = "postgresql+psycopg2://test_user:test_pass@test_host:5433/test_db"
-    assert config.url == expected_url
+    # Store original env vars
+    original_env = {
+        'PGUSER': os.getenv('PGUSER'),
+        'PGPASSWORD': os.getenv('PGPASSWORD'),
+        'PGDATABASE': os.getenv('PGDATABASE'),
+        'PGHOST': os.getenv('PGHOST'),
+        'PGPORT': os.getenv('PGPORT')
+    }
+    
+    try:
+        # Clear env vars
+        for var in ['PGUSER', 'PGPASSWORD', 'PGDATABASE', 'PGHOST', 'PGPORT']:
+            if var in os.environ:
+                del os.environ[var]
+        
+        # Test default values
+        settings = Settings()
+        assert settings.PGUSER == "postgres"
+        assert settings.PGPASSWORD == "password"
+        assert settings.PGDATABASE == "fmrif_scheduler"
+        assert settings.PGHOST == "localhost"
+        assert settings.PGPORT == 5444
+        assert settings.database.echo is False
+        assert settings.database.track_modifications is False
+        
+        # Test custom values
+        settings = Settings(
+            PGUSER="test_user",
+            PGPASSWORD="test_pass",
+            PGDATABASE="test_db",
+            PGHOST="test_host",
+            PGPORT=5433
+        )
+        expected_url = "postgresql+psycopg2://test_user:test_pass@test_host:5433/test_db"
+        assert settings.database_url == expected_url
+        
+    finally:
+        # Restore original env vars
+        for var, value in original_env.items():
+            if value is not None:
+                os.environ[var] = value
+            elif var in os.environ:
+                del os.environ[var]
 
 def test_ldap_config_validation():
     """Test LDAPConfig validation"""
@@ -357,8 +393,8 @@ def test_settings_env_override(temp_env_file, monkeypatch):
     """Test environment variable override functionality"""
     # Write test values to temporary .env file
     env_content = """
-DATABASE__HOST=testhost
-DATABASE__PORT=5433
+PGHOST=testhost
+PGPORT=5433
 CORE__SECRET_KEY=test-secret
 MAIL__SERVER=test-smtp
 LDAP__HOST=test-ldap
@@ -366,8 +402,8 @@ LDAP__HOST=test-ldap
     temp_env_file.write_text(env_content.strip())
     
     # Set environment variables directly
-    monkeypatch.setenv("DATABASE__HOST", "testhost")
-    monkeypatch.setenv("DATABASE__PORT", "5433")
+    monkeypatch.setenv("PGHOST", "testhost")
+    monkeypatch.setenv("PGPORT", "5433")
     monkeypatch.setenv("CORE__SECRET_KEY", "test-secret")
     monkeypatch.setenv("MAIL__SERVER", "test-smtp")
     monkeypatch.setenv("LDAP__HOST", "test-ldap")
@@ -376,21 +412,21 @@ LDAP__HOST=test-ldap
     settings = Settings(_env_file=temp_env_file)
     
     # Verify environment overrides
-    assert settings.database.host == "testhost"
-    assert settings.database.port == 5433
+    assert settings.PGHOST == "testhost"
+    assert settings.PGPORT == 5433
     assert settings.core.secret_key == "test-secret"
     assert settings.mail.server == "test-smtp"
     assert settings.ldap.host == "test-ldap"
     
     # Verify non-overridden values maintain defaults
-    assert settings.database.user == "postgres"
+    assert settings.PGUSER == "postgres"
     assert settings.core.debug is True
     assert settings.mail.port == 25
 
 def test_settings_with_invalid_env_values(temp_env_file, monkeypatch):
     """Test validation of invalid environment variable values"""
     # Set invalid environment variables directly
-    monkeypatch.setenv("DATABASE__PORT", "invalid")
+    monkeypatch.setenv("PGPORT", "invalid")
     monkeypatch.setenv("MAIL__PORT", "-1")
     
     # Verify that invalid values raise ValidationError
@@ -416,13 +452,13 @@ def test_attribute_access_app_config():
 
 def test_database_url_special_chars():
     """Test database URL construction with special characters"""
-    config = DatabaseConfig(
-        user="test",
-        password="pass!word@123",
-        host="localhost",
-        port=5432,
-        db="testdb"
+    settings = Settings(
+        PGUSER="test",
+        PGPASSWORD="pass!word@123",
+        PGHOST="localhost",
+        PGPORT=5432,
+        PGDATABASE="testdb"
     )
     
     expected = f"postgresql+psycopg2://test:{quote('pass!word@123')}@localhost:5432/testdb"
-    assert config.url == expected
+    assert settings.database_url == expected

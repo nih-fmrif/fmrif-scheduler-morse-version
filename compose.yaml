@@ -4,25 +4,30 @@ services:
   postgres:
     container_name: scheduler-postgres
     image: postgres:15
-    env_file:
-      - sql/.env.docker
+    environment:
+      PGUSER: ${PGUSER}
+      PGPASSWORD: ${PGPASSWORD}
+      # POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      PGDATABASE: ${PGDATABASE}
+      # POSTGRES_DB: ${PGDATABASE}
     ports:
-      - "5050:5432" 
+      - "${PGPORT}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready"]
       interval: 10s
       timeout: 5s
       retries: 5
     volumes:
       - ./sql:/sql
-      - ./sql/000-run-migrations.sh:/docker-entrypoint-initdb.d/000-run-migrations.sh:ro
+      - ./sql/000-init.sh:/docker-entrypoint-initdb.d/000-init.sh:ro
       - scheduler_pgdata:/var/lib/postgresql/data
 
   ldap:
     container_name: ldap
     image: bitnami/openldap:latest
     env_file:
-      - .env.docker
+      - .env
     ports:
       - "1389:1389"
 
@@ -32,15 +37,16 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - .env.docker
+      - .env
     ports:
       - "5051:5051"
-    depends_on:
-      postgres:
-        condition: service_healthy
+
     volumes:
       - ./scheduler:/app/scheduler
       - ./.env.docker:/app/.env:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   scheduler_pgdata:

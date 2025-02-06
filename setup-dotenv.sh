@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# change variables so that sqldocker works
 # Copy all .env.sample files to .env.docker
 for f in $(find . -name .env.sample); do
   cp "$f" "${f%.sample}.docker"

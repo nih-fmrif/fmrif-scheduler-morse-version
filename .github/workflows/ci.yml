@@ -55,11 +55,25 @@ jobs:
     - name: Run Playwright tests
       run: |
         # Ensure clean state
-        docker compose down -v
+        docker compose down
+        
+        # Setup environment files
+        bash setup-dotenv.sh
+        
+        # Copy .env file to scheduler directory for container mounting
+        cp .env scheduler/.env
+        
         # Start fresh containers
         docker compose up -d
+        
         # Wait for services to be ready
-        sleep 10
+        echo "Waiting for services to be ready..."
+        sleep 30
+        
+        # Show container logs for debugging
+        echo "=== Scheduler Container Logs ==="
+        docker logs scheduler
+        
         # Run tests
         npm run test
 

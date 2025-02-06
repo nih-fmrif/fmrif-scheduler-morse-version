@@ -16,7 +16,7 @@ Pydantic-settings is used to load the environment variables from the .env file.
   and the separator "__" e.g. DATABASE__HOST=postgres (where DATABASE is the
   nested config class instance)
 """
-
+# TODO: need to rewrite db host and port when in container, remove traces of DATABASE__
 import logging
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, validator, model_validator, EmailStr, field_validator
@@ -55,23 +55,11 @@ class LDAPConfig(BaseModel):
     token_lifetime: int = 28800
 
 class DatabaseConfig(BaseModel):
-    """Database connection and behavior settings"""
     # Required credentials with development defaults
-    user: str = "postgres"
-    password: str = "postgres"
-    db: str = "scheduler"
-    host: str = "postgres"
-    port: int = 5432
     echo: bool = False
     track_modifications: bool = False
 
-    @property
-    def url(self) -> str:
-        """Generate database URL with proper URL encoding of special characters"""
-        return (
-            f"postgresql+psycopg2://{quote(self.user)}:{quote(self.password)}"
-            f"@{self.host}:{self.port}/{self.db}"
-        )
+
 
 class CoreConfig(BaseModel):
     """Core application settings"""
@@ -176,6 +164,21 @@ class Settings(BaseSettings):
     ldap: LDAPConfig = LDAPConfig()
     rbac: RBACConfig = RBACConfig()
 
+    """Database connection settings using standard PG* variables"""
+    PGHOST: str = "postgres"
+    PGPORT: int = 5432
+    PGUSER: str = "postgres"
+    PGPASSWORD: str = "postgres"
+    PGDATABASE: str = "scheduler"
+
+    @property
+    def database_url(self) -> str:
+        """Generate database URL with proper URL encoding of special characters"""
+        return (
+            f"postgresql+psycopg2://{quote(self.PGUSER)}:{quote(self.PGPASSWORD)}"
+            f"@{self.PGHOST}:{self.PGPORT}/{quote(self.PGDATABASE)}"
+        )
+
     def get_proxy_count(self) -> Optional[Dict[str, int]]:
         """Get proxy configuration counts from environment variables"""
         proxy_vars = {
@@ -209,7 +212,7 @@ class AppConfig(dict):
             'SECRET_KEY': settings.core.secret_key,
             'SERVER_NAME': settings.server.server_name,
             'APPLICATION_ROOT': settings.server.application_root,
-            'SQLALCHEMY_DATABASE_URI': settings.database.url,
+            'SQLALCHEMY_DATABASE_URI': settings.database_url,
             'SQLALCHEMY_TRACK_MODIFICATIONS': settings.database.track_modifications,
             'MAIL_SERVER': settings.mail.server,
             'MAIL_PORT': settings.mail.port,

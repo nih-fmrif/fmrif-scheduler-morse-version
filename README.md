@@ -28,6 +28,32 @@ uv run flask run --host 0.0.0.0 --port 5051
 
 ## Local development/testing
 
+### Deployment Setup
+
+1. Start PostgreSQL server however you wish, the following could work assuming you are using the correct postgres variables from .env:
+```bash
+docker run --name postgres_db \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_DB=fmrif_scheduler \
+  -p 5444:5432 \
+  --rm \
+  -v pgdata:/var/lib/postgresql/data \
+  postgres:15
+```
+
+2. Initialize the database (use DROP_DB=true to reset existing database):
+```bash
+DROP_DB=true bash sql/000-init.sh
+```
+
+3. Run the application:
+```bash
+uv run flask run --host 0.0.0.0 --port 5051
+```
+
+### Docker Setup
+
 Dependencies:
 - Podman and Podman Compose
 
@@ -36,7 +62,7 @@ database schema, configure the application to use an example LDAP server,and run
 the application:
 
 ```
-docker compose up --build
+bash run.sh
 ```
 
 This will start:
@@ -47,9 +73,16 @@ This will start:
 
 ### Backend testing
 
+Tests can be run either with Docker or against a standalone database:
+
 ```bash
 uv sync --all-extras
+
+# With Docker (recommended for development)
 uv run pytest
+
+# With standalone setup (PostgreSQL running on port 5444)
+PGHOST=localhost PGPORT=5444 PGDATABASE=scheduler_test pytest
 ```
 
 ### Frontend testing

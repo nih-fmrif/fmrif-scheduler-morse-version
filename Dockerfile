@@ -1,7 +1,7 @@
 FROM python:3.11.2-slim
 SHELL ["/bin/bash", "--login", "-c"]
 WORKDIR /app
-
+ENV IS_CONTAINER=1
 # Add virtual env to the path
 ENV PATH="/app/.venv/bin:$PATH"
 

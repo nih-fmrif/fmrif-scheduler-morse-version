@@ -50,7 +50,8 @@ def get_or_create_superuser():
             id=superuser_id,
             label="Superuser",  # Changed from name to label
             addr="superuser@example.com",  # Changed from email to addr
-            active=True
+            active=True,
+            modified=func.now()  # Set the chg_at timestamp
         )
         model.db.session.add(user)
         
