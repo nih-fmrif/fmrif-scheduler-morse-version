@@ -7,10 +7,8 @@ services:
     environment:
       PGUSER: ${PGUSER}
       PGPASSWORD: ${PGPASSWORD}
-      # POSTGRES_USER: ${PGUSER}
       POSTGRES_PASSWORD: ${PGPASSWORD}
       PGDATABASE: ${PGDATABASE}
-      # POSTGRES_DB: ${PGDATABASE}
     ports:
       - "${PGPORT}:5432"
     healthcheck:

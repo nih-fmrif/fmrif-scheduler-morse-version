@@ -1,6 +1,12 @@
 
 # Scheduler app
 
+## Documentation
+
+For detailed documentation, please refer to:
+- [Project Documentation](docs/README.md)
+- [Project Summary](summary.md)
+
 ## Setup
 
 ### Configure the application

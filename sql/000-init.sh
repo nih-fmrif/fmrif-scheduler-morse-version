@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
 
-# Ensure we're running in bash
-# if [ -z "${BASH_VERSION:-}" ] || [ "${BASH}" != "/bin/bash" ]; then
-#     echo "Error: This script must be run with bash" >&2
-#     echo "Please run as: bash $0" >&2
-#     exit 1
-# fi
-
 set -euo pipefail
 
 # Get the directory where the script is located
@@ -117,40 +110,6 @@ execute_sql_file() {
     fi
     return 0
 }
-
-# # Default environment file
-# ENVFILE="${ENVFILE:-.env}"
-
-# # If ENVFILE doesn't contain a full path, try to find it relative to both script dir and current dir
-# if [[ ! "$ENVFILE" = /* ]]; then
-#     if [[ -f "$PROJECT_ROOT/$ENVFILE" ]]; then
-#         ENVFILE="$PROJECT_ROOT/$ENVFILE"
-#     elif [[ -f "$PWD/$ENVFILE" ]]; then
-#         ENVFILE="$PWD/$ENVFILE"
-#     fi
-# fi
-
-# # Check if environment file exists and is readable
-# if [[ ! -f "$ENVFILE" ]]; then
-#     log "Environment file $ENVFILE not found"
-#     exit 1
-# fi
-
-# if [[ ! -r "$ENVFILE" ]]; then
-#     log "Environment file $ENVFILE is not readable"
-#     exit 1
-# fi
-
-# Clear existing POSTGRES_* environment variables to avoid conflicts
-# unset POSTGRES_HOST POSTGRES_PORT PGUSER PGPASSWORD PGDATABASE
-
-# # Source environment variables safely
-# while IFS= read -r line; do
-#     # Skip comments and empty lines
-#     [[ $line =~ ^[[:space:]]*#.*$ || -z $line ]] && continue
-#     # Export the variable
-#     export "$line"
-# done < <(cat "$ENVFILE" | grep -v '#' )
 
 # Verify essential variables are set
 essential_vars=("PGUSER" "PGPASSWORD" "PGDATABASE")

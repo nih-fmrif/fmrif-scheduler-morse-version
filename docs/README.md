@@ -4,10 +4,8 @@ This documentation provides a comprehensive guide for setting up, developing, an
 
 ## Table of Contents
 
-1. [Environment Setup](environment-setup.md)
+1. [Configuration Guide](configuration-guide.md)
 2. [Testing Guide](testing-guide.md)
-3. [CI/CD Pipeline](ci-cd-pipeline.md)
-4. [Configuration Guide](configuration-guide.md)
 
 # Schema Management
 
@@ -18,3 +16,11 @@ The database schema is managed through SQLAlchemy models and Alembic migrations:
 - SQL files in `sql/` are derived from models for development setup
 
 For production deployments, always use Alembic migrations.
+
+## Alembic Details    
+
+1. To apply migrations to a database (e.g., production or development), run:
+   ```
+   alembic upgrade head
+   ```
+   This will bring your database schema up to the latest revision.
