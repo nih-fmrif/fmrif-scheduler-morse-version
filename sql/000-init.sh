@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# Database initialization script
+
+# Note: This script requires PostgreSQL connection parameters to be 
+# available as environment variables (PGHOST, PGPORT, PGUSER, PGPASSWORD)
+# You can set these by either:
+# 1. Using your .env file (the application will load it)
+# 2. Explicitly exporting variables before running: 
+#    export PGHOST=localhost PGPORT=5050 ... then run this script
 
 set -euo pipefail
 
@@ -139,9 +147,11 @@ if ! check_postgres; then
 fi
 
 # Store target database name
-TARGET_DB="$PGDATABASE"
+TARGET_DB="${PGDATABASE:-fmrif_scheduler}" 
+echo "Target database will be: $TARGET_DB"
 
 # First connect to postgres database for admin operations
+# This is required as we cannot drop/create the database while connected to it
 export PGDATABASE="postgres"
 
 # Drop database if requested
@@ -182,8 +192,9 @@ else
     echo
 fi
 
-# Switch to target database for migrations
+# Switch back to target database for migrations
 export PGDATABASE="$TARGET_DB"
+echo "Switched to target database: $PGDATABASE"
 
 # Attempt to cd into Docker environment (PROJECT_ROOT/sql)
 if cd "${PROJECT_ROOT}/sql" 2>/dev/null; then

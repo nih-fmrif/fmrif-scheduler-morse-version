@@ -1,4 +1,3 @@
-
 # Scheduler app
 
 ## Documentation
@@ -19,6 +18,36 @@ command to get started quickly. Change sensitive values when ready to deploy.
 ```
 bash setup-dotenv.sh
 ```
+
+## Environment Variables
+
+The application uses PostgreSQL connection parameters that can be configured in two ways:
+
+### Using .env file (recommended for development)
+Create a `.env` file in the project root with these variables:
+```
+PGHOST=localhost
+PGPORT=5050
+PGUSER=postgres
+PGPASSWORD=FMRIF-postgres-123
+PGDATABASE=fmrif_scheduler
+```
+
+### Using environment variables (recommended for production)
+If you prefer to set environment variables directly (which will override .env values):
+```bash
+export PGHOST=localhost
+export PGPORT=5050
+export PGUSER=postgres
+export PGPASSWORD=FMRIF-postgres-123
+export PGDATABASE=fmrif_scheduler
+```
+
+### Important Note on PostgreSQL Variables
+- Native PostgreSQL tools use `PG*` variables (PGHOST, PGPORT, etc.)
+- Docker PostgreSQL images use `POSTGRES_*` variables (POSTGRES_PASSWORD, etc.)
+
+When using Docker, you'll need both sets of variables as shown in the Docker setup below.
 
 ## Install/Run the application
 
