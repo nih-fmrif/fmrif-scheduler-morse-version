@@ -47,6 +47,7 @@ class EntraConfig(BaseModel):
     discovery_url: str = ""
     redirect_uri: str = ""
     allowed_audiences: List[str] = Field(default_factory=list)
+    scope: str = "openid profile email"  # OAuth 2.0 OIDC scopes for user identity
     jwks_cache_ttl: int = 60 * 60  # seconds
 
     @property

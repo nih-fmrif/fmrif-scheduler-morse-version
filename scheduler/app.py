@@ -336,6 +336,7 @@ def entra_config():
         "discovery_url": settings.entra.discovery_url,
         "redirect_uri": settings.entra.redirect_uri,
         "allowed_audiences": settings.entra.allowed_audiences,
+        "scope": settings.entra.scope,
     }
     return jsonify(config)
 
