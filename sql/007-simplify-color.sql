@@ -6,8 +6,8 @@ begin;
 update tlkpdept set color_wkday_day = '000000' where coalesce(color_wkday_day, '') = '';
 
 -- normalize on 6 digit colors, expand ABC to AABBCC
-update tlkpdept 
-	set color_wkday_day = 
+update tlkpdept
+	set color_wkday_day =
 		substr(color_wkday_day, 1, 1) || substr(color_wkday_day, 1, 1) ||
 		substr(color_wkday_day, 2, 1) || substr(color_wkday_day, 2, 1) ||
 		substr(color_wkday_day, 3, 1) || substr(color_wkday_day, 3, 1)

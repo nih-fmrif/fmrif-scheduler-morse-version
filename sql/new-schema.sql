@@ -2159,4 +2159,3 @@ ALTER TABLE ONLY public.userdevice
 --
 -- PostgreSQL database dump complete
 --
-

@@ -19,14 +19,14 @@ test.describe('Authentication', () => {
   });
 
   test('should show error on invalid credentials', async () => {
-    // Skip if in superuser mode  
+    // Skip if in superuser mode
     if (process.env.RBAC__SUPERUSER_MODE === 'false') {
       await loginPage.login('invalid', 'invalid');
       await loginPage.verifyErrorMessage();
     } else {
       test.skip();
     }
-    
+
   });
 
   test('should login successfully with valid credentials', async () => {

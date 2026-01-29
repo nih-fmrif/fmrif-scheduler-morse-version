@@ -1,0 +1,4 @@
+node_modules/
+scheduler/static/a11y-dialog/*
+scheduler/static/scroll-lock/*
+scheduler/templates/**

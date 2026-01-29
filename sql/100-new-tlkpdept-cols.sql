@@ -56,7 +56,7 @@ update tlkpdept set iscurrent = false where deptcode in (
 -- 	('maint', 'maintenance', 'maint', false, 'MAINT', '#000000', false, false, true);
 
 	-- Add TRAIN institute if not exists
-INSERT INTO tlkpinst (instcode, inst) 
+INSERT INTO tlkpinst (instcode, inst)
 SELECT 'TRAIN', 'Training'
 WHERE NOT EXISTS (SELECT 1 FROM tlkpinst WHERE instcode = 'TRAIN');
 

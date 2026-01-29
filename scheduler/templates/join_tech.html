@@ -1,54 +1,159 @@
-{% extends "page.html" %}
-{% block title %}become a technologist{% endblock %}
+{% extends "page.html" %} {% block title %}become a technologist{% endblock %}
 {% block body %}
-	<form method=POST>
-		{# content between this and the next comment is user editable #}
-		<p><strong>This document addresses policies and procedures applicable to those individuals who participate in the testing of scans for purposes that are not considered research.</strong></p>
-		<p>A technical scan involves the use of highly experienced and approved individuals from the technical scan list for purposes that fall outside of research protocols. Individuals on this list have met safety criteria set forth in this document. The following points explain criteria by which a scan is determined to be a technical scan	and procedures that apply to such scans.</p>
-		<ul>
-			<li>Technical scans are not, in any way, to be used for research purposes. If there is any question as to whether you are performing "research" during your technical scan, please refer to Federal regulations 45 CFR 46,102 (d) which states: Research means a systematic investigation, including research development, testing and evaluation, designed to develop or contribute to generalizable knowledge.</li>
-			<li>Technical scans are used in order to test pulse sequences, hardware, image reconstruction, data throughput, subject interface, and the experimental setup, and the tests are not done for the purpose of contributing to generalizable knowledge.</li>
-			<li>Technical scans may also be used to troubleshoot the scanner and to provide demonstrations of scanner capabilities for distinguished visitors.</li>
-			<li>Technical scans do not necessarily require collection of MR data: any procedure that is not under an active IRB protocol involving placing a person on the technical scan list into the scanner should be considered a technical scan.</li>
-			<li>All procedures associated with a technical scan (SAR, gradient slew rate, field strength, etc..) must be within FDA guidelines.</li>
-			<li>If the technical scan involves testing of brain activation devices (projector, screen, tactile, sound, pain induction, etc..) the brain activation device must be approved by the safety committee. Note that this applies independently to whether or not fMRI data are being collected.</li>
-			<li>Data from technical scans may not be used for publications, grant applications, or any other internal NIH report (annual report, BSC review document, etc.).</li>
-			<li>The knowledge gained from technical scans should be used only for the benefit of the investigator performing the technical scan.</li>
-			<li>When performing a technical scan, at least one person needs to be in the scan control room. Both the person scanning and the person being scanned need to be on the technical scan list. Scanner technologists may be approved to be on the technical scan list.</li>
-			<li>Technical scans do not require medical coverage.</li>
-			<li>All technical scans need to be logged on the FMRIF website.</li>
-			<li>Individuals participating in a technical scan will sign a document stating that they are members of the technical scan list, that they understand the risks involved, and that no results shall be used in any way for research.</li>
-		</ul>
-		<p>All persons undergoing technical scans must be on the technical scan list. To be on this list, the person's application must be approved by the technical scan list committee. Please submit applications via the online form on the FMRIF website. The list will be viewable to all users on the FMRI website. Technical scan volunteers must be experienced MRI researchers (no students or IRTAs) and must have fullfilled all of the criteria on the <a href="http://intranet.nmrf.nih.gov/human_studies.htm#eligibility">NMRF Scanner Operator guidelines</a>:</p>
-		<blockquote cite="http://intranet.nmrf.nih.gov/human_studies.htm#eligibility">
-			<p>Doctoral level investigators (Ph.D or M.D.) wishing to supervise/conduct human MRI studies must have adequate MR experience. Adequate MR experience can be gained by satisfying the 2 criteria listed below.</p>
-			<ol>
-				<li>Investigator should be trained and certified by one of the MRI technologists in all aspects of the MRI study (e.g. subject screening and positioning, scanner operation etc).</li>
-				<li>Investigator should actively perform 10 human studies at NIH under the supervision of a doctoral level investigator with MR experience or an MRI technologist.</li>
-			</ol>
-		</blockquote>
-		<p>They also must have had all necessary basic training: NMR safety training (once), CPR (every two years), universal precautions (every two years)See <a href="https://fmrif.nimh.nih.gov/public/education">https://fmrif.nimh.nih.gov/public/education</a> for details.</p>
-		<p>Technical scan volunteers may not be scanned more than 3 hours per week. Status on the Technical scan volunteer list must be renewed every year.</p>
-		<fieldset>
-			<legend>To apply for the technical scan list you must attest to the following criteria:</legend>
-			<input-set is-option is-required>
-				<input required type=checkbox id="c1">
-				<label for=c1>I am either a Ph.D. in an MRI-related field, an M.D. with MRI experience, or an accredited NMR Center MR Technologist.</label>
-			</input-set>
-			<input-set is-option is-required>
-				<input required type=checkbox id="c2">
-				<label for=c2>I agree that I will not be scanned as a technical scan volunteer more than three hours per week.</label>
-			</input-set>
-			<input-set is-option is-required>
-				<input required type=checkbox id="c3">
-				<label for=c3>I have two years of scanning experience and have satisfied all NMRF Scanner Operator Criteria.</label>
-			</input-set>
-		</fieldset>
-		<input-set is-option is-required>
-			<input required type=checkbox id="a">
-			<label for=a>I have read the above technical scan guidelines and fully satisfy all the criteria for qualifying to be on the technical scan list. My supervisor and I are fully responsible for any adverse events occurring in association with performing our technical scan.</label>
-		</input-set>
-		{# end user editable section #}
-		<button type=submit>submit</button>
-	</form>
+<form method="POST">
+  {# content between this and the next comment is user editable #}
+  <p>
+    <strong
+      >This document addresses policies and procedures applicable to those
+      individuals who participate in the testing of scans for purposes that are
+      not considered research.</strong
+    >
+  </p>
+  <p>
+    A technical scan involves the use of highly experienced and approved
+    individuals from the technical scan list for purposes that fall outside of
+    research protocols. Individuals on this list have met safety criteria set
+    forth in this document. The following points explain criteria by which a
+    scan is determined to be a technical scan and procedures that apply to such
+    scans.
+  </p>
+  <ul>
+    <li>
+      Technical scans are not, in any way, to be used for research purposes. If
+      there is any question as to whether you are performing "research" during
+      your technical scan, please refer to Federal regulations 45 CFR 46,102 (d)
+      which states: Research means a systematic investigation, including
+      research development, testing and evaluation, designed to develop or
+      contribute to generalizable knowledge.
+    </li>
+    <li>
+      Technical scans are used in order to test pulse sequences, hardware, image
+      reconstruction, data throughput, subject interface, and the experimental
+      setup, and the tests are not done for the purpose of contributing to
+      generalizable knowledge.
+    </li>
+    <li>
+      Technical scans may also be used to troubleshoot the scanner and to
+      provide demonstrations of scanner capabilities for distinguished visitors.
+    </li>
+    <li>
+      Technical scans do not necessarily require collection of MR data: any
+      procedure that is not under an active IRB protocol involving placing a
+      person on the technical scan list into the scanner should be considered a
+      technical scan.
+    </li>
+    <li>
+      All procedures associated with a technical scan (SAR, gradient slew rate,
+      field strength, etc..) must be within FDA guidelines.
+    </li>
+    <li>
+      If the technical scan involves testing of brain activation devices
+      (projector, screen, tactile, sound, pain induction, etc..) the brain
+      activation device must be approved by the safety committee. Note that this
+      applies independently to whether or not fMRI data are being collected.
+    </li>
+    <li>
+      Data from technical scans may not be used for publications, grant
+      applications, or any other internal NIH report (annual report, BSC review
+      document, etc.).
+    </li>
+    <li>
+      The knowledge gained from technical scans should be used only for the
+      benefit of the investigator performing the technical scan.
+    </li>
+    <li>
+      When performing a technical scan, at least one person needs to be in the
+      scan control room. Both the person scanning and the person being scanned
+      need to be on the technical scan list. Scanner technologists may be
+      approved to be on the technical scan list.
+    </li>
+    <li>Technical scans do not require medical coverage.</li>
+    <li>All technical scans need to be logged on the FMRIF website.</li>
+    <li>
+      Individuals participating in a technical scan will sign a document stating
+      that they are members of the technical scan list, that they understand the
+      risks involved, and that no results shall be used in any way for research.
+    </li>
+  </ul>
+  <p>
+    All persons undergoing technical scans must be on the technical scan list.
+    To be on this list, the person's application must be approved by the
+    technical scan list committee. Please submit applications via the online
+    form on the FMRIF website. The list will be viewable to all users on the
+    FMRI website. Technical scan volunteers must be experienced MRI researchers
+    (no students or IRTAs) and must have fullfilled all of the criteria on the
+    <a href="http://intranet.nmrf.nih.gov/human_studies.htm#eligibility"
+      >NMRF Scanner Operator guidelines</a
+    >:
+  </p>
+  <blockquote cite="http://intranet.nmrf.nih.gov/human_studies.htm#eligibility">
+    <p>
+      Doctoral level investigators (Ph.D or M.D.) wishing to supervise/conduct
+      human MRI studies must have adequate MR experience. Adequate MR experience
+      can be gained by satisfying the 2 criteria listed below.
+    </p>
+    <ol>
+      <li>
+        Investigator should be trained and certified by one of the MRI
+        technologists in all aspects of the MRI study (e.g. subject screening
+        and positioning, scanner operation etc).
+      </li>
+      <li>
+        Investigator should actively perform 10 human studies at NIH under the
+        supervision of a doctoral level investigator with MR experience or an
+        MRI technologist.
+      </li>
+    </ol>
+  </blockquote>
+  <p>
+    They also must have had all necessary basic training: NMR safety training
+    (once), CPR (every two years), universal precautions (every two years)See
+    <a href="https://fmrif.nimh.nih.gov/public/education"
+      >https://fmrif.nimh.nih.gov/public/education</a
+    >
+    for details.
+  </p>
+  <p>
+    Technical scan volunteers may not be scanned more than 3 hours per week.
+    Status on the Technical scan volunteer list must be renewed every year.
+  </p>
+  <fieldset>
+    <legend>
+      To apply for the technical scan list you must attest to the following
+      criteria:
+    </legend>
+    <input-set is-option is-required>
+      <input required type="checkbox" id="c1" />
+      <label for="c1"
+        >I am either a Ph.D. in an MRI-related field, an M.D. with MRI
+        experience, or an accredited NMR Center MR Technologist.</label
+      >
+    </input-set>
+    <input-set is-option is-required>
+      <input required type="checkbox" id="c2" />
+      <label for="c2"
+        >I agree that I will not be scanned as a technical scan volunteer more
+        than three hours per week.</label
+      >
+    </input-set>
+    <input-set is-option is-required>
+      <input required type="checkbox" id="c3" />
+      <label for="c3"
+        >I have two years of scanning experience and have satisfied all NMRF
+        Scanner Operator Criteria.</label
+      >
+    </input-set>
+  </fieldset>
+  <input-set is-option is-required>
+    <input required type="checkbox" id="a" />
+    <label for="a"
+      >I have read the above technical scan guidelines and fully satisfy all the
+      criteria for qualifying to be on the technical scan list. My supervisor
+      and I are fully responsible for any adverse events occurring in
+      association with performing our technical scan.</label
+    >
+  </input-set>
+  {# end user editable section #}
+  <button type="submit">submit</button>
+</form>
 {% endblock %}

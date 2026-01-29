@@ -1,5 +1,4 @@
 import datetime
-import re
 import secrets
 from collections import defaultdict
 from typing import (
@@ -26,20 +25,21 @@ from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import func
 from wtforms import Form, fields, validators, widgets
 
-from . import message
-from . import model
+from . import message, model
 
-#-------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------
 """
     DEVELOPMENT ONLY: Create or get a superuser account with all permissions.
-    
+
     This is a development/testing hack that should NOT be used in production.
     It creates a superuser with full system access for local development and testing.
-    
+
     ToDo: Remove this function before deploying to production.
     In production, proper user authentication and authorization should be handled
     via SiteMinder and the regular permission system.
     """
+
+
 # For Superuser mode
 def get_or_create_superuser():
     """Create or get a superuser account with all permissions"""
@@ -51,31 +51,30 @@ def get_or_create_superuser():
             label="Superuser",  # Changed from name to label
             addr="superuser@example.com",  # Changed from email to addr
             active=True,
-            modified=func.now()  # Set the chg_at timestamp
+            modified=func.now(),  # Set the chg_at timestamp
         )
         model.db.session.add(user)
-        
+
         # Add to admin group
         admin_group = get_group("admin")
         if admin_group:
             member = model.GroupMember(
                 group=admin_group.id,
                 user=user.id,
-                approved=func.now()  # Add approved timestamp
+                approved=func.now(),  # Add approved timestamp
             )
             model.db.session.add(member)
-            
+
             # Make superuser the PI
-            pi = model.PrimaryGroupMember(
-                group=admin_group.id,
-                user=user.id
-            )
+            pi = model.PrimaryGroupMember(group=admin_group.id, user=user.id)
             model.db.session.add(pi)
-        
+
         model.db.session.commit()
     return user
 
-#-------------------------------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------------------------------
+
 
 def constraint_of(ex: IntegrityError) -> Tuple[str, str]:
     prefix, name = ex.orig.diag.constraint_name.split("_", maxsplit=1)
@@ -100,11 +99,6 @@ def read_signed_message(signature: str) -> Optional[List[str]]:
         return result
     except itsdangerous.exc.BadData:
         return None
-
-
-def discard_user_titles(name: str) -> str:
-    # user's name is followed by bracketed titles that can be discarded
-    return re.sub(" [([].*$", "", name)
 
 
 def normalize_name(name: str) -> str:
@@ -262,7 +256,7 @@ def show_tech_join_form(user: model.User) -> bool:
     # return a row if user is in DEV unless they have already submitted the form
     q = model.db.session.execute(
         """
-        select researchercode from groupmembers G 
+        select researchercode from groupmembers G
         where G.deptcode = 'DEV'
         and G.researchercode = :user
         and approved is not null
@@ -1043,7 +1037,7 @@ def create_device(form: DeviceEditForm) -> Optional[model.Device]:
 def groups_of_device(device: model.Device) -> Datalist:
     q = model.db.session.execute(
         """
-        select G.deptcode, G.dept_short from tlkpdept G 
+        select G.deptcode, G.dept_short from tlkpdept G
         inner join devicegroup DG using(deptcode)
         where G.department and G.iscurrent and DG.scannercode = :device
         order by 1
@@ -1151,7 +1145,7 @@ def get_dev_members_for_device(
     # get all dev group users and whether they have special permissions on this device
     q = model.db.session.execute(
         """
-        select M."user", D.scannercode from membership M 
+        select M."user", D.scannercode from membership M
         left join userdevice D on D.researchercode = M."user" and M."group" = 'DEV'
         where M."group" = 'DEV' and M.approved and M.user_active and D.scannercode is null or D.scannercode = :device
         order by 1
@@ -1496,7 +1490,7 @@ def validate_templates_before_application(device: model.Device, templates: str):
     q = (
         MT.query.filter(MT.device == device.id)
         .filter(id_col.in_(ts))
-        .filter(MT.hidden == False)
+        .filter(MT.hidden.is_(False))
     )
     n = q.count()
     if n != len(ts):
@@ -1548,7 +1542,7 @@ def validate_templates_before_application(device: model.Device, templates: str):
     # spreads to the rest of the system
     for k, v in sorted(cell_count.items(), key=lambda p: p[0]):
         if v != 7 * 24:
-            errs.append(f"{k} malformed: has {v} entries instead of {7*24}")
+            errs.append(f"{k} malformed: has {v} entries instead of {7 * 24}")
 
     for x in sorted(has_invalid):
         errs.append(f"{x} has invalid entries")
@@ -1587,7 +1581,7 @@ def process_template_apply(
         from
             (
                 -- assign each template 7*n for n=0, 1, 2, ..., len(templates)-1
-                select 7*(row_number() over () - 1)::integer as dow_offset, * 
+                select 7*(row_number() over () - 1)::integer as dow_offset, *
                 from unnest(:templates) as tc
             ) vars
         inner join
@@ -2506,7 +2500,7 @@ def fmt_support_notifications(hours, sns, include_kind):
         indent = "\t\t"
 
     last_section = ""
-    for (date, hour, sn) in sns:
+    for date, hour, sn in sns:
         # if this is for the regular email, there may be multiple SR changes in a row,
         # if so, we only want to add the section header once
         section = f"{date}: {hours[hour]}"

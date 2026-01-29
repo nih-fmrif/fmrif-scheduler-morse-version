@@ -1,16 +1,18 @@
-{% extends "page.html" %}
-{% block title %}{{ title }}{% endblock %}
-{% block body %}
-	{% if templates %}
-		<ul class=list-with-description>
-			{% for t in templates %}
-				<li>
-					<a href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}">{{ t.label }} ({{ t.id }})</a>
-					{% if t.description %}<p>{{ t.description }}</p>{% endif %}
-				</li>
-			{% endfor %}
-		</ul>
-	{% else %}
-		<p class=none>no templates</p>
-	{% endif %}
-{% endblock %}
+{% extends "page.html" %} {% block title %}{{ title }}{% endblock %} {% block
+body %} {% if templates %}
+<ul class="list-with-description">
+  {% for t in templates %}
+  <li>
+    <a
+      href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}"
+      >{{ t.label }} ({{ t.id }})</a
+    >
+    {% if t.description %}
+    <p>{{ t.description }}</p>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="none">no templates</p>
+{% endif %} {% endblock %}

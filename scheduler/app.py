@@ -1,23 +1,21 @@
 import ipaddress
+from datetime import timedelta
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union
 
 import click
-from flask import Flask, abort, g, jsonify, redirect, request, session, current_app
+from flask import Flask, abort, current_app, g, jsonify, redirect, request, session
 from flask.helpers import flash, url_for
 from flask.templating import render_template
 from flask.wrappers import Response
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
-from .config import settings, app_config
-from . import logic
-from . import message
-from . import model
-
-from scheduler.auth.views import auth
 from scheduler.auth.session import get_user_from_session
-from datetime import timedelta
+from scheduler.auth.views import auth
+
+from . import logic, message, model
+from .config import app_config, settings
 
 ## Configuration
 app = Flask(__name__)
@@ -28,16 +26,19 @@ app.config.update(**app_config)
 # Add session security settings
 app.config.update(
     SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True, 
-    SESSION_COOKIE_SAMESITE='Strict',
-    PERMANENT_SESSION_LIFETIME=timedelta(seconds=settings.ldap.token_lifetime)
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+    PERMANENT_SESSION_LIFETIME=timedelta(seconds=settings.ldap.token_lifetime),
 )
+
 
 def proxy_fix(app):
     counts = settings.get_proxy_count()
     if counts is not None:
         from werkzeug.middleware.proxy_fix import ProxyFix
+
         app.wsgi_app = ProxyFix(app.wsgi_app, **counts)
+
 
 proxy_fix(app)
 
@@ -49,7 +50,7 @@ signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
 app.config["URL_SIGNER"] = signer
 
 # Register blueprints
-app.register_blueprint(auth, url_prefix='/auth')
+app.register_blueprint(auth, url_prefix="/auth")
 
 ## Authentication
 
@@ -74,9 +75,10 @@ def setup_user():
     if current_app.config.get("SUPERUSER_MODE", False):
         g.user = get_user_from_session() or logic.get_or_create_superuser()
         return
-        
+
     # Try to get user from session
     g.user = get_user_from_session()
+
 
 def login_required(f):
     @wraps(f)
@@ -84,7 +86,9 @@ def login_required(f):
         if g.user is None:
             abort(403, "Access denied: Authentication required")
         return f(*args, **kwargs)
+
     return protect
+
 
 def in_network_required(f):
     @wraps(f)
@@ -93,7 +97,9 @@ def in_network_required(f):
         if not any(ip in network for network in app.config["NIH_NETWORKS"]):
             abort(403, "Access denied: this page is limited to the NIH network")
         return f(*args, **kwargs)
+
     return protect
+
 
 def active_user_required(f):
     @wraps(f)
@@ -103,7 +109,9 @@ def active_user_required(f):
         if not g.user.active:
             abort(403, "Access denied: this page is limited to active users")
         return f(*args, **kwargs)
+
     return protect
+
 
 def admin_only(f):
     @wraps(f)
@@ -111,7 +119,9 @@ def admin_only(f):
         if not (g.user is not None and g.user.active and logic.is_admin(g.user)):
             abort(403, "Access denied: this page is admin only")
         return f(*args, **kwargs)
+
     return protect
+
 
 ## Error handlers
 
@@ -121,16 +131,15 @@ def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[st
         "code": code,
         "msg": msg,
         "show_login": show_login,
-        "login_url_prefix": app.config["LOGIN_URL_PREFIX"],
     }
     return render_template("error.html", **data), code
 
 
 @app.errorhandler(403)
 def access_denied(e):
-    # Redirect to login page instead of showing SiteMinder message
+    # Redirect to login page if user is not authenticated
     if g.user is None:
-        return redirect(url_for('auth.login'))
+        return redirect(url_for("auth.login"))
     return render_error_page(403, e.description)
 
 
@@ -808,11 +817,13 @@ def device_breadcrumb(device: model.Device) -> Breadcrumb_links:
 
 
 def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> Subpage_links:
-    can = lambda p: perms.admin or (p and device.active)
+    def can(permission: bool) -> bool:
+        return perms.admin or (permission and device.active)
+
     edit = can(perms.dev_pi)
     id = device.id
     return subpage_nav(
-        f"show",
+        "show",
         [
             (True, "schedule", url_for("device", the_device=id)),
             (can(perms.template), "templates", url_for("device_tmpl", the_device=id)),
@@ -1012,7 +1023,6 @@ def entry_log(id):
 
     template = None
     templateObject = logic.get_template_from_templateid(templateid)
-    print(templateObject)
     if templateObject is not None:
         template = {
             "id": templateObject.id,
@@ -1083,7 +1093,7 @@ def device_tmpl(the_device):
         warn = f"no templates have been published to {device.label} before, so the start date will be {start}"
     no_templates = ""
     if len(templates) == 0:
-        no_templates = f"no templates have been created for { device.label } yet"
+        no_templates = f"no templates have been created for {device.label} yet"
 
     form = logic.TemplateApplyForm(codes)
     if form.validate_on_submit():
@@ -1275,14 +1285,16 @@ def template_breadcrumb(
 
 
 def template_subpage_nav(device: model.Device) -> Subpage_links:
-    url = lambda name: url_for(f"device_tmpl{name}", the_device=device.id)
+    def build_url(name: str) -> str:
+        return url_for(f"device_tmpl{name}", the_device=device.id)
+
     return subpage_nav(
         "templates",
         [
-            (True, "apply", url("")),
-            (True, "active", url("_list")),
-            (True, "inactive", url("_archive")),
-            (True, "add template", url("_add")),
+            (True, "apply", build_url("")),
+            (True, "active", build_url("_list")),
+            (True, "inactive", build_url("_archive")),
+            (True, "add template", build_url("_add")),
         ],
     )
 
@@ -1348,11 +1360,17 @@ def device_tmpl_add(the_device):
 def template_single_subpage_nav(
     device: model.Device, tmpl: model.Template
 ) -> Subpage_links:
-    entry = lambda lbl, url: (
-        True,
-        lbl,
-        url_for(f"device_tmpl_{url}_edit", the_device=device.id, the_template=tmpl.id),
-    )
+    def entry(label: str, url_suffix: str) -> tuple[bool, str, str]:
+        return (
+            True,
+            label,
+            url_for(
+                f"device_tmpl_{url_suffix}_edit",
+                the_device=device.id,
+                the_template=tmpl.id,
+            ),
+        )
+
     return subpage_nav(
         "edit template",
         [

@@ -1,7 +1,7 @@
 begin;
 
 -- Add initial departments if they don't exist
-INSERT INTO tlkpdept (deptcode, dept, dept_short, color, ismain, iscurrent) 
+INSERT INTO tlkpdept (deptcode, dept, dept_short, color, ismain, iscurrent)
 SELECT t.* FROM (VALUES
     ('TEST', 'Test Department', 'Test', '#000000', true, true),
     ('DEV', 'Development', 'DEV', '#000000', true, true)
@@ -21,7 +21,7 @@ WHERE NOT EXISTS (
 INSERT INTO userdevice(researchercode, scannercode, templates, slot, tech, medical, training)
 SELECT 'testuser', 'TEST', true, true, false, false, false
 WHERE NOT EXISTS (
-    SELECT 1 FROM userdevice 
+    SELECT 1 FROM userdevice
     WHERE researchercode = 'testuser' AND scannercode = 'TEST'
 );
 
@@ -32,7 +32,7 @@ SELECT t.* FROM (VALUES
     ('TEST', 'DEV')
 ) AS t(scannercode, deptcode)
 WHERE NOT EXISTS (
-    SELECT 1 FROM devicegroup 
+    SELECT 1 FROM devicegroup
     WHERE scannercode = t.scannercode AND deptcode = t.deptcode
 );
 
@@ -43,14 +43,14 @@ SELECT t.* FROM (VALUES
     ('DEV', 'testuser', CURRENT_TIMESTAMP)
 ) AS t(deptcode, researchercode, approved)
 WHERE NOT EXISTS (
-    SELECT 1 FROM groupmembers 
+    SELECT 1 FROM groupmembers
     WHERE deptcode = t.deptcode AND researchercode = t.researchercode
 );
 
 INSERT INTO primarygroupmember(deptcode, researchercode)
 SELECT 'DEV', 'testuser'
 WHERE NOT EXISTS (
-    SELECT 1 FROM primarygroupmember 
+    SELECT 1 FROM primarygroupmember
     WHERE deptcode = 'DEV' AND researchercode = 'testuser'
 );
 

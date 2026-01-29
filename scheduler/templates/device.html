@@ -1,251 +1,349 @@
-{% extends "page.html" %}
-{% import "svg/icons.html" as icons %}
-{% import "macros.html" as macros %}
-{% block title %}{{ device.label }}{% endblock %}
-{% block body %}
-	{% if never_entries %}
-		<p class=note>{{ icons.info() }} {{ never_entries }}</p>
-	{% else %}
-		<nav class=jump-form aria-labelledby=jump-hdr>
-			<form>
-				<span id=jump-hdr>jump to</span>
-				<input name=start aria-label="start date" type=text spellcheck=false autocomplete=off pattern="[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}" value="{{ start_date }}" required>
-				<span aria-hidden=true>and show</span>
-				<input name=days aria-label="show number of days" type=number value="{{ days }}" step=1 min=1 max=31 required>
-				<span aria-hidden=true>days</span>
-				<button type=submit>go</button>
-			</form>
-		</nav>
-		{% if no_entries %}
-			<p class=note>{{ icons.info() }} {{ no_entries }}</p>
-		{% else %}
-			<script id="user-perms" type="application/json">{{ perms_json|tojson }}</script>
-			<script id="user-groups" type="application/json">{{ groups_json|tojson }}</script>
-			<script id="device-groups" type="application/json">{{ device_groups_json|tojson }}</script>
-			<script id="group-colors" type="application/json">{{ colors|tojson }}</script>
-			<script id="human-hours" type="application/json">{{ hours|tojson }}</script>
-			{{ macros.datalist("groups", groups, "invalid group") }}
-			{{ macros.datalist("tech", support.tech, "invalid technologist") }}
-			{{ macros.datalist("med", support.medical, "invalid medical support member") }}
-			{{ macros.datalist("train", support.training, "invalid training support member") }}
-			{% for k, v in members_of_groups.items() %}
-				{{ macros.datalist("members-of-" ~ k, v, "invalid member of " ~ k) }}
-			{% endfor %}
-			<datalist id=none></datalist>
-			<div class="editor-container">
-				<form class="editor schedule-editor">
-					{{ form.csrf_token }}
-					{% if off_hours|length %}
-						<button id="expando" type=button hidden aria-expanded=false data-expands="{{ off_hours|tojson }}">
-							<span class=icons>{{ icons.add() }}{{ icons.close() }}</span>
-							{{ off_hours|length }} empty row{% if off_hours|length > 1 %}s{% endif %}
-						</button>
-					{% endif %}
-					<div id=caption data-changed="false" data-error="false">schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{ macros.edit_icons("schedule") }}</div>
-					<div id="scroll-container" aria-labelledby=caption tabindex=0>
-						<table aria-labelledby=caption>
-							<thead>
-								<tr>
-									<td></td>
-									{% for h in top_row %}
-										<th>{{ h }}</th>
-									{% endfor %}
-								</tr>
-							</thead>
-							<tbody>
-								{% for xs in entries %}
-									{% set h = loop.index-1 %}
-									<tr id="row-{{ h }}" data-hour="{{ h }}" {% if h in off_hours %}hidden data-off-hour{% endif %}><th scope=row>{{ hours[h] }}</th>
-									{% for x in xs %}
-										<td>
-											<entry-cell
-												data-id="{{ x.id }}"
-												data-hour="{{ x.hour }}" data-date="{{ x.date }}"
-												data-old="{% if x.date < cur_date or (x.date == cur_date and x.hour <= cur_hour) %}true{% else %}false{% endif %}"
-												data-can-edit="false"
-												data-changed="false" data-error="false">
-												{{ macros.entry_legend(colors[x.group] if x.group) }}
-												<entry-editor>
-													{{ macros.entry_text("grp-" ~ x.id, "group", "groups", x.group) }}
-													{{ macros.entry_text("mem-" ~ x.id, "member", "none", x.user) }}
-												</entry-editor>
-												<entry-support>
-													{# bucket support requests #}
-													{% set sr = namespace() %}
-													{% for r in x.requests %}
-														{% if r.supportkind == 1 %}
-															{% set sr.medical = r %}
-														{% elif r.supportkind == 2 %}
-															{% set sr.train = r %}
-														{% elif r.supportkind == 3 %}
-															{% set sr.tech = r %}
-														{% endif %}
-													{% endfor %}
-													{# macros for some repeated elements #}
-													{% macro requested(id, checked) %}
-														<input-set is-option>
-															<input-widget>
-																<input id="{{ id }}" class=requested type=checkbox autocomplete=off data-orig={% if checked %}"true" checked{% else %}"false"{% endif %}>
-															</input-widget>
-															<label for="{{ id }}">requested</label>
-														</input-set>
-													{% endmacro %}
-													{% macro handler(id, list, sr) %}
-														<input-set label-above shrink>
-															<label for="{{ id }}">handler</label>
-															<input-widget>
-																<input id="{{ id }}" class=handler
-																	{% if list %}list="{{ list }}"{% endif %}
-																	data-orig="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
-																	value="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
-																	spellcheck=false
-																	autocomplete=off>
-																{{ macros.validation_icons() }}
-															</input-widget>
-														</input-set>
-													{% endmacro %}
-													{% macro tech_kind(id, kind, lbl, checked) %}
-														<input-set is-option>
-															<input-widget>
-																<input id="{{ "tech-" ~ kind ~ "-" ~id }}" name="kind-{{ id }}" autocomplete=off type=radio {% if checked %}checked{% endif %} value="{{ lbl }}">
-															</input-widget>
-															<label for="{{ "tech-" ~ kind ~ "-" ~ id }}">{{ lbl }}</label>
-														</input-set>
-													{% endmacro %}
-													{% if support.tech or sr.tech %}
-														<fieldset data-sr=tech data-new="{% if sr.tech %}false{% else %}true{% endif %}" disabled>
-															<legend>technologist</legend>
-															{{ requested("tech-requested-" ~ x.id, sr.tech is defined and sr.tech.approved is not sameas false) }}
-															{% set note %}{% if sr.tech %}{{ sr.tech.note }}{% else %}cover{% endif %}{% endset %}
-															<fieldset class=sk-sel data-orig="{{ note }}">
-																<legend><span>kind</span></legend>
-																{{ tech_kind(x.id, "cover", "cover", note != "support") }}
-																{{ tech_kind(x.id, "support", "support", note == "support") }}
-															</fieldset>
-															{{ handler("tech-handler-" ~ x.id, "tech", sr.tech) }}
-														</fieldset>
-													{% endif %}
-													{% if support.training or sr.train %}
-														<fieldset data-sr=train data-new="{% if sr.train %}false{% else %}true{% endif %}" disabled>
-															<legend>training</legend>
-															{{ requested("train-requested-" ~ x.id, sr.train is defined and sr.train.approved is not sameas false) }}
-															{{ handler("train-handler-" ~ x.id, "train", sr.train) }}
-														</fieldset>
-													{% endif %}
-													{% if support.medical or sr.medical %}
-														<fieldset data-sr=med data-new="{% if sr.medical %}false{% else %}true{% endif %}" disabled>
-															<legend>medical coverage</legend>
-															{{ requested("med-requested-" ~ x.id, sr.medical is defined and sr.medical.approved is not sameas false) }}
-															{{ handler("med-handler-" ~ x.id, "med", sr.medical) }}
-														</fieldset>
-													{% endif %}
-												</entry-support>
-												<entry-buttons>
-													<button type=button disabled data-reset>reset</button>
-													<button type=button aria-has-popup="true" data-for="{{ x.id }}" data-from-template="{{ x.template }}" hidden>
-														{{ icons.book() }}<sr-only>view activity</sr-only> log
-													</button>
-												</entry-buttons>
-												<entry-status>
-													{{ macros.edit_icons("entry") }}
-													<div class=time-use-icon>
-														{% if x.used is none %}
-															{{ icons.square_empty() }}
-														{% elif x.used %}
-															{{ icons.square_used("time used") }}
-														{% else %}
-															{{ icons.square_unused("time unused") }}
-														{% endif %}
-													</div>
-												</entry-status>
-											</entry-cell>
-										</td>
-									{% endfor %}
-								{% endfor %}
-							</tbody>
-						</table>
-					</div>
-					<div id="focus-trap"></div>
-					<button id="apply" type=submit disabled>save</button>
-				</form>
-				<figure class=legend>
-					<figcaption>legend</figcaption>
-					<dl>
-						<div>
-							<dt>state icons</dt>
-							<dd>
-								<dl>
-									<div>
-										<dt>{{ icons.pencil("pencil") }}</dt>
-										<dd>unsaved changes</dd>
-									</div>
-									<div>
-										<dt class="red">{{ icons.exclaim_triangle("exclamation point in triangle")}}</dt>
-										<dd>errors are present</dd>
-									</div>
-									<div>
-										<dt class="red">{{ icons.lock("lock") }}</dt>
-										<dd>server could not process request</dd>
-									</div>
-								</dl>
-							</dd>
-						</div>
-						<div>
-							<dt>time recorded icons</dt>
-							<dd>
-								<dl>
-									<div>
-										<dt>{{ icons.square_empty("square with question mark") }}</dt>
-										<dd>time not yet recorded</dd>
-									</div>
-									<div>
-										<dt>{{ icons.square_unused("square with x") }}</dt>
-										<dd>time recorded as unused</dd>
-									</div>
-									<div>
-										<dt>{{ icons.square_used("square with check") }}</dt>
-										<dd>time recorded as used</dd>
-									</div>
-								</dl>
-							</dd>
-						</div>
-						<div>
-							<dt>buttons</dt>
-							<dd>
-								<dl>
-									<div>
-										<dt>{{ icons.book("book") }}</dt>
-										<dd>view activity log</dd>
-									</div>
-									<div>
-										<dt>{{ icons.add("circled plus symbol") }}</dt>
-										<dd>expand</dd>
-									</div>
-									<div>
-										<dt>{{ icons.close("circled x") }}</dt>
-										<dd>close</dd>
-									</div>
-								</dl>
-							</dd>
-						</div>
-					</dl>
-				</figure>
-			</div>
-			{{ macros.save_dialogs() }}
-			<div id="log-dialog-container" class=dialog-container aria-hidden=true aria-labelledby=log-dialog-title>
-				<div class=dialog-overlay data-a11y-dialog-hide></div>
-				<div class=dialog-box-container role=document>
-					<h1 id="log-dialog-title" class=dialog-title></h1>
-					<button type=button data-a11y-dialog-hide>
-						{{ icons.close() }}
-						<sr-only>Close dialog</sr-only>
-					</button>
-					<div id="log-dialog-content" class=dialog-content tabindex=0>
-						<div class=dialog-content-loading>loading <span class=wave><span>.</span><span>.</span><span>.</span></span></div>
-						<div class=dialog-content-inner></div>
-					</div>
-				</div>
-			</div>
-		{% endif %}
-	{% endif %}
-{% endblock %}
+{% extends "page.html" %} {% import "svg/icons.html" as icons %} {% import
+"macros.html" as macros %} {% block title %}{{ device.label }}{% endblock %} {%
+block body %} {% if never_entries %}
+<p class="note">{{ icons.info() }} {{ never_entries }}</p>
+{% else %}
+<nav class="jump-form" aria-labelledby="jump-hdr">
+  <form>
+    <span id="jump-hdr">jump to</span>
+    <input
+      name="start"
+      aria-label="start date"
+      type="text"
+      spellcheck="false"
+      autocomplete="off"
+      pattern="[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}"
+      value="{{ start_date }}"
+      required
+    />
+    <span aria-hidden="true">and show</span>
+    <input
+      name="days"
+      aria-label="show number of days"
+      type="number"
+      value="{{ days }}"
+      step="1"
+      min="1"
+      max="31"
+      required
+    />
+    <span aria-hidden="true">days</span>
+    <button type="submit">go</button>
+  </form>
+</nav>
+{% if no_entries %}
+<p class="note">{{ icons.info() }} {{ no_entries }}</p>
+{% else %}
+<script id="user-perms" type="application/json">
+  {{ perms_json|tojson }}
+</script>
+<script id="user-groups" type="application/json">
+  {{ groups_json|tojson }}
+</script>
+<script id="device-groups" type="application/json">
+  {{ device_groups_json|tojson }}
+</script>
+<script id="group-colors" type="application/json">
+  {{ colors|tojson }}
+</script>
+<script id="human-hours" type="application/json">
+  {{ hours|tojson }}
+</script>
+{{ macros.datalist("groups", groups, "invalid group") }} {{
+macros.datalist("tech", support.tech, "invalid technologist") }} {{
+macros.datalist("med", support.medical, "invalid medical support member") }} {{
+macros.datalist("train", support.training, "invalid training support member") }}
+{% for k, v in members_of_groups.items() %} {{ macros.datalist("members-of-" ~
+k, v, "invalid member of " ~ k) }} {% endfor %}
+<datalist id="none"></datalist>
+<div class="editor-container">
+  <form class="editor schedule-editor">
+    {{ form.csrf_token }} {% if off_hours|length %}
+    <button
+      id="expando"
+      type="button"
+      hidden
+      aria-expanded="false"
+      data-expands="{{ off_hours|tojson }}"
+    >
+      <span class="icons">{{ icons.add() }}{{ icons.close() }}</span>
+      {{ off_hours|length }} empty row{% if off_hours|length > 1 %}s{% endif %}
+    </button>
+    {% endif %}
+    <div id="caption" data-changed="false" data-error="false">
+      schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{
+      macros.edit_icons("schedule") }}
+    </div>
+    <div id="scroll-container" aria-labelledby="caption" tabindex="0">
+      <table aria-labelledby="caption">
+        <thead>
+          <tr>
+            <td></td>
+            {% for h in top_row %}
+            <th>{{ h }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for xs in entries %} {% set h = loop.index-1 %}
+          <tr
+            id="row-{{ h }}"
+            data-hour="{{ h }}"
+            {%
+            if
+            h
+            in
+            off_hours
+            %}hidden
+            data-off-hour{%
+            endif
+            %}
+          >
+            <th scope="row">{{ hours[h] }}</th>
+            {% for x in xs %}
+            <td>
+              <entry-cell
+                data-id="{{ x.id }}"
+                data-hour="{{ x.hour }}"
+                data-date="{{ x.date }}"
+                data-old="{% if x.date < cur_date or (x.date == cur_date and x.hour <= cur_hour) %}true{% else %}false{% endif %}"
+                data-can-edit="false"
+                data-changed="false"
+                data-error="false"
+              >
+                {{ macros.entry_legend(colors[x.group] if x.group) }}
+                <entry-editor>
+                  {{ macros.entry_text("grp-" ~ x.id, "group", "groups",
+                  x.group) }} {{ macros.entry_text("mem-" ~ x.id, "member",
+                  "none", x.user) }}
+                </entry-editor>
+                <entry-support>
+                  {# bucket support requests #} {% set sr = namespace() %} {%
+                  for r in x.requests %} {% if r.supportkind == 1 %} {% set
+                  sr.medical = r %} {% elif r.supportkind == 2 %} {% set
+                  sr.train = r %} {% elif r.supportkind == 3 %} {% set sr.tech =
+                  r %} {% endif %} {% endfor %} {# macros for some repeated
+                  elements #} {% macro requested(id, checked) %}
+                  <input-set is-option>
+                    <input-widget>
+                      <input
+                        id="{{ id }}"
+                        class="requested"
+                        type="checkbox"
+                        autocomplete="off"
+                        data-orig="{{ 'true' if checked else 'false' }}"
+                        {%
+                        if
+                        checked
+                        %}checked{%
+                        endif
+                        %}
+                      />
+                    </input-widget>
+                    <label for="{{ id }}">requested</label>
+                  </input-set>
+                  {% endmacro %} {% macro handler(id, list, sr) %}
+                  <input-set label-above shrink>
+                    <label for="{{ id }}">handler</label>
+                    <input-widget>
+                      <input
+                        id="{{ id }}"
+                        class="handler"
+                        {%
+                        if
+                        list
+                        %}list="{{ list }}"
+                        {%
+                        endif
+                        %}
+                        data-orig="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
+                        value="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
+                        spellcheck="false"
+                        autocomplete="off"
+                      />
+                      {{ macros.validation_icons() }}
+                    </input-widget>
+                  </input-set>
+                  {% endmacro %} {% macro tech_kind(id, kind, lbl, checked) %}
+                  <input-set is-option>
+                    <input-widget>
+                      <input
+                        id="{{ 'tech-' ~ kind ~ '-' ~ id }}"
+                        name="kind-{{ id }}"
+                        autocomplete="off"
+                        type="radio"
+                        {%
+                        if
+                        checked
+                        %}checked{%
+                        endif
+                        %}
+                        value="{{ lbl }}"
+                      />
+                    </input-widget>
+                    <label for="{{ 'tech-' ~ kind ~ '-' ~ id }}"
+                      >{{ lbl }}</label
+                    >
+                  </input-set>
+                  {% endmacro %} {% if support.tech or sr.tech %}
+                  <fieldset
+                    data-sr="tech"
+                    data-new="{% if sr.tech %}false{% else %}true{% endif %}"
+                    disabled
+                  >
+                    <legend>technologist</legend>
+                    {{ requested("tech-requested-" ~ x.id, sr.tech is defined
+                    and sr.tech.approved is not sameas false) }} {% set note
+                    %}{% if sr.tech %}{{ sr.tech.note }}{% else %}cover{% endif
+                    %}{% endset %}
+                    <fieldset class="sk-sel" data-orig="{{ note }}">
+                      <legend><span>kind</span></legend>
+                      {{ tech_kind(x.id, "cover", "cover", note != "support") }}
+                      {{ tech_kind(x.id, "support", "support", note ==
+                      "support") }}
+                    </fieldset>
+                    {{ handler("tech-handler-" ~ x.id, "tech", sr.tech) }}
+                  </fieldset>
+                  {% endif %} {% if support.training or sr.train %}
+                  <fieldset
+                    data-sr="train"
+                    data-new="{% if sr.train %}false{% else %}true{% endif %}"
+                    disabled
+                  >
+                    <legend>training</legend>
+                    {{ requested("train-requested-" ~ x.id, sr.train is defined
+                    and sr.train.approved is not sameas false) }} {{
+                    handler("train-handler-" ~ x.id, "train", sr.train) }}
+                  </fieldset>
+                  {% endif %} {% if support.medical or sr.medical %}
+                  <fieldset
+                    data-sr="med"
+                    data-new="{% if sr.medical %}false{% else %}true{% endif %}"
+                    disabled
+                  >
+                    <legend>medical coverage</legend>
+                    {{ requested("med-requested-" ~ x.id, sr.medical is defined
+                    and sr.medical.approved is not sameas false) }} {{
+                    handler("med-handler-" ~ x.id, "med", sr.medical) }}
+                  </fieldset>
+                  {% endif %}
+                </entry-support>
+                <entry-buttons>
+                  <button type="button" disabled data-reset>reset</button>
+                  <button
+                    type="button"
+                    aria-has-popup="true"
+                    data-for="{{ x.id }}"
+                    data-from-template="{{ x.template }}"
+                    hidden
+                  >
+                    {{ icons.book() }}<sr-only>view activity</sr-only> log
+                  </button>
+                </entry-buttons>
+                <entry-status>
+                  {{ macros.edit_icons("entry") }}
+                  <div class="time-use-icon">
+                    {% if x.used is none %} {{ icons.square_empty() }} {% elif
+                    x.used %} {{ icons.square_used("time used") }} {% else %} {{
+                    icons.square_unused("time unused") }} {% endif %}
+                  </div>
+                </entry-status>
+              </entry-cell>
+            </td>
+            {% endfor %} {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="focus-trap"></div>
+    <button id="apply" type="submit" disabled>save</button>
+  </form>
+  <figure class="legend">
+    <figcaption>legend</figcaption>
+    <dl>
+      <div>
+        <dt>state icons</dt>
+        <dd>
+          <dl>
+            <div>
+              <dt>{{ icons.pencil("pencil") }}</dt>
+              <dd>unsaved changes</dd>
+            </div>
+            <div>
+              <dt class="red">
+                {{ icons.exclaim_triangle("exclamation point in triangle")}}
+              </dt>
+              <dd>errors are present</dd>
+            </div>
+            <div>
+              <dt class="red">{{ icons.lock("lock") }}</dt>
+              <dd>server could not process request</dd>
+            </div>
+          </dl>
+        </dd>
+      </div>
+      <div>
+        <dt>time recorded icons</dt>
+        <dd>
+          <dl>
+            <div>
+              <dt>{{ icons.square_empty("square with question mark") }}</dt>
+              <dd>time not yet recorded</dd>
+            </div>
+            <div>
+              <dt>{{ icons.square_unused("square with x") }}</dt>
+              <dd>time recorded as unused</dd>
+            </div>
+            <div>
+              <dt>{{ icons.square_used("square with check") }}</dt>
+              <dd>time recorded as used</dd>
+            </div>
+          </dl>
+        </dd>
+      </div>
+      <div>
+        <dt>buttons</dt>
+        <dd>
+          <dl>
+            <div>
+              <dt>{{ icons.book("book") }}</dt>
+              <dd>view activity log</dd>
+            </div>
+            <div>
+              <dt>{{ icons.add("circled plus symbol") }}</dt>
+              <dd>expand</dd>
+            </div>
+            <div>
+              <dt>{{ icons.close("circled x") }}</dt>
+              <dd>close</dd>
+            </div>
+          </dl>
+        </dd>
+      </div>
+    </dl>
+  </figure>
+</div>
+{{ macros.save_dialogs() }}
+<div
+  id="log-dialog-container"
+  class="dialog-container"
+  aria-hidden="true"
+  aria-labelledby="log-dialog-title"
+>
+  <div class="dialog-overlay" data-a11y-dialog-hide></div>
+  <div class="dialog-box-container" role="document">
+    <h1 id="log-dialog-title" class="dialog-title"></h1>
+    <button type="button" data-a11y-dialog-hide>
+      {{ icons.close() }}
+      <sr-only>Close dialog</sr-only>
+    </button>
+    <div id="log-dialog-content" class="dialog-content" tabindex="0">
+      <div class="dialog-content-loading">
+        loading
+        <span class="wave"><span>.</span><span>.</span><span>.</span></span>
+      </div>
+      <div class="dialog-content-inner"></div>
+    </div>
+  </div>
+</div>
+{% endif %} {% endif %} {% endblock %}

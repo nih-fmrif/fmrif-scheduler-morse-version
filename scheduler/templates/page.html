@@ -1,78 +1,110 @@
-{% extends "base.html" %}
-{% import "svg/icons.html" as icons %}
-{% block basehead %}
-	{% block head %}
-		<script id=app-root type="application/json">{{ config.APPLICATION_ROOT }}</script>
-		<script type=module src="{{ url_for("static", filename="script.js") }}"></script>
-	{% endblock %}
-{% endblock %}
-{% block basebody %}
-	<nav class=skip-link aria-label="skip link">
-		<a href="#main">skip to main content</a>
-	</nav>
-	<div class=top>
-		<div class=top-inner>
-			<nav class=breadcrumb aria-label=breadcrumb>
-				<ul>
-					{% for (name, url) in breadcrumb %}
-						<li><a href="{{url}}"{% if request.path == url %} aria-current=page{% endif %}>{{name}}</a></li>
-					{% endfor %}
-				</ul>
-			</nav>
-			<section class=login-info aria-label="login info">
-				<p>{% if user %}logged in as {{user.id}}{% if not user.active %} (inactive){% endif %}{% else %}not logged in{% endif %}</p>
-			</section>
-		</div>
-	</div>
-	{% with msgs = get_flashed_messages(with_categories=true) %}
-		{% if msgs %}
-			<section class=flash-messages aria-label="status messages">
-				<ul>
-					{% for cat, msg in msgs %}
-						<li class="msg-{{ cat }}">
-							{% if cat == "info" or cat == "message" %}
-								{{ icons.smiley_face(cat) }}
-							{% elif cat == "warning" %}
-								{{ icons.neutral_face(cat) }}
-							{% elif cat == "error" %}
-								{{ icons.frowny_face(cat) }}
-							{% endif %}
-							{{ msg }}
-						</li>
-					{% endfor %}
-				</ul>
-			</section>
-		{% endif %}
-	{% endwith %}
-	<main id=main tabindex="-1">
-		{% if subpage_nav %}
-			<nav class=subpage-nav aria-labelledby="subpage-nav-title">
-				<div class=subpage-nav-inner>
-					<span id="subpage-nav-title">{{ subpage_nav.title | safe }}</span>
-					<ul>
-						{% for link, href in subpage_nav.links %}
-							<li><a href="{{ href }}"{% if request.path == href %} aria-current=page{% endif %}>{{ link | safe}}</a></li>
-						{% endfor %}
-					</ul>
-				</div>
-			</nav>
-		{% endif %}
-		<div class="body {{request.endpoint}}">{% block body %}{% endblock %}</div>
-	</main>
-	<div id=confirm-dialog-container class=dialog-container aria-hidden=true aria-labelledby=dialog-title>
-		<div class=dialog-overlay data-a11y-dialog-hide></div>
-		<div class=dialog-box-container role=document>
-			<h1 id=dialog-title class=dialog-title></h1>
-			<button type=button data-a11y-dialog-hide>
-				{{ icons.close() }}
-				<sr-only>Close dialog</sr-only>
-			</button>
-			<div id=dialog-content class=dialog-content tabindex=0><div class=dialog-content-inner></div></div>
-			<div class=dialog-form>
-				<button data-a11y-dialog-hide name=cancel type=button>cancel</button>
-				<button data-a11y-dialog-hide name=confirm type=button>confirm</button>
-			</div>
-		</div>
-	</div>
-	<div hidden id=announce role=status aria-live=polite></div>
+{% extends "base.html" %} {% import "svg/icons.html" as icons %} {% block
+basehead %} {% block head %}
+<script id="app-root" type="application/json">
+  {{ config.APPLICATION_ROOT }}
+</script>
+<script
+  type="module"
+  src="{{ url_for('static', filename='script.js') }}"
+></script>
+{% endblock %} {% endblock %} {% block basebody %}
+<nav class="skip-link" aria-label="skip link">
+  <a href="#main">skip to main content</a>
+</nav>
+<div class="top">
+  <div class="top-inner">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <ul>
+        {% for (name, url) in breadcrumb %}
+        <li>
+          <a
+            href="{{url}}"
+            {%
+            if
+            request.path=""
+            ="url"
+            %}
+            aria-current="page{%"
+            endif
+            %}
+            >{{name}}</a
+          >
+        </li>
+        {% endfor %}
+      </ul>
+    </nav>
+    <section class="login-info" aria-label="login info">
+      <p>
+        {% if user %}logged in as {{user.id}}{% if not user.active %}
+        (inactive){% endif %}{% else %}not logged in{% endif %}
+      </p>
+    </section>
+  </div>
+</div>
+{% with msgs = get_flashed_messages(with_categories=true) %} {% if msgs %}
+<section class="flash-messages" aria-label="status messages">
+  <ul>
+    {% for cat, msg in msgs %}
+    <li class="msg-{{ cat }}">
+      {% if cat == "info" or cat == "message" %} {{ icons.smiley_face(cat) }} {%
+      elif cat == "warning" %} {{ icons.neutral_face(cat) }} {% elif cat ==
+      "error" %} {{ icons.frowny_face(cat) }} {% endif %} {{ msg }}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %} {% endwith %}
+<main id="main" tabindex="-1">
+  {% if subpage_nav %}
+  <nav class="subpage-nav" aria-labelledby="subpage-nav-title">
+    <div class="subpage-nav-inner">
+      <span id="subpage-nav-title">{{ subpage_nav.title | safe }}</span>
+      <ul>
+        {% for link, href in subpage_nav.links %}
+        <li>
+          <a
+            href="{{ href }}"
+            {%
+            if
+            request.path=""
+            ="href"
+            %}
+            aria-current="page{%"
+            endif
+            %}
+            >{{ link | safe}}</a
+          >
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </nav>
+  {% endif %}
+  <div class="body {{request.endpoint}}">{% block body %}{% endblock %}</div>
+</main>
+<div
+  id="confirm-dialog-container"
+  class="dialog-container"
+  aria-hidden="true"
+  aria-labelledby="dialog-title"
+>
+  <div class="dialog-overlay" data-a11y-dialog-hide></div>
+  <div class="dialog-box-container" role="document">
+    <h1 id="dialog-title" class="dialog-title"></h1>
+    <button type="button" data-a11y-dialog-hide>
+      {{ icons.close() }}
+      <sr-only>Close dialog</sr-only>
+    </button>
+    <div id="dialog-content" class="dialog-content" tabindex="0">
+      <div class="dialog-content-inner"></div>
+    </div>
+    <div class="dialog-form">
+      <button data-a11y-dialog-hide name="cancel" type="button">cancel</button>
+      <button data-a11y-dialog-hide name="confirm" type="button">
+        confirm
+      </button>
+    </div>
+  </div>
+</div>
+<div hidden id="announce" role="status" aria-live="polite"></div>
 {% endblock %}

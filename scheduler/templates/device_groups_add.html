@@ -1,14 +1,10 @@
-{% extends "page.html" %}
-{% import "macros.html" as macros %}
-{% block title %}{{title}}{% endblock %}
-{% block body %}
-	{% if none %}
-		<p class=none>{{ none }}</p>
-	{% else %}
-		<form class="device-groups-add-form" method=post action="{{ action }}">
-			{{ macros.form(form)}}
-			{{ macros.datalist("departments", form.departments, "invalid department") }}
-			<button type=submit>add</button>
-		</form>
-	{% endif %}
-{% endblock %}
+{% extends "page.html" %} {% import "macros.html" as macros %} {% block title
+%}{{title}}{% endblock %} {% block body %} {% if none %}
+<p class="none">{{ none }}</p>
+{% else %}
+<form class="device-groups-add-form" method="post" action="{{ action }}">
+  {{ macros.form(form)}} {{ macros.datalist("departments", form.departments,
+  "invalid department") }}
+  <button type="submit">add</button>
+</form>
+{% endif %} {% endblock %}

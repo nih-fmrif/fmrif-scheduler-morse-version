@@ -26,13 +26,13 @@ test.describe('Groups Section', () => {
     await groupsPage.goto();
     await groupsPage.testGroupLink.click();
     await groupDetailsPage.verifyPageElements();
-    
+
     // Test navigation through group options
     await groupDetailsPage.viewGroupLink.click();
     await groupDetailsPage.membershipLink.click();
     await groupDetailsPage.changePILink.click();
     await groupDetailsPage.editLink.click();
-    
+
     // Test edit functionality
     await groupEditPage.verifyEditForm();
     await groupEditPage.saveButton.click();

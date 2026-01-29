@@ -17,7 +17,7 @@ The database schema is managed through SQLAlchemy models and Alembic migrations:
 
 For production deployments, always use Alembic migrations.
 
-## Alembic Details    
+## Alembic Details
 
 1. To apply migrations to a database (e.g., production or development), run:
    ```

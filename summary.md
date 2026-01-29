@@ -20,7 +20,7 @@ bash run.sh
 ### 1. Environment Setup (`setup-dotenv.sh`)
 
 This script handles the initial environment configuration:
-- Copies `.env.sample.local` to `.env` 
+- Copies `.env.sample.local` to `.env`
 
 ### 2. Environment Variable Management & Docker initialization (`run.sh`)
 
@@ -123,7 +123,7 @@ sequenceDiagram
     Note over RS: run.sh execution
     RS->>RS: Process .env file
     RS->>RS: Export environment variables
-    
+
     Note over DC: docker compose up --build
     RS->>DC: Start containers
     DC->>PG: Start official PostgreSQL image
@@ -263,5 +263,3 @@ npx playwright install --with-deps
 ```bash
 npm run test
 ```
-
-

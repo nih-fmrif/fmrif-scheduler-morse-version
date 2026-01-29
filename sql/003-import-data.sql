@@ -1,11 +1,11 @@
 -- Add initial institutes with required fields
-INSERT INTO tlkpinst (instcode, instshort, inst) VALUES 
+INSERT INTO tlkpinst (instcode, instshort, inst) VALUES
 ('MAINT', 'MAINT', 'Maintenance'),
 ('TEST', 'TEST', 'Test Institute'),
 ('TRAIN', 'TRAIN', 'Training');
 
 -- Add departments with all required fields
-INSERT INTO tlkpdept (deptcode, dept, dept_short, grp, color_wkday_day, ismain, iscurrent) VALUES 
+INSERT INTO tlkpdept (deptcode, dept, dept_short, grp, color_wkday_day, ismain, iscurrent) VALUES
 ('TEST', 'Test Department', 'Test', 'TEST', '000000', true, true),
 ('DEV', 'Development', 'DEV', 'DEV', '000000', true, true),
 ('admin', 'Administration', 'admin', 'ADMIN', '000000', true, true);

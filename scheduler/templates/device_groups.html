@@ -1,12 +1,8 @@
-{% extends "page.html" %}
-{% import "macros.html" as macros %}
-{% block title %}{{title}}{% endblock %}
-{% block body %}
-	{% if none %}
-		<p class=none>{{ none }}</p>
-	{% else %}
-		<form class="device-groups-form" method=post action="{{ action }}">
-			{{ macros.form(form)}}
-		</form>
-	{% endif %}
-{% endblock %}
+{% extends "page.html" %} {% import "macros.html" as macros %} {% block title
+%}{{title}}{% endblock %} {% block body %} {% if none %}
+<p class="none">{{ none }}</p>
+{% else %}
+<form class="device-groups-form" method="post" action="{{ action }}">
+  {{ macros.form(form)}}
+</form>
+{% endif %} {% endblock %}

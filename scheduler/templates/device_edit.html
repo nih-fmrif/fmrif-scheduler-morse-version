@@ -1,9 +1,7 @@
-{% extends "page.html" %}
-{% import "macros.html" as macros %}
-{% block title %}{{title}}{% endblock %}
-{% block body %}
-	<form class="device-edit edit-form" method=post action="{{ action }}">
-		{{ macros.form(form)}}
-		<button type=submit>{{ submit }}</button>
-	</form>
+{% extends "page.html" %} {% import "macros.html" as macros %} {% block title
+%}{{title}}{% endblock %} {% block body %}
+<form class="device-edit edit-form" method="post" action="{{ action }}">
+  {{ macros.form(form)}}
+  <button type="submit">{{ submit }}</button>
+</form>
 {% endblock %}

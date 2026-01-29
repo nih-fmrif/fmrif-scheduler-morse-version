@@ -1,10 +1,8 @@
-{% extends "page.html" %}
-{% import "macros.html" as macros %}
-{% block title %}{{title}}{% endblock %}
-{% block body %}
-	<form class="group-edit edit-form" method=post action="{{ action }}">
-		{{ macros.form(form)}}
-		{{ macros.datalist("institutes", form.institutes, "invalid institute") }}
-		<button type=submit>{{ submit }}</button>
-	</form>
+{% extends "page.html" %} {% import "macros.html" as macros %} {% block title
+%}{{title}}{% endblock %} {% block body %}
+<form class="group-edit edit-form" method="post" action="{{ action }}">
+  {{ macros.form(form)}} {{ macros.datalist("institutes", form.institutes,
+  "invalid institute") }}
+  <button type="submit">{{ submit }}</button>
+</form>
 {% endblock %}

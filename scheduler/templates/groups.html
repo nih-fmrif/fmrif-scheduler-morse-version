@@ -1,15 +1,16 @@
-{% extends "page.html" %}
-{% block title %}{{ title }}{% endblock %}
-{% block body %}
-	<article class=list-with-description aria-labelledby=list-lbl>
-		<span id=list-lbl>Group</span>
-		<ul>
-			{% for group in groups %}
-				<li>
-					<a href="{{ url_for("group", the_group=group.id) }}">{{group.label}}</a>
-					{% if group.description %}<p>{{group.description}}</p>{% endif %}
-				</li>
-			{% endfor %}
-		</ul>
-	</article>
+{% extends "page.html" %} {% block title %}{{ title }}{% endblock %} {% block
+body %}
+<article class="list-with-description" aria-labelledby="list-lbl">
+  <span id="list-lbl">Group</span>
+  <ul>
+    {% for group in groups %}
+    <li>
+      <a href="{{ url_for('group', the_group=group.id) }}">{{group.label}}</a>
+      {% if group.description %}
+      <p>{{group.description}}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</article>
 {% endblock %}

@@ -29,7 +29,7 @@ create view app_log_json as with regular_entries as (
 		'main' kind,
 		coalesce(chg_by, '')::text chg_by,
 		json_strip_nulls(json_build_object(
-			'researcher', case 
+			'researcher', case
 				when researchercode_old is distinct from researchercode then
 					json_build_array(researchercode_old, researchercode)
 				else null end,
@@ -51,19 +51,19 @@ support_entries as (
 		label kind,
 		chg_by::text,
 		json_strip_nulls(json_build_object(
-			'filed_by', case 
+			'filed_by', case
 				when filed_by_old is distinct from filed_by then
 					json_build_array(filed_by_old, filed_by)
 				else null end,
-			'fulfilled_by', case 
+			'fulfilled_by', case
 				when fulfilled_by_old is distinct from fulfilled_by then
 					json_build_array(fulfilled_by_old, fulfilled_by)
 				else null end,
-			'approved', case 
+			'approved', case
 				when approved_old is distinct from approved then
 					json_build_array(approved_old, approved)
 				else null end,
-			'note', case 
+			'note', case
 				when note_old is distinct from note then
 					json_build_array(note_old, note)
 				else null end

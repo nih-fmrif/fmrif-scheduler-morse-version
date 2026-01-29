@@ -12,7 +12,7 @@ export class LoginPage {
   constructor(page: Page) {
     this.page = page;
     this.usernameInput = page.getByLabel('Username');
-    this.passwordInput = page.getByLabel('Password'); 
+    this.passwordInput = page.getByLabel('Password');
     this.submitButton = page.getByRole('button', { name: 'Login' });
     this.logoutLink = page.getByRole('link', { name: 'logout' });
     this.errorMessage = page.getByText('Invalid username or password');

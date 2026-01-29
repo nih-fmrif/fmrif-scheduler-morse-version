@@ -11,17 +11,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
          python-version: '3.11'
-         
-    - name: Set up Node.js  
+
+    - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '18'
-        
+
     - name: Install Python dependencies
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -36,7 +36,7 @@ jobs:
       run: |
         uv run pytest tests/python/
 
-    - name: Install Node.js dependencies  
+    - name: Install Node.js dependencies
       run: npm ci --no-optional
 
     - name: Cache Playwright browsers
@@ -47,7 +47,7 @@ jobs:
         key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
         restore-keys: |
           playwright-${{ runner.os }}-
-      
+
     - name: Install Playwright browsers
       if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: npx playwright install --with-deps
@@ -56,24 +56,24 @@ jobs:
       run: |
         # Ensure clean state
         docker compose down
-        
+
         # Setup environment files
         bash setup-dotenv.sh
-        
+
         # Copy .env file to scheduler directory for container mounting
         cp .env scheduler/.env
-        
+
         # Start fresh containers
         docker compose up -d
-        
+
         # Wait for services to be ready
         echo "Waiting for services to be ready..."
         sleep 30
-        
+
         # Show container logs for debugging
         echo "=== Scheduler Container Logs ==="
         docker logs scheduler
-        
+
         # Run tests
         npm run test
 

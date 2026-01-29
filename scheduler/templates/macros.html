@@ -29,7 +29,10 @@
 	{% else %}
 		{% set option = f.type == "BooleanField" or f.type == "_Option" %}
 		{% set above = f.type == "TextAreaField" %}
-		<input-set{% if option %} is-option{% endif %}{% if "required" in f.flags %} is-required{% endif %}{% if above %} label-above{% endif %}>
+		{% set option_attr = ' is-option' if option else '' %}
+		{% set required_attr = ' is-required' if "required" in f.flags else '' %}
+		{% set above_attr = ' label-above' if above else '' %}
+		<input-set{{ option_attr }}{{ required_attr }}{{ above_attr }}>
 			{% if option %}
 				<input-widget>{{ field_render(f) }}</input-widget>
 				{{ field_label(f) }}
@@ -112,14 +115,14 @@
 {% endmacro %}
 
 {% macro entry_legend(color) %}
-	<entry-legend style="--swatch: {{ color or "transparent" }}"></entry-legend>
+	<entry-legend style="--swatch: {{ color or 'transparent' }}"></entry-legend>
 {% endmacro %}
 
 {% macro entry_text(id, lbl, list, value) %}
 	<input-set label-above shrink>
 	<label for="{{ id }}">{{ lbl }}</label>
 	<input-widget>
-		<input id="{{ id }}" disabled spellcheck=false autocomplete=off {% if list %}list="{{ list }}"{% endif %} data-orig="{{ value or "" }}" value="{{ value or ""}}">
+		<input id="{{ id }}" disabled spellcheck=false autocomplete=off {% if list %}list="{{ list }}"{% endif %} data-orig="{{ value or '' }}" value="{{ value or '' }}">
 		{{ validation_icons() }}
 	</input-widget>
 	</input-set>
@@ -142,7 +145,7 @@
 			</input-set>
 			<button hidden data-a11y-dialog-hide name=cancel type=button>cancel</button>
 			<button data-a11y-dialog-hide name=confirm type=button>confirm</button>
-		</div>		
+		</div>
 	</div>
 </div>
 <div id="result-dialog-container" class=dialog-container aria-hidden=true aria-labelledby=result-dialog-title>

@@ -1,23 +1,16 @@
-{% extends "page.html" %}
-{% import "macros.html" as macros %}
-{% block title %}{{ title }}{% endblock %}
-{% block body %}
-	<form method=post action="{{ action }}">
-		{{ form.csrf_token }}
-		{{ macros.form_errors(form) }}
-		{{ macros.field(form.templates) }}
-		{{ macros.field(form.slot) }}
-		{{ macros.field(form.medical) }}
-		{{ macros.field(form.training) }}
-		{% if form.tech %}
-			{{ macros.field(form.tech) }}
-		{% else %}
-			<p>{{ user.id }} is not a technologist</p>
-		{% endif %}
-		<form-submit>
-			<a href="{{ url_for("device_users", the_device=device.id) }}">cancel</a>
-			{% if form.rm %}{{ macros.field(form.rm) }}{%endif%}
-			{{ macros.field(form.cru) }}
-		</form-submit>
-	</form>
+{% extends "page.html" %} {% import "macros.html" as macros %} {% block title
+%}{{ title }}{% endblock %} {% block body %}
+<form method="post" action="{{ action }}">
+  {{ form.csrf_token }} {{ macros.form_errors(form) }} {{
+  macros.field(form.templates) }} {{ macros.field(form.slot) }} {{
+  macros.field(form.medical) }} {{ macros.field(form.training) }} {% if
+  form.tech %} {{ macros.field(form.tech) }} {% else %}
+  <p>{{ user.id }} is not a technologist</p>
+  {% endif %}
+  <form-submit>
+    <a href="{{ url_for('device_users', the_device=device.id) }}">cancel</a>
+    {% if form.rm %}{{ macros.field(form.rm) }}{%endif%} {{
+    macros.field(form.cru) }}
+  </form-submit>
+</form>
 {% endblock %}

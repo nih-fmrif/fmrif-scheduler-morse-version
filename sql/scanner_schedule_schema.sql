@@ -14,7 +14,7 @@ COMMENT ON SCHEMA public IS 'Standard public schema';
 
 
 --
--- Name: plpgsql; Type: PROCEDURAL LANGUAGE; Schema: -; Owner: 
+-- Name: plpgsql; Type: PROCEDURAL LANGUAGE; Schema: -; Owner:
 --
 
 CREATE PROCEDURAL LANGUAGE plpgsql;
@@ -81,7 +81,7 @@ SET default_tablespace = '';
 SET default_with_oids = true;
 
 --
--- Name: tlkpdept; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpdept; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tlkpdept (
@@ -218,7 +218,7 @@ CREATE VIEW departments_agt AS
 ALTER TABLE public.departments_agt OWNER TO adamt;
 
 --
--- Name: tblsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tblsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tblsched (
@@ -252,7 +252,7 @@ COMMENT ON TABLE tblsched IS 'Schedule assignments';
 
 
 --
--- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tlkpresearcher (
@@ -317,7 +317,7 @@ CREATE SEQUENCE tblsched_schedid_seq
 ALTER TABLE public.tblsched_schedid_seq OWNER TO jburton;
 
 --
--- Name: tbltemplate; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tbltemplate; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tbltemplate (
@@ -357,7 +357,7 @@ CREATE SEQUENCE tbltemplate_templateid_seq
 ALTER TABLE public.tbltemplate_templateid_seq OWNER TO jburton;
 
 --
--- Name: tbltemplates; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tbltemplates; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tbltemplates (
@@ -381,7 +381,7 @@ COMMENT ON TABLE tbltemplates IS 'List of scanner templates';
 SET default_with_oids = false;
 
 --
--- Name: technicalscans; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: technicalscans; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE technicalscans (
@@ -398,7 +398,7 @@ CREATE TABLE technicalscans (
 ALTER TABLE public.technicalscans OWNER TO jburton;
 
 --
--- Name: temp_timelapse; Type: TABLE; Schema: public; Owner: zope; Tablespace: 
+-- Name: temp_timelapse; Type: TABLE; Schema: public; Owner: zope; Tablespace:
 --
 
 CREATE TABLE temp_timelapse (
@@ -417,7 +417,7 @@ ALTER TABLE public.temp_timelapse OWNER TO zope;
 SET default_with_oids = true;
 
 --
--- Name: tlkpinst; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpinst; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tlkpinst (
@@ -440,7 +440,7 @@ CREATE VIEW "template" AS
 ALTER TABLE public."template" OWNER TO jburton;
 
 --
--- Name: tlkpscanner; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpscanner; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tlkpscanner (
@@ -462,7 +462,7 @@ COMMENT ON TABLE tlkpscanner IS 'List of scanners';
 
 
 --
--- Name: tlogresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlogresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tlogresearcher (
@@ -485,7 +485,7 @@ CREATE TABLE tlogresearcher (
 ALTER TABLE public.tlogresearcher OWNER TO jburton;
 
 --
--- Name: tlogsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlogsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE TABLE tlogsched (
@@ -582,7 +582,7 @@ COMMENT ON VIEW vtblsched_audit_total IS 'Used to determine total allocated time
 
 
 --
--- Name: tblsched_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tblsched_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tblsched
@@ -590,7 +590,7 @@ ALTER TABLE ONLY tblsched
 
 
 --
--- Name: tbltemplate_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tbltemplate_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -598,7 +598,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplate_scannercode_key1; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tbltemplate_scannercode_key1; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -606,7 +606,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplates_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tbltemplates_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplates
@@ -614,7 +614,7 @@ ALTER TABLE ONLY tbltemplates
 
 
 --
--- Name: technicalscans_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: technicalscans_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY technicalscans
@@ -622,7 +622,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: technicalscans_scantime_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: technicalscans_scantime_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY technicalscans
@@ -630,7 +630,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: tlkpdept_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpdept_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpdept
@@ -638,7 +638,7 @@ ALTER TABLE ONLY tlkpdept
 
 
 --
--- Name: tlkpinst_instshort_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpinst_instshort_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpinst
@@ -646,7 +646,7 @@ ALTER TABLE ONLY tlkpinst
 
 
 --
--- Name: tlkpinst_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpinst_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpinst
@@ -654,7 +654,7 @@ ALTER TABLE ONLY tlkpinst
 
 
 --
--- Name: tlkpresearcher_dept_code_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpresearcher_dept_code_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -662,7 +662,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -670,7 +670,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpscanner_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpscanner_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpscanner
@@ -678,7 +678,7 @@ ALTER TABLE ONLY tlkpscanner
 
 
 --
--- Name: tlogresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlogresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
 --
 
 ALTER TABLE ONLY tlogresearcher
@@ -686,7 +686,7 @@ ALTER TABLE ONLY tlogresearcher
 
 
 --
--- Name: scann_template; Type: INDEX; Schema: public; Owner: jburton; Tablespace: 
+-- Name: scann_template; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE INDEX scann_template ON tbltemplates USING btree (scannercode, templatecode);
@@ -695,35 +695,35 @@ ALTER TABLE tbltemplates CLUSTER ON scann_template;
 
 
 --
--- Name: tblsched_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tblsched_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE UNIQUE INDEX tblsched_scannercode_key ON tblsched USING btree (scannercode, scheddate, schedhour);
 
 
 --
--- Name: tbltemplate_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tbltemplate_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE INDEX tbltemplate_scannercode_key ON tbltemplate USING btree (scannercode, templatecode, dow, "hour");
 
 
 --
--- Name: tlkpdept_dept_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpdept_dept_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpdept_dept_key ON tlkpdept USING btree (dept);
 
 
 --
--- Name: tlkpdept_dept_short_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpdept_dept_short_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpdept_dept_short_key ON tlkpdept USING btree (dept_short);
 
 
 --
--- Name: tlkpscanner_scanner_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace: 
+-- Name: tlkpscanner_scanner_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpscanner_scanner_key ON tlkpscanner USING btree (scanner);
@@ -1148,4 +1148,3 @@ GRANT ALL ON TABLE vtblsched_audit_total TO apache;
 --
 -- PostgreSQL database dump complete
 --
-

@@ -1,15 +1,18 @@
-{% extends "page.html" %}
-{% block title %}{{ title }}{% endblock %}
-{% block body %}
-	<article class=list-with-description aria-labelledby=list-lbl>
-		<span id=list-lbl>Devices</span>
-		<ul>
-			{% for device in devices %}
-				<li>
-					<a href="{{ url_for("device", the_device=device.id) }}">{{device.label}}</a>
-					{% if device.description %}<p>{{device.description}}</p>{% endif %}
-				</li>
-			{% endfor %}
-		</ul>
-	</article>
+{% extends "page.html" %} {% block title %}{{ title }}{% endblock %} {% block
+body %}
+<article class="list-with-description" aria-labelledby="list-lbl">
+  <span id="list-lbl">Devices</span>
+  <ul>
+    {% for device in devices %}
+    <li>
+      <a href="{{ url_for('device', the_device=device.id) }}"
+        >{{device.label}}</a
+      >
+      {% if device.description %}
+      <p>{{device.description}}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</article>
 {% endblock %}

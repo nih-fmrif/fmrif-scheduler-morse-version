@@ -1,8 +1,4 @@
-{% extends "base.html" %}
-{% block title %}{{msg}}{% endblock %}
-{% block basebody %}
-	{{code}} - {{msg}}
-	{% if show_login %}
-		<a class=login-link href="{{login_url_prefix}}{{request.url|urlencode|replace("/", "%2f")}}">login with SiteMinder</a>
-	{% endif %}
-{% endblock %}
+{% extends "base.html" %} {% block title %}{{msg}}{% endblock %} {% block
+basebody %} {{code}} - {{msg}} {% if show_login %}
+<a class="login-link" href="{{ url_for('auth.login') }}">Log in</a>
+{% endif %} {% endblock %}
