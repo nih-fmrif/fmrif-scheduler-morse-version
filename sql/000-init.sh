@@ -6,7 +6,7 @@
 # You can set these by either:
 # 1. Using your .env file (the application will load it)
 # 2. Explicitly exporting variables before running:
-#    export PGHOST=localhost PGPORT=5050 ... then run this script
+#    export PGHOST=localhost PGPORT=5444 ... then run this script
 
 set -euo pipefail
 

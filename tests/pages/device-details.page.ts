@@ -1,4 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { waitForAppShell } from '../utils/test-helpers';
 
 export class DeviceDetailsPage {
   readonly page: Page;
@@ -18,6 +19,10 @@ export class DeviceDetailsPage {
   }
 
   async verifyPageElements() {
-    await expect(this.page.getByText('show schedule templates')).toBeVisible();
+    await waitForAppShell(this.page);
+    await expect(this.page.locator('div.body.device')).toBeVisible();
+    await expect(this.page.locator('div.body.device nav.jump-form, div.body.device p.note')).toBeVisible();
+    await expect(this.scheduleLink).toBeVisible();
+    await expect(this.templatesLink).toBeVisible();
   }
 }

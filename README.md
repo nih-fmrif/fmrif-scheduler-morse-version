@@ -18,6 +18,7 @@ command to get started quickly. Change sensitive values when ready to deploy.
 ```
 bash setup-dotenv.sh
 ```
+The application fails fast if a required `.env` file is missing.
 
 ## Environment Variables
 
@@ -27,7 +28,7 @@ The application uses PostgreSQL connection parameters that can be configured in 
 Create a `.env` file in the project root with these variables:
 ```
 PGHOST=localhost
-PGPORT=5050
+PGPORT=5444
 PGUSER=postgres
 PGPASSWORD=FMRIF-postgres-123
 PGDATABASE=fmrif_scheduler
@@ -37,7 +38,7 @@ PGDATABASE=fmrif_scheduler
 If you prefer to set environment variables directly (which will override .env values):
 ```bash
 export PGHOST=localhost
-export PGPORT=5050
+export PGPORT=5444
 export PGUSER=postgres
 export PGPASSWORD=FMRIF-postgres-123
 export PGDATABASE=fmrif_scheduler
@@ -100,7 +101,7 @@ bash run.sh
 ```
 
 This will start:
-- PostgreSQL on port 5050
+- PostgreSQL on port 5444
 - Scheduler application on port 5051
 
 
@@ -117,6 +118,7 @@ uv run pytest
 # With standalone setup (PostgreSQL running on port 5444)
 PGHOST=localhost PGPORT=5444 PGDATABASE=scheduler_test pytest
 ```
+If you run tests with `RBAC__SUPERUSER_MODE=false`, ensure Entra settings are configured.
 
 ### Frontend testing
 

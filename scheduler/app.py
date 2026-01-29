@@ -137,6 +137,24 @@ def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[st
     return render_template("error.html", **data), code
 
 
+def wants_html_response() -> bool:
+    accept = request.accept_mimetypes
+    if not accept:
+        return False
+    return (
+        accept.best_match(["text/html", "application/json"]) == "text/html"
+        and accept["text/html"] > accept["application/json"]
+    )
+
+
+@app.errorhandler(401)
+def unauthorized(e):
+    # Redirect browser clients to login for unauthenticated requests
+    if g.user is None and wants_html_response():
+        return redirect(url_for("auth.login"))
+    return render_error_page(401, "Unauthorized")
+
+
 @app.errorhandler(403)
 def access_denied(e):
     # Redirect to login page if user is not authenticated
@@ -162,7 +180,8 @@ def force_login_cli(user):
         click.echo(f"no such user {user}")
         return
     token = logic.create_reset_token_for(user)
-    click.echo(url_for("force_login", token=token))
+    with app.test_request_context():
+        click.echo(url_for("force_login", token=token))
 
 
 @app.cli.command("deactivate-user")
@@ -298,6 +317,28 @@ def render_to(template):
 @app.route("/robots.txt")
 def robots():
     return Response("User-agent: *\nDisallow: /", mimetype="text/plain")
+
+
+@app.route("/api/config/entra.json")
+def entra_config():
+    """Serve Entra configuration from environment variables.
+
+    This endpoint dynamically generates the Entra OAuth configuration
+    from environment variables, avoiding hardcoded credentials in git.
+
+    Changed from /static/config/entra-config.json to /api/config/entra.json
+    to avoid conflict with Flask's static file handler.
+    """
+    config = {
+        "client_id": settings.entra.client_id,
+        "tenant_id": settings.entra.tenant_id,
+        "authorization_endpoint": f"https://login.microsoftonline.com/{settings.entra.tenant_id}/oauth2/v2.0/authorize",
+        "discovery_url": settings.entra.discovery_url,
+        "redirect_uri": settings.entra.redirect_uri,
+        "allowed_audiences": settings.entra.allowed_audiences,
+        "scope": settings.entra.scope,
+    }
+    return jsonify(config)
 
 
 @app.route("/force-login/<token>")

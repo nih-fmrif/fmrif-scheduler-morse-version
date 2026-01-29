@@ -18,10 +18,10 @@ overwritten with the environment variable "DATABASE__USER".
 Running `setup-dotenv.sh` will create an .env file (from .env.sample.local) in the root of the project
 with the default values. This file can be modified to set the desired values for
 the environment.
+The application fails fast if a required `.env` file is missing.
 
-Note that CI and local development use the .env.docker files instantiated from
-.env.sample files. These can be ignored unless you are working on the CI/CD
-pipeline.
+Note that CI and local development use the root `.env` instantiated from
+`.env.sample.local`.
 
 Some useful variables that one might consider setting are listed below.
 
@@ -43,11 +43,11 @@ SERVER__APPLICATION_ROOT=
 
 #### Database Settings
 ```env
-DATABASE__HOST=postgres
-DATABASE__PORT=5432
-DATABASE__USER=postgres
-DATABASE__PASSWORD=postgres
-DATABASE__DB=scheduler
+PGHOST=postgres
+PGPORT=5432
+PGUSER=postgres
+PGPASSWORD=postgres
+PGDATABASE=scheduler
 ```
 
 #### Authentication Settings
@@ -63,6 +63,7 @@ ENTRA__REDIRECT_URI=https://fmrif-schedule-backend-staging.nimh.nih.gov
 ## Superuser Mode (local development only)
 RBAC__SUPERUSER_MODE=true
 ```
+When `RBAC__SUPERUSER_MODE=false`, Entra settings must be set to non-placeholder values.
 
 #### Mail Settings
 ```env
@@ -75,7 +76,7 @@ MAIL__PASSWORD=test
 ### Deployment Specific Configuration
 
 1. **Docker Environment**
-   - Uses `.env.docker`
+   - Uses `.env` automatically and also mounts the .env file into the container
    - Services communicate via Docker network
    - Database host is `postgres`
 

@@ -1,4 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { waitForAppShell } from '../utils/test-helpers';
 
 export class ListActionFormPage {
   readonly page: Page;
@@ -13,12 +14,14 @@ export class ListActionFormPage {
 
   async goto() {
     await this.page.goto('/mailing-lists');
+    await waitForAppShell(this.page);
   }
 
   async verifyPageElements() {
-    await expect(this.page.getByText('home list action form logged')).toBeVisible();
-    await expect(this.page.getByText('email the NIH email address used for this list (must end in nih.gov) name your')).toBeVisible();
+    await waitForAppShell(this.page);
     await expect(this.listActionFormLink).toBeVisible();
+    await expect(this.page.locator('form.mailing-list-form')).toBeVisible();
+    await expect(this.submitButton).toBeVisible();
   }
 
   async submitForm() {

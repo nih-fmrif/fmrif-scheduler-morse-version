@@ -1,4 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { waitForAppShell } from '../utils/test-helpers';
 
 export class DeviceTemplatesPage {
   readonly page: Page;
@@ -16,6 +17,13 @@ export class DeviceTemplatesPage {
   }
 
   async verifyPageElements() {
-    await expect(this.page.getByText('templates apply active')).toBeVisible();
+    await waitForAppShell(this.page);
+    await expect(this.applyLink).toBeVisible();
+    await expect(this.activeLink).toBeVisible();
+    await expect(this.inactiveLink).toBeVisible();
+    await expect(this.addTemplateLink).toBeVisible();
+    const pageBody = this.page.locator('div.body.device_tmpl');
+    await expect(pageBody).toBeVisible();
+    await expect(pageBody.locator('form.template-apply, p.note').first()).toBeVisible();
   }
 }

@@ -1,4 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { waitForAppShell } from '../utils/test-helpers';
 
 export class GroupDetailsPage {
   readonly page: Page;
@@ -16,8 +17,11 @@ export class GroupDetailsPage {
   }
 
   async verifyPageElements() {
+    await waitForAppShell(this.page);
     await expect(this.page.getByRole('heading', { name: 'Test' })).toBeVisible();
-    await expect(this.page.getByText('home groups Test logged in as')).toBeVisible();
-    await expect(this.page.getByText('show view Test membership for')).toBeVisible();
+    await expect(this.viewGroupLink).toBeVisible();
+    await expect(this.membershipLink).toBeVisible();
+    await expect(this.changePILink).toBeVisible();
+    await expect(this.editLink).toBeVisible();
   }
 }

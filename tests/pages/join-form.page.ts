@@ -1,4 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { waitForAppShell } from '../utils/test-helpers';
 
 export class JoinFormPage {
   readonly page: Page;
@@ -13,9 +14,11 @@ export class JoinFormPage {
 
   async goto() {
     await this.page.goto('/join');
+    await waitForAppShell(this.page);
   }
 
   async verifyPageElements() {
-    await expect(this.page.getByText('home join form logged in as')).toBeVisible();
+    await waitForAppShell(this.page);
+    await expect(this.page.getByRole('button', { name: 'submit' })).toBeVisible();
   }
 }

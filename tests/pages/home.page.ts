@@ -1,4 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { waitForAppShell } from '../utils/test-helpers';
 
 export class HomePage {
   readonly page: Page;
@@ -16,14 +17,17 @@ export class HomePage {
     this.groupsLink = page.getByRole('link', { name: 'groups' });
     this.joinFormLink = page.getByRole('link', { name: 'join form' });
     this.listActionFormLink = page.getByRole('link', { name: 'list action form' });
-    this.skipToMainContent = page.getByText('skip to main content home');
+    this.skipToMainContent = page.getByRole('link', { name: 'skip to main content' });
   }
 
   async goto() {
     await this.page.goto('/');
+    await waitForAppShell(this.page);
   }
 
   async verifyAllLinksVisible() {
+    await waitForAppShell(this.page);
+    await expect(this.page.locator('ul.index')).toBeVisible();
     await expect(this.homeLink).toBeVisible();
     await expect(this.devicesLink).toBeVisible();
     await expect(this.groupsLink).toBeVisible();

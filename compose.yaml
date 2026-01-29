@@ -33,7 +33,7 @@ services:
 
     volumes:
       - ./scheduler:/app/scheduler
-      - ./.env.docker:/app/.env:ro
+      - ./.env:/app/.env:ro
     depends_on:
       postgres:
         condition: service_healthy

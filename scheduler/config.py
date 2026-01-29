@@ -23,7 +23,7 @@ import os
 from typing import Dict, List, Optional
 from urllib.parse import quote
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from scheduler.find_env_file import find_envfile
@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 env_file = find_envfile()
+logger.info(f"Loading .env from: {env_file}")
+
+PLACEHOLDER_UUID = "00000000-0000-0000-0000-000000000000"
 
 
 class EntraConfig(BaseModel):
@@ -44,6 +47,7 @@ class EntraConfig(BaseModel):
     discovery_url: str = ""
     redirect_uri: str = ""
     allowed_audiences: List[str] = Field(default_factory=list)
+    scope: str = "openid profile email"  # OAuth 2.0 OIDC scopes for user identity
     jwks_cache_ttl: int = 60 * 60  # seconds
 
     @property
@@ -101,7 +105,7 @@ class CoreConfig(BaseModel):
 class ServerConfig(BaseModel):
     """Server configuration settings"""
 
-    server_name: str = "localhost:5051"
+    server_name: str = ""  # Empty allows Flask to work with reverse proxies (nginx, etc.)
     application_root: str = ""
 
 
@@ -202,6 +206,30 @@ class Settings(BaseSettings):
             f"@{self.PGHOST}:{self.PGPORT}/{quote(self.PGDATABASE)}"
         )
 
+    @model_validator(mode="after")
+    def validate_required_settings(self) -> "Settings":
+        # SERVER_NAME can be empty (recommended for reverse proxy setups)
+        # When empty, Flask accepts requests from any host
+
+        if not self.rbac.superuser_mode:
+            missing = []
+            if not self.entra.client_id.strip() or self.entra.client_id == PLACEHOLDER_UUID:
+                missing.append("ENTRA__CLIENT_ID")
+            if not self.entra.tenant_id.strip() or self.entra.tenant_id == PLACEHOLDER_UUID:
+                missing.append("ENTRA__TENANT_ID")
+            if not self.entra.discovery_url.strip():
+                missing.append("ENTRA__DISCOVERY_URL")
+            if not self.entra.redirect_uri.strip():
+                missing.append("ENTRA__REDIRECT_URI")
+
+            if missing:
+                raise ValueError(
+                    "Missing required Entra settings when RBAC__SUPERUSER_MODE is false: "
+                    + ", ".join(missing)
+                )
+
+        return self
+
     def get_proxy_count(self) -> Optional[Dict[str, int]]:
         """Get proxy configuration counts from environment variables"""
         proxy_vars = {
@@ -233,39 +261,42 @@ class AppConfig(dict):
 
     def __init__(self, settings: Settings):
         super().__init__()
-        self.update(
-            {
-                "SECRET_KEY": settings.core.secret_key,
-                "SERVER_NAME": settings.server.server_name,
-                "APPLICATION_ROOT": settings.server.application_root,
-                "SQLALCHEMY_DATABASE_URI": settings.database_url,
-                "SQLALCHEMY_TRACK_MODIFICATIONS": settings.database.track_modifications,
-                "MAIL_SERVER": settings.mail.server,
-                "MAIL_PORT": settings.mail.port,
-                "MAIL_USE_TLS": settings.mail.use_tls,
-                "MAIL_USE_SSL": settings.mail.use_ssl,
-                "MAIL_USERNAME": settings.mail.username,
-                "MAIL_PASSWORD": settings.mail.password,
-                "nih_mailing_lists": settings.mail.mailing_lists,
-                "SESSION_COOKIE_NAME": settings.session.cookie_name,
-                "PERMANENT_SESSION_LIFETIME": settings.session.permanent_lifetime,
-                "SESSION_TYPE": settings.session.type,
-                "SESSION_USE_SIGNER": settings.session.use_signer,
-                "SESSION_SQLALCHEMY_TABLE": settings.session.sqlalchemy_table,
-                "SUPERUSER_MODE": settings.rbac.superuser_mode,
-                "NIH_NETWORKS": [
-                    ipaddress.ip_network(net) for net in settings.core.nih_networks
-                ],
-                "SITE_DEFAULT_SENDER": settings.core.site_sender,
-                "ENTRA_CLIENT_ID": settings.entra.client_id,
-                "ENTRA_TENANT_ID": settings.entra.tenant_id,
-                "ENTRA_DISCOVERY_URL": settings.entra.discovery_url,
-                "ENTRA_REDIRECT_URI": settings.entra.redirect_uri,
-                "ENTRA_AUDIENCES": settings.entra.audiences,
-                "ENTRA_ISSUER": settings.entra.issuer,
-                "ENTRA_JWKS_CACHE_TTL": settings.entra.jwks_cache_ttl,
-            }
-        )
+        config_dict = {
+            "SECRET_KEY": settings.core.secret_key,
+            "APPLICATION_ROOT": settings.server.application_root,
+            "SQLALCHEMY_DATABASE_URI": settings.database_url,
+            "SQLALCHEMY_TRACK_MODIFICATIONS": settings.database.track_modifications,
+            "MAIL_SERVER": settings.mail.server,
+            "MAIL_PORT": settings.mail.port,
+            "MAIL_USE_TLS": settings.mail.use_tls,
+            "MAIL_USE_SSL": settings.mail.use_ssl,
+            "MAIL_USERNAME": settings.mail.username,
+            "MAIL_PASSWORD": settings.mail.password,
+            "nih_mailing_lists": settings.mail.mailing_lists,
+            "SESSION_COOKIE_NAME": settings.session.cookie_name,
+            "PERMANENT_SESSION_LIFETIME": settings.session.permanent_lifetime,
+            "SESSION_TYPE": settings.session.type,
+            "SESSION_USE_SIGNER": settings.session.use_signer,
+            "SESSION_SQLALCHEMY_TABLE": settings.session.sqlalchemy_table,
+            "SUPERUSER_MODE": settings.rbac.superuser_mode,
+            "NIH_NETWORKS": [
+                ipaddress.ip_network(net) for net in settings.core.nih_networks
+            ],
+            "SITE_DEFAULT_SENDER": settings.core.site_sender,
+            "ENTRA_CLIENT_ID": settings.entra.client_id,
+            "ENTRA_TENANT_ID": settings.entra.tenant_id,
+            "ENTRA_DISCOVERY_URL": settings.entra.discovery_url,
+            "ENTRA_REDIRECT_URI": settings.entra.redirect_uri,
+            "ENTRA_AUDIENCES": settings.entra.audiences,
+            "ENTRA_ISSUER": settings.entra.issuer,
+            "ENTRA_JWKS_CACHE_TTL": settings.entra.jwks_cache_ttl,
+        }
+
+        # Only set SERVER_NAME if not empty (for reverse proxy compatibility)
+        if settings.server.server_name.strip():
+            config_dict["SERVER_NAME"] = settings.server.server_name
+
+        self.update(config_dict)
 
     def __getattr__(self, name):
         try:

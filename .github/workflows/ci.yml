@@ -30,11 +30,12 @@ jobs:
     - name: Setup environment
       run: |
         bash setup-dotenv.sh
-        docker compose up --build -d
+        docker compose up --build -d --wait
 
     - name: Run Python tests
-      run: |
-        uv run pytest tests/python/
+      env:
+        RBAC__SUPERUSER_MODE: "true"
+      run: uv run pytest tests/python/
 
     - name: Install Node.js dependencies
       run: npm ci --no-optional
@@ -53,6 +54,9 @@ jobs:
       run: npx playwright install --with-deps
 
     - name: Run Playwright tests
+      env:
+        BASE_URL: "http://localhost:5051"
+        RBAC__SUPERUSER_MODE: "true"
       run: |
         # Ensure clean state
         docker compose down
@@ -64,7 +68,7 @@ jobs:
         cp .env scheduler/.env
 
         # Start fresh containers
-        docker compose up -d
+        docker compose up -d --wait
 
         # Wait for services to be ready
         echo "Waiting for services to be ready..."

@@ -6,8 +6,8 @@ The project uses multiple test environments:
 
 1. **Docker Environment**
    - Used by CI/CD pipeline
-   - Configured via `.env.docker` files
-   - PostgreSQL on port 5050
+   - Configured via `.env`
+   - PostgreSQL on port 5444
    - Entra authentication is handled via browser flow (no local auth service)
    - Application on port 5051
 
@@ -32,7 +32,7 @@ pytest --cov=scheduler tests/python/
 
 ```bash
 # Run all E2E tests
-npm run test
+BASE_URL=http://localhost:5051 RBAC__SUPERUSER_MODE=true npm run test
 
 # Run with UI
 npm run test:ui
@@ -52,6 +52,7 @@ npm run test:headed
    - Configuration in `playwright.config.ts`
    - Base URL: http://localhost:5051
    - Browser: Chromium
+   - If `RBAC__SUPERUSER_MODE=false`, provide real Entra settings for auth-related tests
 
 ## Writing Tests
 

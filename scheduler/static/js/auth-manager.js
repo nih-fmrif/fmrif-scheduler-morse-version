@@ -44,7 +44,7 @@ const PKCE_VERIFIER_KEY = "pkce_verifier";
 async function initializeAuth() {
   try {
     // Load Entra configuration
-    const response = await fetch("/static/config/entra-config.json");
+    const response = await fetch("/api/config/entra.json");
     if (!response.ok) {
       throw new Error(`Failed to load configuration: ${response.status}`);
     }
