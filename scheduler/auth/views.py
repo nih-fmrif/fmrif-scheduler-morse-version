@@ -15,6 +15,18 @@ def login():
     return render_template("auth/login.html")
 
 
+@auth.route("/callback")
+def callback():
+    """Handle OAuth redirect from Microsoft Entra.
+
+    Entra redirects here with ?code=xxx&state=yyy after user authentication.
+    The page renders login.html; the JavaScript on that page detects the
+    code parameter, exchanges it for tokens via PKCE, then establishes
+    a server session via POST /auth/session.
+    """
+    return render_template("auth/login.html")
+
+
 @auth.route("/session", methods=["POST"])
 def establish_session():
     """Create a server session from a validated JWT bearer token."""
