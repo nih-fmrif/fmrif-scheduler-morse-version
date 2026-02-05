@@ -6,6 +6,8 @@ scheduler/static/config/entra-config.json
 
 .DS_Store
 node_modules/
+playwright/.auth/
+playwright-auth.json
 scheduler/.DS_Store
 scheduler/static/.DS_Store
 scheduler/templates/.DS_Store

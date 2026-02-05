@@ -33,11 +33,14 @@ class _JWKSCache:
 _CACHE = _JWKSCache()
 
 
-def _log_debug(message: str) -> None:
+def _log_debug(message: str, *args: object) -> None:
     try:
         logger = getattr(current_app, "logger", None)
         if logger:
-            logger.debug(message)
+            if args:
+                logger.debug(message, *args)
+            else:
+                logger.debug(message)
     except RuntimeError:
         # Outside of Flask app context; skip logging
         pass
@@ -130,13 +133,19 @@ def user_from_claims(claims: Dict) -> Optional[SessionUser]:
     if not claims:
         return None
 
-    email = (
-        claims.get("email")
-        or claims.get("preferred_username")
-        or claims.get("upn")
-    )
+    email = claims.get("email")
+    source = "email"
     if not email:
+        email = claims.get("preferred_username")
+        source = "preferred_username"
+    if not email:
+        email = claims.get("upn")
+        source = "upn"
+    if not email:
+        _log_debug("JWT claims missing email; keys=%s", sorted(claims.keys()))
         return None
+    _log_debug("JWT email claim resolved from %s", source)
+    email = str(email).lower()
 
     username = email.split("@")[0].lower()
     display_name = claims.get("name") or username

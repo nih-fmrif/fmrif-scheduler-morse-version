@@ -1,6 +1,6 @@
 # scheduler/auth/session.py
 
-from typing import Optional
+from typing import Dict, Optional
 
 from flask import abort, current_app, g, request, session
 from functools import wraps
@@ -62,6 +62,20 @@ def login_user_with_token(token: str) -> Optional[SessionUser]:
             current_app.logger.warning("JWT verification failed during login: %s", error)
         return None
 
+    user = user_from_claims(claims)
+    if not user:
+        if current_app and current_app.logger:
+            current_app.logger.warning("JWT claims missing email during login")
+        return None
+
+    _persist_user(user)
+    _store_session(user)
+    g.user = user
+    return user
+
+
+def login_user_with_claims(claims: Dict) -> Optional[SessionUser]:
+    """Create a session from already-validated JWT claims."""
     user = user_from_claims(claims)
     if not user:
         if current_app and current_app.logger:

@@ -40,7 +40,7 @@ If you prefer to set environment variables directly (which will override .env va
 export PGHOST=localhost
 export PGPORT=5444
 export PGUSER=postgres
-export PGPASSWORD=FMRIF-postgres-123
+export PGPASSWORD=password
 export PGDATABASE=fmrif_scheduler
 ```
 
@@ -119,6 +119,9 @@ uv run pytest
 PGHOST=localhost PGPORT=5444 PGDATABASE=scheduler_test pytest
 ```
 If you run tests with `RBAC__SUPERUSER_MODE=false`, ensure Entra settings are configured.
+Server-side OAuth state is stored in the database table `oauth_state` to avoid
+cross-site cookie constraints during the callback. Apply Alembic migrations
+(`alembic upgrade head`) or run `sql/000-init.sh` when provisioning a new database.
 
 ### Frontend testing
 
@@ -138,6 +141,59 @@ npx playwright install --with-deps
 1. Run tests:
 ```bash
 npm run test
+```
+
+### Auth testing (real Entra)
+
+The default Playwright suite assumes `RBAC__SUPERUSER_MODE=true` for fast UI checks.
+To validate the real server-side OAuth flow, run the auth tests with Entra credentials
+or a Playwright storage state file. Playwright loads `.env` automatically via
+`playwright.config.ts`. To test a deployed instance instead of localhost, set
+`PLAYWRIGHT_BASE_URL` in `.env`.
+
+#### Option A: Run headless with Entra credentials
+
+Add the following to your `.env`:
+```env
+RBAC__SUPERUSER_MODE=false
+OAUTH_TEST_USERNAME=your.username@nih.gov
+OAUTH_TEST_PASSWORD=your-password
+PLAYWRIGHT_BASE_URL=https://your-deployment.example.gov
+```
+
+Then run:
+```bash
+npx playwright test tests/oauth.spec.ts
+```
+
+#### Option B: Generate a storage state file (recommended for MFA accounts)
+
+This performs a one-time headed login and saves cookies/session state, which can
+be reused in headless runs:
+
+```env
+RBAC__SUPERUSER_MODE=false
+OAUTH_TEST_USERNAME=your.username@nih.gov
+OAUTH_TEST_PASSWORD=your-password
+PLAYWRIGHT_STORAGE_STATE=./playwright-auth.json
+PLAYWRIGHT_BASE_URL=https://your-deployment.example.gov
+```
+
+Then run:
+```bash
+npx playwright test tests/auth-storage.spec.ts --headed
+```
+
+Then run auth checks headlessly using the saved state:
+
+```env
+RBAC__SUPERUSER_MODE=false
+PLAYWRIGHT_STORAGE_STATE=./playwright-auth.json
+```
+
+Then run:
+```bash
+npx playwright test tests/oauth.spec.ts
 ```
 
 ### Browser-based testing using X11 forwarding on Apple Silicon with XQuartz

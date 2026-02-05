@@ -31,8 +31,8 @@ pytest --cov=scheduler tests/python/
 ### End-to-End Tests (Playwright)
 
 ```bash
-# Run all E2E tests
-BASE_URL=http://localhost:5051 RBAC__SUPERUSER_MODE=true npm run test
+# Run all E2E tests (uses .env settings)
+npm run test
 
 # Run with UI
 npm run test:ui
@@ -50,9 +50,11 @@ npm run test:headed
 
 2. **Playwright Configuration**
    - Configuration in `playwright.config.ts`
-   - Base URL: http://localhost:5051
-   - Browser: Chromium
-   - If `RBAC__SUPERUSER_MODE=false`, provide real Entra settings for auth-related tests
+  - Base URL: defaults to http://localhost:5051, or set PLAYWRIGHT_BASE_URL in .env
+  - Browser: Chromium
+- If `RBAC__SUPERUSER_MODE=false`, provide real Entra settings for auth-related tests
+- For headless OAuth flow tests, use real Entra credentials or a Playwright
+  storage state file (see README for setup details).
 
 ## Writing Tests
 

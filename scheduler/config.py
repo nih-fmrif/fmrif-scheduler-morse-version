@@ -264,7 +264,6 @@ class AppConfig(dict):
         super().__init__()
         config_dict = {
             "SECRET_KEY": settings.core.secret_key,
-            "APPLICATION_ROOT": settings.server.application_root,
             "SQLALCHEMY_DATABASE_URI": settings.database_url,
             "SQLALCHEMY_TRACK_MODIFICATIONS": settings.database.track_modifications,
             "MAIL_SERVER": settings.mail.server,
@@ -296,6 +295,9 @@ class AppConfig(dict):
         # Only set SERVER_NAME if not empty (for reverse proxy compatibility)
         if settings.server.server_name.strip():
             config_dict["SERVER_NAME"] = settings.server.server_name
+        # Only set APPLICATION_ROOT if not empty to avoid empty cookie paths
+        if settings.server.application_root.strip():
+            config_dict["APPLICATION_ROOT"] = settings.server.application_root
 
         self.update(config_dict)
 

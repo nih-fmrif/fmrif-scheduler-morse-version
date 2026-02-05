@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union
 
 import click
+import pickle
 from flask import Flask, abort, current_app, g, jsonify, redirect, request, session
 from flask.helpers import flash, url_for
 from flask.templating import render_template
@@ -22,6 +23,10 @@ app = Flask(__name__)
 
 # Load configuration from settings
 app.config.update(**app_config)
+
+# Ensure cookie path is always valid, even when APPLICATION_ROOT is empty
+if not app.config.get("SESSION_COOKIE_PATH"):
+    app.config["SESSION_COOKIE_PATH"] = app.config.get("APPLICATION_ROOT") or "/"
 
 # Add session security settings
 app.config.update(
@@ -46,6 +51,8 @@ proxy_fix(app)
 
 # Initialize extensions
 model.db.init_app(app)
+# Ensure Flask-Session uses the same SQLAlchemy instance as the app models
+app.config.setdefault("SESSION_SQLALCHEMY", model.db)
 Session(app)
 message.mailer.init_app(app)
 signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
@@ -86,6 +93,42 @@ def setup_user():
 
     # Try to get user from session
     g.user = get_user_from_session()
+    if request.path == "/" and g.user is None:
+        cookie_name = current_app.config.get("SESSION_COOKIE_NAME", "session")
+        cookie_value = request.cookies.get(cookie_name, "")
+        cookie_present = bool(cookie_value)
+        session_sid = getattr(session, "sid", "")
+        session_id = current_app.config.get("SESSION_KEY_PREFIX", "session:") + session_sid
+        session_exists = False
+        session_payload_keys = None
+        try:
+            if session_id and model.db:
+                row = model.db.session.execute(
+                    "select data from site_sessions where session_id = :sid limit 1",
+                    {"sid": session_id},
+                ).first()
+                if row:
+                    session_exists = True
+                    try:
+                        payload = pickle.loads(bytes(row[0]))
+                        if isinstance(payload, dict):
+                            session_payload_keys = list(payload.keys())
+                    except Exception:
+                        current_app.logger.exception(
+                            "Failed to decode session payload for session_id=%s",
+                            session_id,
+                        )
+        except Exception:
+            current_app.logger.exception("Failed to verify session_id in site_sessions")
+        current_app.logger.info(
+            "Home request without session (cookie_present=%s, cookie_tail=%s, session_sid=%s, session_keys=%s, session_id_present=%s, session_payload_keys=%s)",
+            cookie_present,
+            cookie_value[-12:] if cookie_value else None,
+            session_sid,
+            list(session.keys()),
+            session_exists,
+            session_payload_keys,
+        )
 
 
 def login_required(f):
@@ -323,11 +366,9 @@ def robots():
 def entra_config():
     """Serve Entra configuration from environment variables.
 
-    This endpoint dynamically generates the Entra OAuth configuration
-    from environment variables, avoiding hardcoded credentials in git.
-
-    Changed from /static/config/entra-config.json to /api/config/entra.json
-    to avoid conflict with Flask's static file handler.
+    Legacy endpoint from the previous browser-based auth flow. The server-side
+    OAuth flow no longer depends on this, but it remains for backward
+    compatibility and diagnostics.
     """
     config = {
         "client_id": settings.entra.client_id,

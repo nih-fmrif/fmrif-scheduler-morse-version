@@ -14,72 +14,14 @@ body %}
 
   <div id="login-content">
     <p>Sign in with your NIH credentials</p>
-    <button id="login-btn" class="btn btn-primary">Login with NIH
-    Credentials</button>
-    <p id="login-status" class="login-status"></p>
+    <form
+      method="get"
+      action="{% if next_url %}{{ url_for('auth.start_login', next=next_url) }}{% else %}{{ url_for('auth.start_login') }}{% endif %}"
+    >
+      <button id="login-btn" class="btn btn-primary" type="submit">
+        Login with NIH Credentials
+      </button>
+    </form>
   </div>
 </div>
-
-<!-- OAuth 2.0 modules -->
-<script src="{{ url_for('static', filename='js/oauth-utils.js') }}"></script>
-<script src="{{ url_for('static', filename='js/auth-manager.js') }}"></script>
-<script>
-  async function establishServerSession() {
-    const token = getAccessToken();
-    if (!token) {
-      return false;
-    }
-
-    const response = await fetch("/auth/session", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    return response.ok;
-  }
-</script>
-
-<script>
-  // Initialize auth on page load
-  document.addEventListener("DOMContentLoaded", async () => {
-    const auth = await initializeAuth();
-
-    if (auth.isAuthenticated) {
-      // User already authenticated, establish backend session then redirect
-      const ok = await establishServerSession();
-      if (ok) {
-        window.location.href = "/";
-        return;
-      }
-      document.getElementById("login-status").textContent =
-        "Could not establish session, please try logging in again.";
-    } else {
-      // Show login button
-      document.getElementById("login-btn").style.display = "block";
-    }
-  });
-
-  // Handle login button click
-  document.getElementById("login-btn").addEventListener("click", async () => {
-    const btn = document.getElementById("login-btn");
-    const statusDiv = document.getElementById("login-status");
-
-    btn.disabled = true;
-    btn.textContent = "Redirecting to NIH...";
-    statusDiv.textContent = "Redirecting to NIH Entra for authentication...";
-
-    try {
-      await startOAuthFlow();
-      // Browser will redirect to Entra
-    } catch (error) {
-      console.error("OAuth flow error:", error);
-      btn.disabled = false;
-      btn.textContent = "Login with NIH Credentials";
-      statusDiv.textContent = "Error starting login. Please try again.";
-      statusDiv.className = "login-status error";
-    }
-  });
-</script>
 {% endblock %}

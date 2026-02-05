@@ -55,8 +55,10 @@ PGDATABASE=scheduler
 # Entra / OIDC settings
 ENTRA__CLIENT_ID=00000000-0000-0000-0000-000000000000
 ENTRA__TENANT_ID=00000000-0000-0000-0000-000000000000
+ENTRA__CLIENT_SECRET=your-client-secret-here
 ENTRA__DISCOVERY_URL=https://login.microsoftonline.com/${ENTRA__TENANT_ID}/v2.0/.well-known/openid-configuration
-ENTRA__REDIRECT_URI=https://fmrif-schedule-backend-staging.nimh.nih.gov
+ENTRA__REDIRECT_URI=https://fmrif-schedule-backend-staging.nimh.nih.gov/auth/callback
+ENTRA__SCOPE=openid profile email offline_access
 # Optional: additional accepted audiences for JWT validation
 # ENTRA__ALLOWED_AUDIENCES=["api://00000000-0000-0000-0000-000000000000"]
 

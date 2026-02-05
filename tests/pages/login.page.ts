@@ -3,19 +3,15 @@ import { Page, Locator, expect } from '@playwright/test';
 
 export class LoginPage {
   readonly page: Page;
-  readonly usernameInput: Locator;
-  readonly passwordInput: Locator;
-  readonly submitButton: Locator;
-  readonly logoutLink: Locator;
-  readonly errorMessage: Locator;
+  readonly heading: Locator;
+  readonly subtitle: Locator;
+  readonly loginButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.usernameInput = page.getByLabel('Username');
-    this.passwordInput = page.getByLabel('Password');
-    this.submitButton = page.getByRole('button', { name: 'Login' });
-    this.logoutLink = page.getByRole('link', { name: 'logout' });
-    this.errorMessage = page.getByText('Invalid username or password');
+    this.heading = page.getByRole('heading', { name: /Device Scheduler/i });
+    this.subtitle = page.getByText(/Sign in with your NIH credentials/i);
+    this.loginButton = page.getByRole('button', { name: /Login with NIH Credentials/i });
   }
 
   async goto() {
@@ -23,36 +19,16 @@ export class LoginPage {
   }
 
   async verifyPageElements() {
-    await expect(this.usernameInput).toBeVisible();
-    await expect(this.passwordInput).toBeVisible();
-    await expect(this.submitButton).toBeVisible();
+    await expect(this.heading).toBeVisible();
+    await expect(this.subtitle).toBeVisible();
+    await expect(this.loginButton).toBeVisible();
   }
 
-  async login(username: string, password: string) {
-    await this.usernameInput.fill(username);
-    await this.passwordInput.fill(password);
-    await this.submitButton.click();
+  async startLogin() {
+    await this.loginButton.click();
   }
 
-  async verifySuccessfulLogin() {
-    if (process.env.RBAC__SUPERUSER_MODE === 'false') {
-      await this.page.waitForURL('/**');
-      await expect(this.page.getByText(/logged in as/)).toBeVisible();
-    } else {
-      await this.page.goto('/');
-      await expect(this.page.getByText('logged in as superuser')).toBeVisible();
-    }
-  }
-
-  async verifyErrorMessage() {
-    await expect(this.errorMessage).toBeVisible();
-  }
-
-  async logout() {
-    await this.logoutLink.click();
-  }
-
-  async verifyLoggedOut() {
-    await expect(this.logoutLink).not.toBeVisible();
+  async verifyLoggedIn() {
+    await expect(this.page.getByText(/logged in as/i)).toBeVisible();
   }
 }

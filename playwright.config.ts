@@ -1,6 +1,10 @@
 import { PlaywrightTestConfig } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 
-const baseURL = process.env.BASE_URL || 'http://localhost:5051';
+dotenv.config({ path: path.resolve(__dirname, '.env'), override: false });
+
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
 
 const config: PlaywrightTestConfig = {
   testDir: './tests',

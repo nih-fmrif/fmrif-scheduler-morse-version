@@ -1,6 +1,8 @@
-# Entra Configuration
+# Entra Configuration (Deprecated)
 
-This directory contains OAuth 2.0 / OIDC configuration for Microsoft Entra (formerly Azure AD) authentication.
+This directory previously contained OAuth 2.0 / OIDC configuration for a browser-based SPA flow.
+The application now uses a server-side OAuth flow; configuration is loaded from environment variables and
+the frontend no longer reads `entra-config.json`.
 
 ## Files
 

@@ -1,4 +1,4 @@
-const baseURL = process.env.BASE_URL || 'http://localhost:5051';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
 const rbacMode = process.env.RBAC__SUPERUSER_MODE;
 const expectAppShell = rbacMode === 'true';
 const expectLoginPage = rbacMode === 'false';
@@ -16,9 +16,12 @@ export default async function globalSetup() {
 
   while (Date.now() - start < timeoutMs) {
     try {
-      const response = await fetch(baseURL, { redirect: 'follow' });
+      const response = await fetch(baseURL, {
+        redirect: 'follow',
+        headers: { Accept: 'text/html' },
+      });
       lastStatus = response.status;
-      const body = await response.text();
+      let body = await response.text();
 
       const hasAppShell = body.includes('nav class="breadcrumb"') && body.includes('login-info');
       const hasLoginPage = body.includes('Device Scheduler') && body.includes('login-btn');
@@ -30,6 +33,19 @@ export default async function globalSetup() {
           (!expectAppShell && !expectLoginPage && (hasAppShell || hasLoginPage)))
       ) {
         return;
+      }
+
+      if (!response.ok && expectLoginPage) {
+        const loginResponse = await fetch(`${baseURL}/auth/login`, {
+          redirect: 'follow',
+          headers: { Accept: 'text/html' },
+        });
+        lastStatus = loginResponse.status;
+        body = await loginResponse.text();
+        const loginVisible = body.includes('Device Scheduler') && body.includes('login-btn');
+        if (loginResponse.ok && loginVisible) {
+          return;
+        }
       }
     } catch (error) {
       lastError = error;

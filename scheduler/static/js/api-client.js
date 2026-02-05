@@ -1,11 +1,9 @@
 /**
- * API Client with JWT Bearer Token Authentication
- * Wraps fetch() to automatically include JWT token from auth-manager
+ * API Client using server-side session cookies
+ * Wraps fetch() for JSON requests and error handling
  *
  * Features:
- * - Automatically adds Authorization header with Bearer token
- * - Checks token expiry before each request
- * - Automatically refreshes expired tokens
+ * - Sends same-origin cookies by default
  * - Handles 401 Unauthorized responses
  * - JSON serialization/deserialization
  * - Structured error responses
@@ -13,14 +11,11 @@
  */
 
 /**
- * Make authenticated API call with JWT Bearer token
+ * Make API call using session cookies
  *
  * This is the main wrapper function for all API requests.
  * Automatically handles:
- * - Getting current access token
- * - Checking token expiry
- * - Refreshing token if needed
- * - Adding Authorization header
+ * - JSON serialization/deserialization
  * - Error handling
  *
  * @param {string} method - HTTP method (GET, POST, PUT, DELETE, PATCH)
@@ -29,10 +24,9 @@
  * @param {object} [options={}] - Additional options
  * @param {object} [options.headers={}] - Additional headers to merge
  * @param {boolean} [options.json=true] - Parse response as JSON
- * @param {boolean} [options.retry=true] - Retry on 401 (unauthorized)
  * @returns {Promise<{ok: boolean, status: number, data: any, error: string|null}>}
  *
- * @throws {Error} If not authenticated or network error
+ * @throws {Error} If network error
  *
  * @example
  * // GET request
@@ -60,48 +54,32 @@
  * });
  */
 async function apiCall(method, url, data = null, options = {}) {
-  const { headers = {}, json = true, retry = true } = options;
+  const { headers = {}, json = true } = options;
 
   try {
-    // Step 1: Check authentication
-    if (!isAuthenticated()) {
-      console.warn("User not authenticated, attempting token refresh...");
-      const refreshed = await refreshToken();
-      if (!refreshed) {
-        console.error("Token refresh failed, user needs to login");
-        throw new Error("Authentication required. Please login.");
-      }
-    }
-
-    // Step 2: Get current access token
-    const token = getAccessToken();
-    if (!token) {
-      throw new Error("No access token available");
-    }
-
-    // Step 3: Build request headers
+    // Step 1: Build request headers
     const requestHeaders = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
       ...headers,
     };
 
-    // Step 4: Build fetch options
+    // Step 2: Build fetch options
     const fetchOptions = {
       method: method,
       headers: requestHeaders,
+      credentials: "same-origin",
     };
 
-    // Step 5: Add body for requests that need it
+    // Step 3: Add body for requests that need it
     if (data && (method === "POST" || method === "PUT" || method === "PATCH")) {
       fetchOptions.body = JSON.stringify(data);
     }
 
-    // Step 6: Make the API call
+    // Step 4: Make the API call
     console.log(`${method} ${url}`);
     const response = await fetch(url, fetchOptions);
 
-    // Step 7: Handle response
+    // Step 5: Handle response
     const responseData = json ? await response.json() : await response.text();
 
     if (response.ok) {
@@ -114,28 +92,15 @@ async function apiCall(method, url, data = null, options = {}) {
       };
     }
 
-    // Step 8: Handle error responses
+    // Step 6: Handle error responses
     if (response.status === 401) {
-      // Unauthorized - token might be invalid or expired
-      console.warn("Received 401 Unauthorized, attempting refresh...");
-
-      if (retry) {
-        // Clear current token and retry once
-        const refreshed = await refreshToken();
-        if (refreshed) {
-          console.log("Token refreshed, retrying request...");
-          // Retry without recursive retries (prevent infinite loop)
-          return apiCall(method, url, data, {
-            ...options,
-            retry: false,
-          });
-        }
-      }
-
-      // Refresh failed, user needs to login
-      console.error("Token refresh failed, redirecting to login...");
-      await logout();
-      throw new Error("Session expired. Please login again.");
+      console.warn("Received 401 Unauthorized");
+      return {
+        ok: false,
+        status: response.status,
+        data: responseData,
+        error: "Unauthorized",
+      };
     }
 
     // Other error status codes

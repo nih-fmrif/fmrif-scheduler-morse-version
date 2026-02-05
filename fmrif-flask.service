@@ -3,7 +3,7 @@ Description=FMRIF Scheduler Flask Application
 After=network.target postgresql.service
 
 [Service]
-Type=notify
+Type=simple
 User=leejo
 WorkingDirectory=/home/leejo/fmrif-scheduler-morse-version
 Environment="PATH=/home/leejo/fmrif-scheduler-morse-version/.venv/bin"
@@ -11,8 +11,8 @@ Environment="FLASK_APP=scheduler.app"
 ExecStart=/home/leejo/fmrif-scheduler-morse-version/.venv/bin/python -m flask run --host=0.0.0.0 --port=5051
 Restart=always
 RestartSec=10
-StandardOutput=append:/tmp/flask-staging.log
-StandardError=append:/tmp/flask-staging.log
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

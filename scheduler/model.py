@@ -376,3 +376,21 @@ class ResetTokens(Model):
     )
 
     user: User = db.relationship("User", lazy="joined")
+
+
+class OAuthState(Model):
+    """Temporary OAuth state storage for server-side login flow."""
+
+    __tablename__ = "oauth_state"
+
+    state: str = db.Column("state", db.String(128), primary_key=True)
+    nonce: str = db.Column("nonce", db.String(128), nullable=False)
+    redirect_next: Optional[str] = db.Column("redirect_next", db.Text(), nullable=True)
+    session_id: Optional[str] = db.Column("session_id", db.String(255), nullable=True)
+    created_at: Any = db.Column(
+        "created_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
