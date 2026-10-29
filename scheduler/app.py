@@ -32,6 +32,7 @@ from werkzeug.exceptions import HTTPException
 import scheduler.logic.app_error_events as app_error_logic
 import scheduler.logic.core as logic
 import scheduler.logic.csp_violation_events as csp_logic
+from scheduler import db_runtime
 from scheduler.auth.session import (
     authenticate_bearer_token,
     get_user_from_session,
@@ -126,7 +127,7 @@ def _resolve_static_asset_version() -> str:
     return _STATIC_ASSET_VERSION
 
 
-def create_app() -> Flask:
+def create_app(*, skip_startup_db_check: bool = False) -> Flask:
     """Build and configure a Flask application instance."""
     app = Flask(__name__)
 
@@ -163,6 +164,10 @@ def create_app() -> Flask:
     proxy_fix(app)
 
     model.db.init_app(app)
+    with app.app_context():
+        db_runtime.configure_engine_runtime(model.db.engine)
+        if settings.database.startup_check and not skip_startup_db_check:
+            db_runtime.verify_startup_database_connectivity()
     app.config.setdefault("SESSION_SQLALCHEMY", model.db)
     global _SHARED_SESSION_INTERFACE
     if _SHARED_SESSION_INTERFACE is None:
@@ -420,14 +425,7 @@ def apply_security_headers(response: Response):
             f'{_CSP_REPORTING_GROUP}="{url_for("csp_report")}"'
         )
 
-    if settings.security.enable_hsts and request.is_secure:
-        hsts_parts = [f"max-age={settings.security.hsts_max_age}"]
-        if settings.security.hsts_include_subdomains:
-            hsts_parts.append("includeSubDomains")
-        if settings.security.hsts_preload:
-            hsts_parts.append("preload")
-        response.headers["Strict-Transport-Security"] = "; ".join(hsts_parts)
-
+    # Keep HSTS edge-owned so the TLS terminator remains the single authority.
     return response
 
 
@@ -879,6 +877,7 @@ def register_core_app_features(app: Flask) -> None:
     app.add_template_filter(_css_token_filter, "css_token")
     app.add_template_global(_current_csp_nonce_global, "current_csp_nonce")
     app.add_template_global(_static_asset_url_global, "static_asset_url")
+    app.add_url_rule("/health/db", view_func=health_db)
     app.register_error_handler(401, unauthorized)
     app.register_error_handler(403, access_denied)
     app.register_error_handler(404, not_found)
@@ -886,3 +885,16 @@ def register_core_app_features(app: Flask) -> None:
     app.cli.add_command(deactivate_user)
     app.cli.add_command(activate_user)
     app.cli.add_command(add_admin)
+
+
+def health_db() -> tuple[Response, int]:
+    payload = db_runtime.probe_database_health()
+    status_code = 200 if payload["status"] == "ok" else 503
+    if payload["status"] == "ok":
+        return jsonify({"status": "ok", "database": "reachable"}), status_code
+    current_app.logger.error(
+        "Database health check failed: %s %s",
+        payload.get("error", "unknown"),
+        payload.get("detail", ""),
+    )
+    return jsonify({"status": "error", "database": "unreachable"}), status_code

@@ -23,7 +23,6 @@ RUN sed -i 's/^platforms = \[.*\]/platforms = ["linux-64"]/g' /app/pixi.toml \
     && "${PIXI_HOME}/bin/pixi" install --manifest-path /app/pixi.toml --environment default --no-progress
 
 COPY ./entrypoint.sh ./entrypoint.sh
-COPY ./alembic.ini ./alembic.ini
 
 # Make entrypoint executable
 RUN chmod a+x entrypoint.sh

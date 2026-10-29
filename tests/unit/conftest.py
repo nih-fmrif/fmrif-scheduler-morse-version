@@ -172,6 +172,20 @@ def _create_app():
     return app
 
 
+def _dispose_app_engines(app) -> None:
+    with app.app_context():
+        model.db.session.remove()
+        seen_engine_ids: set[int] = set()
+        for bind in list(model.db.engines.values()):
+            bind_id = id(bind)
+            if bind_id in seen_engine_ids:
+                continue
+            seen_engine_ids.add(bind_id)
+            dispose = getattr(bind, "dispose", None)
+            if callable(dispose):
+                dispose()
+
+
 def _bootstrap_route_test_database() -> None:
     init_script = project_root / "sql" / "000-init.sh"
     if not init_script.exists():
@@ -263,7 +277,11 @@ def db_test_isolation(request):
 
 @pytest.fixture
 def app():
-    return _create_app()
+    app = _create_app()
+    try:
+        yield app
+    finally:
+        _dispose_app_engines(app)
 
 
 @pytest.fixture

@@ -186,6 +186,7 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
     "/auth/test/session": public_route(
         "/auth/test/session", {"POST": 403, "DELETE": 403}
     ),
+    "/health/db": public_route("/health/db", {"GET": 200}),
     "/app/issues": protected_route("/app/issues", ["GET"]),
     "/app/issues/notifications/scan": protected_route(
         "/app/issues/notifications/scan", ["POST"]
@@ -195,6 +196,12 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
     ),
     "/app/issues/organization/history-scan": protected_route(
         "/app/issues/organization/history-scan", ["POST"]
+    ),
+    "/app/issues/operations/backup": protected_route(
+        "/app/issues/operations/backup", ["POST"]
+    ),
+    "/app/issues/operations/restore-drill": protected_route(
+        "/app/issues/operations/restore-drill", ["POST"]
     ),
     "/app/issues/config": protected_route("/app/issues/config", ["POST"]),
     "/app/issues/mapping/import": protected_route(
@@ -353,6 +360,12 @@ RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
     ("/app/issues/organization/history-scan", "POST"): rbac_mutating_admin_only(
         "/app/issues/organization/history-scan"
     ),
+    ("/app/issues/operations/backup", "POST"): rbac_mutating_admin_only(
+        "/app/issues/operations/backup"
+    ),
+    ("/app/issues/operations/restore-drill", "POST"): rbac_mutating_admin_only(
+        "/app/issues/operations/restore-drill"
+    ),
     ("/app/issues/config", "POST"): rbac_mutating_admin_only("/app/issues/config"),
     (
         "/app/issues/mapping/import",
@@ -419,6 +432,14 @@ BEHAVIOR_TEST_REQUIREMENTS: Dict[tuple[str, str], str] = {
         "/app/issues/config",
         "POST",
     ): "Admin configuration changes must validate values and persist when valid.",
+    (
+        "/app/issues/operations/backup",
+        "POST",
+    ): "Admin backup trigger must require CSRF and surface the shared backup execution path.",
+    (
+        "/app/issues/operations/restore-drill",
+        "POST",
+    ): "Admin restore-drill trigger must require CSRF and surface the shared restore execution path.",
     (
         "/app/issues/organization/history-scan",
         "POST",

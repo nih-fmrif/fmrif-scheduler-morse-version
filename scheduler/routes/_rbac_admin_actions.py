@@ -46,6 +46,7 @@ def app_issues_config():
         group_institute_mapping = logic.parse_admin_group_institute_mapping(
             group_institute_mapping_raw
         )
+        backup_config, restore_config = logic.parse_admin_operations_form(request.form)
     except ValueError as ex:
         flash(str(ex), "error")
         return _app_issues_redirect(request.form.get("return_query", ""))
@@ -65,6 +66,11 @@ def app_issues_config():
         logic.set_admin_group_institute_mapping(
             group_institute_mapping, updated_by=actor_id
         )
+        logic.set_admin_operations_config(
+            backup_config,
+            restore_config,
+            updated_by=actor_id,
+        )
         model.db.session.commit()
         flash("admin configuration updated", "message")
     except SQLAlchemyError:
@@ -72,6 +78,127 @@ def app_issues_config():
         current_app.logger.exception("Failed to persist admin config update")
         flash("failed to save admin configuration", "error")
     return _app_issues_redirect(request.form.get("return_query", ""))
+
+
+def _compact_detail(value: str, *, limit: int = 240) -> str:
+    normalized = " ".join((value or "").split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 3]}..."
+
+
+def _admin_operation_audit_detail(result: logic.AdminOperationResult) -> str:
+    parts = [f"status={result.status}"]
+    if result.backup_path:
+        parts.append(f"backup_path={result.backup_path}")
+    if result.backup_format:
+        parts.append(f"backup_format={result.backup_format}")
+    if result.size_bytes is not None:
+        parts.append(f"size_bytes={result.size_bytes}")
+    if result.database_name:
+        parts.append(f"database_name={result.database_name}")
+    if result.duration_seconds is not None:
+        parts.append(f"duration_seconds={round(float(result.duration_seconds), 3)}")
+    if result.next_due_at:
+        parts.append(f"next_due_at={result.next_due_at}")
+    if result.detail:
+        parts.append(f"detail={_compact_detail(result.detail)}")
+    return ", ".join(parts)
+
+
+def _flash_admin_operation_result(
+    *,
+    success_label: str,
+    error_label: str,
+    result: logic.AdminOperationResult,
+) -> None:
+    if result.status == "ok":
+        flash(f"{success_label}: {result.detail}", "message")
+        return
+    if result.status == "skipped":
+        flash(result.detail, "message")
+        return
+    flash(f"{error_label}: {result.detail}", "error")
+
+
+def app_issues_run_backup():
+    form = schedule_logic.CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400, "invalid form submission")
+
+    return_query = request.form.get("return_query", "")
+    if not logic.admin_settings_available():
+        flash(
+            "Admin configuration storage is unavailable. Run database migrations.",
+            "error",
+        )
+        return _app_issues_redirect(return_query)
+
+    actor_id = g.user.id if g.user is not None else "unknown"
+    result = logic.run_backup_operation(force=True, updated_by=actor_id)
+    _record_rbac_action(
+        action="operations.backup.run",
+        where="/app/issues",
+        how="admin-panel",
+        what=_admin_operation_audit_detail(result),
+    )
+    try:
+        model.db.session.commit()
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception("Failed to persist manual backup execution")
+        flash(
+            "backup run completed but the app could not save status or audit details",
+            "error",
+        )
+        return _app_issues_redirect(return_query)
+
+    _flash_admin_operation_result(
+        success_label="backup completed",
+        error_label="backup failed",
+        result=result,
+    )
+    return _app_issues_redirect(return_query)
+
+
+def app_issues_run_restore_drill():
+    form = schedule_logic.CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400, "invalid form submission")
+
+    return_query = request.form.get("return_query", "")
+    if not logic.admin_settings_available():
+        flash(
+            "Admin configuration storage is unavailable. Run database migrations.",
+            "error",
+        )
+        return _app_issues_redirect(return_query)
+
+    actor_id = g.user.id if g.user is not None else "unknown"
+    result = logic.run_restore_drill_operation(force=True, updated_by=actor_id)
+    _record_rbac_action(
+        action="operations.restore_drill.run",
+        where="/app/issues",
+        how="admin-panel",
+        what=_admin_operation_audit_detail(result),
+    )
+    try:
+        model.db.session.commit()
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception("Failed to persist manual restore drill execution")
+        flash(
+            "restore drill completed but the app could not save status or audit details",
+            "error",
+        )
+        return _app_issues_redirect(return_query)
+
+    _flash_admin_operation_result(
+        success_label="restore drill completed",
+        error_label="restore drill failed",
+        result=result,
+    )
+    return _app_issues_redirect(return_query)
 
 
 def app_issues_import_mapping():

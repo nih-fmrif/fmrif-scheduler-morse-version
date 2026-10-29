@@ -8,7 +8,10 @@ pixi run test-unit -- tests/unit/test_some_file.py -q
 pixi run test-unit-xdist
 pixi run test-routes
 pixi run test-routes -- tests/unit/test_some_route_file.py -q
+pixi run test-integration
 pixi run test-integration-ci
+pixi run test-debian-smoke
+pixi run test-debian-integration
 pixi run test-integration-heavy
 pixi run test-load-moderate
 pixi run test-load-moderate-scheduler
@@ -20,10 +23,27 @@ pixi run test-load-moderate-notify
   - `bash run-compose.sh --no-app`
   - `bash run-compose.sh --no-app --resume` (reuse existing services/data)
 
+## Deployment-adjacent runtime checks
+- `pixi run test-debian-smoke` and `pixi run test-debian-integration` exercise
+  the Debian-packaged runtime on the supported Debian 13 baseline.
+- Use `test-debian-smoke` when changing dependency pins, runtime packaging,
+  startup/config loading, SQL bootstrap or Alembic behavior, DB runtime code,
+  or nginx/proxy/header handling.
+- Use `test-debian-integration` when those changes can also affect auth/session
+  behavior, callback routing, CSP/static asset delivery, or any browser-visible
+  flow that depends on the packaged runtime path.
+- For ordinary Python logic changes already covered by unit/route/Pixi browser
+  suites, the Debian tasks are usually optional.
+- Treat failures there as deployment-relevant even when the Pixi-managed path is
+  green.
+- These tasks improve repo-local and CI confidence, but they do not replace the
+  host verification runbooks in `fmrif-scheduler-docs/`.
+
 ## Notes
 - `test-unit` and `test-routes` use `scripts/run-target-aware-pytest-suite.py`, which forwards into `scripts/run-isolated-test-suite.sh`.
 - `test-unit-xdist` is an opt-in unit-only variant that adds `-n auto` on top of the same wrapper.
 - `test-integration*` runs directly through `scripts/run-isolated-test-suite.sh`.
+- `test-integration` is the local-default browser run; `test-integration-ci` uses a CI-friendly reporter.
 - The wrapper applies per-suite isolation for DB/Mailpit/runtime settings.
 - Interface policy: when explicit test selectors are supplied, they replace the default collection root for that task. Tasks must not silently widen a narrowed request.
 - Keep `test-routes` on the default serial task unless worker-specific route isolation is added deliberately.

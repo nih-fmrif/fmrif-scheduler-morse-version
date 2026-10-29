@@ -8,6 +8,51 @@ secret_placeholder="__GENERATE_AUTH_TEST_SECRET__"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/scripts/runtime-scope.sh"
 
+profile="${SETUP_DOTENV_PROFILE:-default}"
+
+usage() {
+  cat <<'EOF'
+Usage: bash setup-dotenv.sh [--profile default|host-local-postgres]
+
+Profiles:
+  default              Local compose-oriented defaults (for example PGPORT=5444).
+  host-local-postgres  Native host defaults for a local PostgreSQL service
+                       (for example PGHOST=127.0.0.1, PGPORT=5432).
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --profile)
+      if [ "$#" -lt 2 ]; then
+        echo "ERROR: --profile requires a value." >&2
+        exit 1
+      fi
+      profile="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "$profile" in
+  default|host-local-postgres)
+    ;;
+  *)
+    echo "ERROR: unsupported setup-dotenv profile: $profile" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
+
 if [ ! -f "$sample_file" ]; then
   echo "ERROR: $sample_file was not found. Create it or copy from the template." >&2
   exit 1
@@ -80,11 +125,31 @@ normalize_int_candidate() {
   exit 1
 }
 
+profile_resets_managed_candidate() {
+  local key=$1
+
+  if [ "$profile" != "host-local-postgres" ]; then
+    return 1
+  fi
+
+  case "$key" in
+    APP_PORT|PGHOST|PGPORT|MAILPIT__PORT|MAILPIT__SMTP_PORT|COMPOSE_PROJECT_NAME|PGDATABASE|SCHEDULER_TEST_DB_NAME|SESSION__COOKIE_NAME|MAIL__DEFAULT_SENDER)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 resolve_candidate() {
   local key=$1
 
   if is_var_set "$key"; then
     printf '%s' "${!key}"
+    return 0
+  fi
+  if profile_resets_managed_candidate "$key"; then
+    printf ''
     return 0
   fi
   if [ -n "${existing_env[$key]+x}" ]; then
@@ -291,6 +356,17 @@ load_existing_env "$target_env_file"
 declare -A final_values
 
 scope_base="${RUNTIME_SCOPE:-default}"
+default_pg_host="localhost"
+default_pg_port_mode="available"
+default_pg_port="5444"
+
+case "$profile" in
+  host-local-postgres)
+    default_pg_host="127.0.0.1"
+    default_pg_port_mode="fixed"
+    default_pg_port="5432"
+    ;;
+esac
 
 app_candidate="$(resolve_candidate APP_PORT)"
 app_port=""
@@ -308,7 +384,11 @@ if [ -n "${pg_port_candidate}" ]; then
   pg_port="$(normalize_int_candidate "$pg_port_candidate" PGPORT)"
 fi
 if [ -z "${pg_port}" ]; then
-  pg_port="$(pick_available_port 5444 "PGPORT" "$app_port")"
+  if [ "$default_pg_port_mode" = "fixed" ]; then
+    pg_port="$default_pg_port"
+  else
+    pg_port="$(pick_available_port "$default_pg_port" "PGPORT" "$app_port")"
+  fi
 fi
 validate_port "$pg_port" "PGPORT"
 
@@ -362,7 +442,7 @@ else
 fi
 pg_host="$(resolve_candidate PGHOST)"
 if [ -z "$pg_host" ] || is_placeholder "$pg_host"; then
-  pg_host="localhost"
+  pg_host="$default_pg_host"
 fi
 pg_user="$(resolve_candidate PGUSER)"
 if [ -z "$pg_user" ] || is_placeholder "$pg_user"; then
@@ -528,7 +608,7 @@ echo "  SCHEDULER_TEST_DB_NAME=$test_db_name"
 if [ "${AUTH_TEST__SHARED_SECRET_GENERATED:-0}" -eq 1 ]; then
   echo "Generated random AUTH_TEST__SHARED_SECRET"
 fi
-echo "Generated .env from $sample_file for scope=$scope_base"
+echo "Generated .env from $sample_file for scope=$scope_base profile=$profile"
 
 export RUNTIME_SCOPE_PGHOST="$pg_host"
 export RUNTIME_SCOPE_PGPORT="$pg_port"

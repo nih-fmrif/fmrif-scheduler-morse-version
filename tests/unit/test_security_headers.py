@@ -42,6 +42,15 @@ def test_security_headers_present_on_http(route_client):
     assert "Strict-Transport-Security" not in response.headers
 
 
+def test_database_health_route_reports_reachability(route_client):
+    response = route_client.get("/health/db")
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ok", "database": "reachable"}
+    assert response.headers.get("X-Content-Type-Options") == "nosniff"
+    assert response.headers.get("X-Frame-Options") == "DENY"
+
+
 def test_static_asset_urls_include_version_query(route_client):
     response = route_client.get("/auth/login")
 
@@ -68,12 +77,12 @@ def test_login_page_scripts_use_header_nonce(route_client):
     assert set(script_nonces) == {nonce}
 
 
-def test_hsts_present_on_https_requests(route_client):
+def test_hsts_not_present_on_direct_https_requests(route_client):
     response = route_client.get(
         "/auth/login",
         environ_overrides={"wsgi.url_scheme": "https"},
     )
-    assert response.headers.get("Strict-Transport-Security", "").startswith("max-age=")
+    assert "Strict-Transport-Security" not in response.headers
 
 
 def test_csp_report_only_mode(monkeypatch, route_client):
@@ -205,7 +214,7 @@ def test_proxyfix_reconstructs_forwarded_scheme_host_and_port(monkeypatch):
         )
 
     assert response.status_code == 200
-    assert response.headers.get("Strict-Transport-Security", "").startswith("max-age=")
+    assert "Strict-Transport-Security" not in response.headers
 
     csp = response.headers.get("Content-Security-Policy", "")
     assert "default-src 'self'" in csp

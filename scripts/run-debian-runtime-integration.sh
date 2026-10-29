@@ -6,7 +6,6 @@ usage() {
 Usage: bash scripts/run-debian-runtime-integration.sh <debian-version> [playwright args...]
 
 Examples:
-  bash scripts/run-debian-runtime-integration.sh 12.13
   bash scripts/run-debian-runtime-integration.sh 13.1 --project=chromium tests/playwright/integration/auth-ui.spec.ts
 EOF
 }

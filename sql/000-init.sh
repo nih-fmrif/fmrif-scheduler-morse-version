@@ -107,17 +107,22 @@ execute_sql_file() {
     # Load the canonical seed dump with FK/trigger checks relaxed because
     # data-only dumps rely on this when loading into an already-constrained schema.
     if [ "${file}" = "${SEED_DUMP_FILE}" ]; then
+        set +e
         output=$(PGPASSWORD="$PGPASSWORD" "${psql_cmd[@]}" <<SQL 2>&1
 SET session_replication_role = replica;
 \i '${file}'
 SET session_replication_role = DEFAULT;
 SQL
         )
+        status=$?
+        set -e
     else
         # Redirect stderr to stdout to capture all output
+        set +e
         output=$(PGPASSWORD="$PGPASSWORD" "${psql_cmd[@]}" -f "$file" 2>&1)
+        status=$?
+        set -e
     fi
-    local status=$?
 
     if [ $status -ne 0 ]; then
         # Check for common schema conflict errors

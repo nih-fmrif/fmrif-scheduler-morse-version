@@ -207,13 +207,14 @@ Attack classes mitigated:
 
 ## Browser and Transport Hardening
 
-Implemented in `scheduler/app.py` response middleware and `SecurityConfig`.
+Implemented in `scheduler/app.py` response middleware, nginx edge config, and
+`SecurityConfig`.
 
 Headers and controls:
 
 - `Content-Security-Policy` (default policy is nonce-backed for scripts: `script-src 'self' 'nonce-{nonce}' 'strict-dynamic'`, plus `script-src-attr 'none'`, `style-src 'self'`, `style-src-attr 'none'`, and `report-to csp-endpoint`)
 - `Reporting-Endpoints: csp-endpoint="/csp-report"`
-- `Strict-Transport-Security` (HTTPS responses only)
+- `Strict-Transport-Security` (HTTPS edge responses only, emitted by nginx)
 - `X-Frame-Options: DENY`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
@@ -221,6 +222,8 @@ Headers and controls:
 Additional behavior:
 
 - The app generates one request-scoped nonce and renders it onto every `<script>` tag, including non-executable JSON bootstrap tags used for page state.
+- The app intentionally does not emit `Strict-Transport-Security`; the HTTPS
+  edge owns that header so the deployed system has one HSTS authority.
 - CSP violations posted to `/csp-report` are redacted before persistence, stored in the database, and surfaced in the Admin Panel.
 - Top-level static asset URLs include a deploy-scoped version query parameter, which reduces stale HTML/asset mismatches after deploys.
 

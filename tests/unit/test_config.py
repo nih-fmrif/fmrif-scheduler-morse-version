@@ -10,6 +10,7 @@ from scheduler.config import (
     AUTH_CALLBACK_PATH,
     AppConfig,
     CoreConfig,
+    DatabaseConfig,
     EntraConfig,
     LoggingConfig,
     MailConfig,
@@ -52,6 +53,17 @@ def clean_env(monkeypatch):
         "PGUSER",
         "PGPASSWORD",
         "PGDATABASE",
+        "DATABASE__POOL_SIZE",
+        "DATABASE__MAX_OVERFLOW",
+        "DATABASE__POOL_TIMEOUT",
+        "DATABASE__POOL_RECYCLE",
+        "DATABASE__CONNECT_TIMEOUT",
+        "DATABASE__STATEMENT_TIMEOUT_MS",
+        "DATABASE__LOCK_TIMEOUT_MS",
+        "DATABASE__IDLE_IN_TRANSACTION_TIMEOUT_MS",
+        "DATABASE__APPLICATION_NAME",
+        "DATABASE__SLOW_QUERY_THRESHOLD_MS",
+        "DATABASE__STARTUP_CHECK",
         "CORE__SECRET_KEY",
         "CORE__DEBUG",
         "MAIL__SERVER",
@@ -64,6 +76,17 @@ def clean_env(monkeypatch):
         "ENTRA__REDIRECT_URI",
         "ENTRA__JWKS_CACHE_TTL",
         "SERVER__SERVER_NAME",
+        "DATABASE__POOL_SIZE",
+        "DATABASE__MAX_OVERFLOW",
+        "DATABASE__POOL_TIMEOUT",
+        "DATABASE__POOL_RECYCLE",
+        "DATABASE__CONNECT_TIMEOUT",
+        "DATABASE__STATEMENT_TIMEOUT_MS",
+        "DATABASE__LOCK_TIMEOUT_MS",
+        "DATABASE__IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS",
+        "DATABASE__APPLICATION_NAME",
+        "DATABASE__SLOW_QUERY_THRESHOLD_MS",
+        "DATABASE__STARTUP_CHECK_ENABLED",
         "SESSION__COOKIE_NAME",
         "SESSION__COOKIE_SECURE",
         "SESSION__TYPE",
@@ -92,6 +115,7 @@ def clean_env(monkeypatch):
         (MailConfig, "port", 25, 587, "invalid"),
         (LoggingConfig, "level", "INFO", "DEBUG", "invalid"),
         (SessionConfig, "permanent_lifetime", 28800, 3600, "invalid"),
+        (DatabaseConfig, "pool_size", 5, 8, -1),
     ],
 )
 def test_config_field_validation(
@@ -188,6 +212,50 @@ def test_database_url_construction():
     for case in test_cases:
         settings = make_settings(**case["config"])
         assert settings.database_url == case["expected"]
+
+
+def test_database_engine_options_are_explicit():
+    settings = make_settings(
+        database={
+            "pool_size": 7,
+            "max_overflow": 3,
+            "pool_timeout": 11,
+            "pool_recycle": 900,
+            "connect_timeout": 4,
+            "statement_timeout_ms": 15000,
+            "lock_timeout_ms": 2500,
+            "idle_in_transaction_timeout_ms": 45000,
+            "application_name": "scheduler-test",
+            "slow_query_threshold_ms": 275,
+            "startup_check": False,
+        }
+    )
+
+    assert settings.database.sqlalchemy_engine_options == {
+        "pool_size": 7,
+        "max_overflow": 3,
+        "pool_timeout": 11,
+        "pool_recycle": 900,
+        "pool_pre_ping": True,
+        "pool_reset_on_return": "rollback",
+        "connect_args": {
+            "connect_timeout": 4,
+            "options": (
+                "-c statement_timeout=15000 -c lock_timeout=2500 "
+                "-c idle_in_transaction_session_timeout=45000 "
+                "-c application_name=scheduler-test"
+            ),
+        },
+    }
+
+    app_config = AppConfig(settings)
+    assert (
+        app_config["SQLALCHEMY_ENGINE_OPTIONS"]
+        == settings.database.sqlalchemy_engine_options
+    )
+    assert app_config["DATABASE_SLOW_QUERY_THRESHOLD_MS"] == 275
+    assert app_config["DATABASE_STARTUP_CHECK"] is False
+    assert app_config["DATABASE_STARTUP_CHECK_ENABLED"] is False
 
 
 @pytest.mark.parametrize(
@@ -374,6 +442,51 @@ def test_database_config_validation():
     # Verify database config flags
     assert settings.database.echo is False
     assert settings.database.track_modifications is False
+    assert settings.database.pool_size == 5
+    assert settings.database.max_overflow == 10
+    assert settings.database.connect_timeout == 10
+    assert settings.database.application_name == "fmrif-scheduler"
+    assert settings.database.startup_check is True
+    assert settings.database.sqlalchemy_engine_options["pool_pre_ping"] is True
+    assert settings.database.sqlalchemy_engine_options["connect_args"] == {
+        "connect_timeout": 10,
+        "options": (
+            "-c statement_timeout=60000 "
+            "-c lock_timeout=10000 "
+            "-c idle_in_transaction_session_timeout=60000 "
+            "-c application_name=fmrif-scheduler"
+        ),
+    }
+
+
+def test_database_runtime_config_uses_explicit_values():
+    settings = make_settings(
+        database={
+            "pool_size": 9,
+            "max_overflow": 3,
+            "pool_timeout": 41,
+            "pool_recycle": 901,
+            "connect_timeout": 17,
+            "statement_timeout_ms": 120000,
+            "lock_timeout_ms": 7000,
+            "idle_in_transaction_timeout_ms": 91000,
+            "application_name": "scheduler-prod",
+            "slow_query_threshold_ms": 250,
+            "startup_check": False,
+        }
+    )
+
+    assert settings.database.pool_size == 9
+    assert settings.database.max_overflow == 3
+    assert settings.database.pool_timeout == 41
+    assert settings.database.pool_recycle == 901
+    assert settings.database.connect_timeout == 17
+    assert settings.database.statement_timeout_ms == 120000
+    assert settings.database.lock_timeout_ms == 7000
+    assert settings.database.idle_in_transaction_timeout_ms == 91000
+    assert settings.database.application_name == "scheduler-prod"
+    assert settings.database.slow_query_threshold_ms == 250
+    assert settings.database.startup_check is False
 
 
 def test_core_config_validation():

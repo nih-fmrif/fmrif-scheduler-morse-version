@@ -2,8 +2,14 @@ import csv
 import datetime
 import io
 import json
+import subprocess
+import tempfile
 import uuid
+from pathlib import Path
 
+import pytest
+
+import scheduler.logic._admin_config_operations as ops_logic
 import scheduler.logic.admin_config as logic
 from scheduler import model
 
@@ -113,6 +119,356 @@ def test_parse_admin_group_institute_mapping_normalizes_and_validates_shape():
             }
         ],
     }
+
+
+def test_parse_admin_operations_form_normalizes_backup_and_restore_settings():
+    backup_config, restore_config = logic.parse_admin_operations_form(
+        {
+            "ops_backup_enabled": "1",
+            "ops_backup_directory": "/srv/backups/fmrif",
+            "ops_backup_format": "plain",
+            "ops_backup_retention_count": "14",
+            "ops_backup_max_age_hours": "48",
+            "ops_backup_min_free_gb": "8",
+            "ops_restore_enabled": "true",
+            "ops_restore_interval_days": "10",
+        }
+    )
+
+    assert backup_config.enabled is True
+    assert backup_config.directory == "/srv/backups/fmrif"
+    assert backup_config.format == "plain"
+    assert backup_config.retention_count == 14
+    assert backup_config.max_age_hours == 48
+    assert backup_config.min_free_gb == 8
+    assert restore_config.enabled is True
+    assert restore_config.interval_days == 10
+
+
+def test_parse_admin_operations_form_rejects_invalid_backup_format():
+    with pytest.raises(ValueError, match="backup format must be custom or plain"):
+        logic.parse_admin_operations_form(
+            {
+                "ops_backup_enabled": "1",
+                "ops_backup_directory": "/srv/backups/fmrif",
+                "ops_backup_format": "tarball",
+                "ops_backup_retention_count": "14",
+                "ops_backup_max_age_hours": "48",
+                "ops_backup_min_free_gb": "8",
+                "ops_restore_enabled": "true",
+                "ops_restore_interval_days": "10",
+            }
+        )
+
+
+def test_collect_backup_status_reports_latest_backup_and_thresholds(app_context):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        backup_dir = Path(temp_dir)
+        latest = backup_dir / "fmrif-20260323T120000Z.dump"
+        latest.write_bytes(b"backup-bytes")
+        globals_file = backup_dir / "fmrif-20260324T120000Z.globals.sql"
+        globals_file.write_text("-- globals --", encoding="utf-8")
+        model.db.session.add(
+            model.AppSetting(
+                key=logic.ADMIN_SETTING_KEY_BACKUP_DIRECTORY,
+                value=str(backup_dir),
+                updated_by="test-admin",
+            )
+        )
+        model.db.session.commit()
+
+        status = logic.collect_backup_status()
+        latest_backup = logic.latest_backup_file()
+        latest_globals_backup = logic.latest_globals_backup_file()
+
+    assert status["directory_exists"] is True
+    assert status["latest_backup_path"] == str(latest)
+    assert status["format"] == "custom"
+    assert status["latest_backup_format"] == "custom"
+    assert status["latest_backup_size_bytes"] == len(b"backup-bytes")
+    assert status["backup_age_state"] == "ok"
+    assert status["free_disk_state"] == "ok"
+    assert latest_backup == latest
+    assert latest_globals_backup == globals_file
+
+
+def test_run_backup_operation_records_success_and_prunes_old_backups(
+    app_context, monkeypatch
+):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        backup_dir = Path(temp_dir)
+        stale = backup_dir / "fmrif-20240101T000000Z.dump"
+        stale.write_bytes(b"stale-bytes")
+        model.db.session.add_all(
+            [
+                model.AppSetting(
+                    key=logic.ADMIN_SETTING_KEY_BACKUP_DIRECTORY,
+                    value=str(backup_dir),
+                    updated_by="test-admin",
+                ),
+                model.AppSetting(
+                    key=logic.ADMIN_SETTING_KEY_BACKUP_RETENTION_COUNT,
+                    value="1",
+                    updated_by="test-admin",
+                ),
+            ]
+        )
+        model.db.session.commit()
+
+        def fake_run(command, **kwargs):
+            output_path = Path(command[command.index("-f") + 1])
+            output_path.write_bytes(b"fresh-backup")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        session_resets: list[str] = []
+
+        monkeypatch.setattr(ops_logic.subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            ops_logic,
+            "_reset_admin_settings_session",
+            lambda: session_resets.append("reset"),
+        )
+
+        result = logic.run_backup_operation(force=True, updated_by="tester")
+        model.db.session.commit()
+
+        assert result.status == "ok"
+        assert result.backup_format == "custom"
+        assert result.backup_path.endswith(".dump")
+        assert result.size_bytes == len(b"fresh-backup")
+        assert result.pruned_paths == (str(stale),)
+        assert "--format=custom" in result.command
+        assert session_resets == ["reset", "reset"]
+        status = logic.collect_backup_status()
+        assert status["last_status"] == "success"
+        assert status["format"] == "custom"
+        assert status["last_path"] == result.backup_path
+        assert status["last_size_bytes"] == len(b"fresh-backup")
+
+
+def test_run_backup_operation_supports_plain_format(app_context, monkeypatch):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        backup_dir = Path(temp_dir)
+        model.db.session.add_all(
+            [
+                model.AppSetting(
+                    key=logic.ADMIN_SETTING_KEY_BACKUP_DIRECTORY,
+                    value=str(backup_dir),
+                    updated_by="test-admin",
+                ),
+                model.AppSetting(
+                    key=logic.ADMIN_SETTING_KEY_BACKUP_FORMAT,
+                    value="plain",
+                    updated_by="test-admin",
+                ),
+            ]
+        )
+        model.db.session.commit()
+
+        def fake_run(command, **kwargs):
+            output_path = Path(command[command.index("-f") + 1])
+            output_path.write_text("-- plain backup --", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        monkeypatch.setattr(ops_logic.subprocess, "run", fake_run)
+
+        result = logic.run_backup_operation(force=True, updated_by="tester")
+        model.db.session.commit()
+
+        assert result.status == "ok"
+        assert result.backup_format == "plain"
+        assert result.backup_path.endswith(".sql")
+        assert "--format=plain" in result.command
+        status = logic.collect_backup_status()
+        assert status["format"] == "plain"
+        assert status["latest_backup_format"] == "plain"
+
+
+def test_run_globals_backup_operation_records_success_and_prunes_old_backups(
+    app_context, monkeypatch
+):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        backup_dir = Path(temp_dir)
+        stale = backup_dir / "fmrif-20240101T000000Z.globals.sql"
+        stale.write_text("-- stale globals --", encoding="utf-8")
+        model.db.session.add_all(
+            [
+                model.AppSetting(
+                    key=logic.ADMIN_SETTING_KEY_BACKUP_DIRECTORY,
+                    value=str(backup_dir),
+                    updated_by="test-admin",
+                ),
+                model.AppSetting(
+                    key=logic.ADMIN_SETTING_KEY_BACKUP_RETENTION_COUNT,
+                    value="1",
+                    updated_by="test-admin",
+                ),
+            ]
+        )
+        model.db.session.commit()
+
+        chown_calls: list[tuple[Path, str | None, str | None]] = []
+
+        def fake_run(command, **kwargs):
+            kwargs["stdout"].write("-- fresh globals --")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        def fake_chown(path, *, user=None, group=None):
+            chown_calls.append((Path(path), user, group))
+
+        monkeypatch.setattr(ops_logic.subprocess, "run", fake_run)
+        monkeypatch.setattr(ops_logic.shutil, "chown", fake_chown)
+
+        result = logic.run_globals_backup_operation(
+            force=False,
+            updated_by="tester",
+            owner_user="fmrif-scheduler",
+            owner_group="fmrif-scheduler",
+        )
+        model.db.session.commit()
+
+        assert result.status == "ok"
+        assert result.backup_format == "globals"
+        assert result.backup_path.endswith(".globals.sql")
+        assert result.size_bytes == len("-- fresh globals --")
+        assert result.pruned_paths == (str(stale),)
+        assert "--globals-only" in result.command
+        assert chown_calls == [
+            (
+                Path(result.backup_path),
+                "fmrif-scheduler",
+                "fmrif-scheduler",
+            )
+        ]
+        assert logic.latest_globals_backup_file() == Path(result.backup_path)
+
+
+def test_run_restore_drill_operation_records_success(app_context, monkeypatch):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        backup_dir = Path(temp_dir)
+        latest = backup_dir / "fmrif-20260323T120000Z.dump"
+        latest.write_bytes(b"backup-bytes")
+        model.db.session.add(
+            model.AppSetting(
+                key=logic.ADMIN_SETTING_KEY_BACKUP_DIRECTORY,
+                value=str(backup_dir),
+                updated_by="test-admin",
+            )
+        )
+        model.db.session.commit()
+
+        commands: list[list[str]] = []
+        databases: list[str] = []
+
+        class FakeCursor:
+            def __init__(self, database: str):
+                self.database = database
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, query, params=None):
+                return None
+
+            def fetchone(self):
+                return (True, True, True)
+
+        class FakeConnection:
+            def __init__(self, database: str):
+                self.database = database
+                self.autocommit = False
+
+            def cursor(self):
+                return FakeCursor(self.database)
+
+            def close(self):
+                return None
+
+            def set_isolation_level(self, level):
+                return None
+
+        def fake_connect(*, host, port, user, password, database):
+            databases.append(database)
+            return FakeConnection(database)
+
+        def fake_run(command, **kwargs):
+            commands.append(list(command))
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        session_resets: list[str] = []
+
+        monkeypatch.setattr(ops_logic.psycopg2, "connect", fake_connect)
+        monkeypatch.setattr(ops_logic.subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            ops_logic,
+            "_reset_admin_settings_session",
+            lambda: session_resets.append("reset"),
+        )
+
+        result = logic.run_restore_drill_operation(force=True, updated_by="tester")
+        model.db.session.commit()
+
+        assert result.status == "ok"
+        assert result.backup_path == str(latest)
+        assert "_restore_" in result.database_name
+        assert commands and commands[0][0] == "pg_restore"
+        assert commands[0][-1] == str(latest)
+        assert databases[0] == "postgres"
+        assert databases[1] == result.database_name
+        assert session_resets == ["reset", "reset"]
+        status = logic.collect_restore_drill_status()
+        assert status["last_status"] == "success"
+        assert status["last_database"] == result.database_name
+        assert status["last_duration_seconds"] is not None
+
+
+def test_drop_database_retries_when_other_role_backend_is_transient(monkeypatch):
+    executed: list[tuple[str, object | None]] = []
+    drop_attempts = 0
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, query, params=None):
+            nonlocal drop_attempts
+            text = str(query)
+            executed.append((text, params))
+            if "DROP DATABASE IF EXISTS" in text:
+                drop_attempts += 1
+                if drop_attempts == 1:
+                    raise ops_logic.psycopg2.OperationalError(
+                        "database is being accessed by other users"
+                    )
+
+        def fetchone(self):
+            return (1,)
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+    monkeypatch.setattr(ops_logic.time, "sleep", lambda _: None)
+
+    ops_logic._drop_database(
+        FakeConnection(),
+        "fmrif_scheduler_restore_test",
+        retry_timeout_seconds=1.0,
+        retry_interval_seconds=0.0,
+    )
+
+    terminate_queries = [
+        text for text, _params in executed if "SELECT pg_terminate_backend" in text
+    ]
+    assert terminate_queries
+    assert "AND usename = current_user" in terminate_queries[0]
+    assert drop_attempts == 2
 
 
 def test_parse_admin_group_institute_mapping_rejects_unknown_canonical_targets():

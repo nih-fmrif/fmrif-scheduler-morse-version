@@ -43,7 +43,14 @@ def build_command(
     user_args: list[str],
 ) -> list[str]:
     normalized_args = _normalize_user_args(user_args)
-    command = ["bash", "scripts/run-isolated-test-suite.sh", suite, "pytest"]
+    command = [
+        "bash",
+        "scripts/run-isolated-test-suite.sh",
+        suite,
+        "python3",
+        "-m",
+        "pytest",
+    ]
     if has_explicit_selector(normalized_args):
         command.extend(["-m", marker, *normalized_args])
         return command

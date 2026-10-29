@@ -1,0 +1,3 @@
+[submodule "fmrif-scheduler-docs"]
+	path = fmrif-scheduler-docs
+	url = git@github.com:nih-fmrif/fmrif-scheduler-docs.git

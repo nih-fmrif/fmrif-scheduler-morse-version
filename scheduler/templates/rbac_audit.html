@@ -902,8 +902,76 @@ body %}
   <section class="admin-config-panel" aria-labelledby="admin-config-title">
     <h2 id="admin-config-title">Admin configuration</h2>
     <p>Settings from <code>.env</code> that are safe to adjust at runtime.</p>
+    <div class="admin-config-help">
+      <p>
+        DB status:
+        <strong>{{ admin_operations_status.database.status }}</strong>
+        {% if admin_operations_status.database.status == "ok" %} | latency {{
+        admin_operations_status.database.latency_ms }} ms | active connections
+        {{ admin_operations_status.database.active_connection_count }} | lock
+        waits {{ admin_operations_status.database.lock_wait_count }} | idle in
+        transaction {{
+        admin_operations_status.database.idle_in_transaction_count }} {% else %}
+        | {{ admin_operations_status.database.error }}{% if
+        admin_operations_status.database.detail %}: {{
+        admin_operations_status.database.detail }}{% endif %} {% endif %}
+      </p>
+      <p>
+        Latest backup: {% if admin_operations_status.backup.latest_backup_path
+        %}<code>{{ admin_operations_status.backup.latest_backup_path }}</code>{%
+        else %}none yet{% endif %} | {{
+        admin_operations_status.backup.backup_age_detail }} | {{
+        admin_operations_status.backup.free_disk_detail }}
+      </p>
+      <p>
+        Restore drill: {{ admin_operations_status.restore_drill.last_status }}{%
+        if admin_operations_status.restore_drill.last_success_at %}, last
+        success {{ admin_operations_status.restore_drill.last_success_at }}{%
+        endif %}{% if admin_operations_status.restore_drill.last_message %} | {{
+        admin_operations_status.restore_drill.last_message }}{% endif %}{% if
+        admin_operations_status.restore_drill.enabled %} | {% if
+        admin_operations_status.restore_drill.due_now %}due now{% else %}next
+        due {{ admin_operations_status.restore_drill.next_due_at or "after first
+        successful drill" }}{% endif %}{% else %} | disabled{% endif %}
+      </p>
+    </div>
 
     {% if admin_settings_available %}
+    <div class="admin-section-actions">
+      <form
+        class="admin-inline-form"
+        action="{{ url_for('app_issues_run_backup') }}"
+        method="post"
+      >
+        {{ admin_backup_form.csrf_token }}
+        <input
+          type="hidden"
+          name="return_query"
+          value="{{ request.query_string.decode('utf-8', errors='ignore') }}"
+        />
+        <button id="admin-run-backup" type="submit">run backup now</button>
+      </form>
+      <form
+        class="admin-inline-form"
+        action="{{ url_for('app_issues_run_restore_drill') }}"
+        method="post"
+      >
+        {{ admin_restore_form.csrf_token }}
+        <input
+          type="hidden"
+          name="return_query"
+          value="{{ request.query_string.decode('utf-8', errors='ignore') }}"
+        />
+        <button id="admin-run-restore-drill" type="submit">
+          run restore drill now
+        </button>
+      </form>
+    </div>
+    <p class="admin-config-help">
+      Manual runs execute immediately, bypass the enabled/due schedule gates,
+      and record their outcome back into this panel. Restore drills always
+      target a throwaway database rather than the live application database.
+    </p>
     <form
       class="admin-config-form"
       action="{{ url_for('app_issues_config') }}"
@@ -970,6 +1038,120 @@ body %}
 </textarea
         >
       </label>
+      <div class="admin-config-grid">
+        <label class="admin-config-field" for="ops-backup-enabled">
+          <input type="hidden" name="ops_backup_enabled" value="0" />
+          <input
+            id="ops-backup-enabled"
+            name="ops_backup_enabled"
+            type="checkbox"
+            value="1"
+            {%
+            if
+            admin_ops_backup_enabled
+            %}checked{%
+            endif
+            %}
+          />
+          automated backups enabled
+        </label>
+        <label class="admin-config-field" for="ops-restore-enabled">
+          <input type="hidden" name="ops_restore_enabled" value="0" />
+          <input
+            id="ops-restore-enabled"
+            name="ops_restore_enabled"
+            type="checkbox"
+            value="1"
+            {%
+            if
+            admin_ops_restore_enabled
+            %}checked{%
+            endif
+            %}
+          />
+          restore drills enabled
+        </label>
+      </div>
+      <div class="admin-config-grid">
+        <label class="admin-config-field" for="ops-backup-directory">
+          backup directory
+          <input
+            id="ops-backup-directory"
+            name="ops_backup_directory"
+            type="text"
+            value="{{ admin_ops_backup_directory }}"
+            autocomplete="off"
+            spellcheck="false"
+            required
+          />
+        </label>
+        <label class="admin-config-field" for="ops-backup-format">
+          backup format
+          <select id="ops-backup-format" name="ops_backup_format">
+            {% if admin_ops_backup_format == "plain" %}
+            <option value="custom">custom (.dump)</option>
+            <option value="plain" selected>plain SQL (.sql)</option>
+            {% else %}
+            <option value="custom" selected>custom (.dump)</option>
+            <option value="plain">plain SQL (.sql)</option>
+            {% endif %}
+          </select>
+        </label>
+      </div>
+      <div class="admin-config-grid">
+        <label class="admin-config-field" for="ops-backup-retention-count">
+          backup retention count
+          <input
+            id="ops-backup-retention-count"
+            name="ops_backup_retention_count"
+            type="number"
+            min="1"
+            step="1"
+            value="{{ admin_ops_backup_retention_count }}"
+            required
+          />
+        </label>
+      </div>
+      <div class="admin-config-grid">
+        <label class="admin-config-field" for="ops-backup-max-age-hours">
+          backup age warning threshold (hours)
+          <input
+            id="ops-backup-max-age-hours"
+            name="ops_backup_max_age_hours"
+            type="number"
+            min="1"
+            step="1"
+            value="{{ admin_ops_backup_max_age_hours }}"
+            required
+          />
+        </label>
+        <label class="admin-config-field" for="ops-backup-min-free-gb">
+          minimum free disk (GB)
+          <input
+            id="ops-backup-min-free-gb"
+            name="ops_backup_min_free_gb"
+            type="number"
+            min="1"
+            step="1"
+            value="{{ admin_ops_backup_min_free_gb }}"
+            required
+          />
+        </label>
+      </div>
+      <div class="admin-config-grid">
+        <label class="admin-config-field" for="ops-restore-interval-days">
+          restore drill interval (days)
+          <input
+            id="ops-restore-interval-days"
+            name="ops_restore_interval_days"
+            type="number"
+            min="1"
+            step="1"
+            value="{{ admin_ops_restore_interval_days }}"
+            required
+          />
+        </label>
+      </div>
       {% if admin_group_institute_mapping_uses_recommended_default %}
       <p class="admin-config-help">
         No stored mapping exists yet. The editor is showing the recommended
@@ -977,6 +1159,17 @@ body %}
         local operational institutes and legacy aliases.
       </p>
       {% endif %}
+      <p class="admin-config-help">
+        Manual and scheduled backups capture the application's logical
+        PostgreSQL contents. They do not snapshot cluster-global roles, grants,
+        or other DBA-managed objects.
+      </p>
+      <p class="admin-config-help">
+        Scheduled backup and restore-drill jobs still run outside the request
+        path. The Admin Panel owns the runtime policy, visibility, and manual
+        trigger actions for that logical backup path; operators should document
+        any companion globals backup separately.
+      </p>
       <button type="submit">save admin configuration</button>
     </form>
     {% else %}

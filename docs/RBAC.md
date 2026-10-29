@@ -150,8 +150,8 @@ endpoint that now requires a scoped `session_key`.
 
 This is a test-isolation mechanism, not a production authorization design.
 
-If that boundary starts to spread, the intended cleanup direction is documented in
-`docs/auth-adapter-refactor-note.md`.
+If that boundary starts to spread, treat it as ordinary cleanup work and keep
+the production-versus-test distinction explicit in code review.
 
 ### UI Consolidation
 

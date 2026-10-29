@@ -6,7 +6,6 @@ usage() {
 Usage: bash scripts/run-debian-runtime-smoke.sh <debian-version>
 
 Examples:
-  bash scripts/run-debian-runtime-smoke.sh 12.13
   APP_PORT=5082 PGPORT=5542 MAILPIT__PORT=5583 MAILPIT__SMTP_PORT=5584 \
     bash scripts/run-debian-runtime-smoke.sh 13.1
 EOF

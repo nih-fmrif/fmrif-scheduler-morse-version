@@ -6,7 +6,6 @@ usage() {
 Usage: bash scripts/with-debian-runtime-stack.sh <debian-version> -- <command...>
 
 Examples:
-  bash scripts/with-debian-runtime-stack.sh 12.13 -- curl -fsS "$TEST_BASE_URL/auth/login"
   bash scripts/with-debian-runtime-stack.sh 13.1 -- python3 scripts/run-integration-playwright.py --project=chromium
 EOF
 }
@@ -32,12 +31,6 @@ fi
 
 set_default_ports() {
     case "$debian_version" in
-        12.13)
-            export APP_PORT="${APP_PORT:-5081}"
-            export PGPORT="${PGPORT:-5541}"
-            export MAILPIT__PORT="${MAILPIT__PORT:-5581}"
-            export MAILPIT__SMTP_PORT="${MAILPIT__SMTP_PORT:-5582}"
-            ;;
         13.1)
             export APP_PORT="${APP_PORT:-5082}"
             export PGPORT="${PGPORT:-5542}"

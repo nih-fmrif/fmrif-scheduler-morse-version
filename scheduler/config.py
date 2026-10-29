@@ -121,6 +121,20 @@ def _coerce_int(value: Any, field_name: str) -> int:
         raise ValueError(f"{field_name} must be a valid integer") from exc
 
 
+def _coerce_nonnegative_int(value: Any, field_name: str) -> int:
+    parsed = _coerce_int(value, field_name)
+    if parsed < 0:
+        raise ValueError(f"{field_name} must be non-negative")
+    return parsed
+
+
+def _coerce_positive_int(value: Any, field_name: str) -> int:
+    parsed = _coerce_int(value, field_name)
+    if parsed <= 0:
+        raise ValueError(f"{field_name} must be greater than 0")
+    return parsed
+
+
 def _coerce_str(value: Any) -> str:
     if value is None:
         return ""
@@ -244,6 +258,10 @@ def _raw_values_from_env(source: Mapping[str, str]) -> dict[str, Any]:
         if root not in _NESTED_SETTING_NAMES:
             continue
         path = [root] + [part.lower() for part in parts[1:]]
+        if path == ["database", "idle_in_transaction_session_timeout_ms"]:
+            path[-1] = "idle_in_transaction_timeout_ms"
+        elif path == ["database", "startup_check_enabled"]:
+            path[-1] = "startup_check"
         _set_nested_value(raw, path, value)
     return raw
 
@@ -390,10 +408,91 @@ class EntraConfig:
 class DatabaseConfig:
     echo: bool = False
     track_modifications: bool = False
+    pool_size: int = 5
+    max_overflow: int = 10
+    pool_timeout: int = 30
+    pool_recycle: int = 1800
+    connect_timeout: int = 10
+    statement_timeout_ms: int = 60000
+    lock_timeout_ms: int = 10000
+    idle_in_transaction_timeout_ms: int = 60000
+    application_name: str = "fmrif-scheduler"
+    slow_query_threshold_ms: int = 500
+    startup_check: bool = True
 
     def __post_init__(self) -> None:
         self.echo = _coerce_bool(self.echo)
         self.track_modifications = _coerce_bool(self.track_modifications)
+        self.pool_size = _coerce_positive_int(self.pool_size, "DATABASE__POOL_SIZE")
+        self.max_overflow = _coerce_nonnegative_int(
+            self.max_overflow, "DATABASE__MAX_OVERFLOW"
+        )
+        self.pool_timeout = _coerce_positive_int(
+            self.pool_timeout, "DATABASE__POOL_TIMEOUT"
+        )
+        self.pool_recycle = _coerce_positive_int(
+            self.pool_recycle, "DATABASE__POOL_RECYCLE"
+        )
+        self.connect_timeout = _coerce_positive_int(
+            self.connect_timeout, "DATABASE__CONNECT_TIMEOUT"
+        )
+        self.statement_timeout_ms = _coerce_nonnegative_int(
+            self.statement_timeout_ms, "DATABASE__STATEMENT_TIMEOUT_MS"
+        )
+        self.lock_timeout_ms = _coerce_nonnegative_int(
+            self.lock_timeout_ms, "DATABASE__LOCK_TIMEOUT_MS"
+        )
+        self.idle_in_transaction_timeout_ms = _coerce_nonnegative_int(
+            self.idle_in_transaction_timeout_ms,
+            "DATABASE__IDLE_IN_TRANSACTION_TIMEOUT_MS",
+        )
+        self.application_name = _coerce_str(self.application_name).strip()
+        if not self.application_name:
+            raise ValueError("DATABASE__APPLICATION_NAME must not be empty")
+        self.slow_query_threshold_ms = _coerce_nonnegative_int(
+            self.slow_query_threshold_ms, "DATABASE__SLOW_QUERY_THRESHOLD_MS"
+        )
+        self.startup_check = _coerce_bool(self.startup_check)
+
+    @property
+    def connect_args(self) -> dict[str, Any]:
+        options = [
+            f"-c statement_timeout={self.statement_timeout_ms}",
+            f"-c lock_timeout={self.lock_timeout_ms}",
+            (
+                "-c idle_in_transaction_session_timeout="
+                f"{self.idle_in_transaction_timeout_ms}"
+            ),
+            f"-c application_name={self.application_name}",
+        ]
+        return {
+            "connect_timeout": self.connect_timeout,
+            "options": " ".join(options),
+        }
+
+    @property
+    def sqlalchemy_engine_options(self) -> dict[str, Any]:
+        return {
+            "pool_size": self.pool_size,
+            "max_overflow": self.max_overflow,
+            "pool_timeout": self.pool_timeout,
+            "pool_recycle": self.pool_recycle,
+            "pool_pre_ping": True,
+            "connect_args": self.connect_args,
+            "pool_reset_on_return": "rollback",
+        }
+
+    @property
+    def engine_options(self) -> Dict[str, Any]:
+        return self.sqlalchemy_engine_options
+
+    @property
+    def idle_in_transaction_session_timeout_ms(self) -> int:
+        return self.idle_in_transaction_timeout_ms
+
+    @property
+    def startup_check_enabled(self) -> bool:
+        return self.startup_check
 
 
 @dataclass
@@ -876,6 +975,7 @@ class AppConfig(dict):
             "SECRET_KEY": settings.core.secret_key,
             "DEBUG": settings.core.debug,
             "SQLALCHEMY_DATABASE_URI": settings.database_url,
+            "SQLALCHEMY_ENGINE_OPTIONS": settings.database.sqlalchemy_engine_options,
             "SQLALCHEMY_TRACK_MODIFICATIONS": settings.database.track_modifications,
             "MAIL_SERVER": settings.mail.server,
             "MAIL_PORT": settings.mail.port,
@@ -918,6 +1018,9 @@ class AppConfig(dict):
             "LOG_LEVEL": settings.logging.level,
             "LOG_REVEAL_SENSITIVE_DATA": settings.logging.reveal_sensitive_data,
             "LOG_REDACTION_TEXT": settings.logging.redaction_text,
+            "DATABASE_SLOW_QUERY_THRESHOLD_MS": settings.database.slow_query_threshold_ms,
+            "DATABASE_STARTUP_CHECK": settings.database.startup_check,
+            "DATABASE_STARTUP_CHECK_ENABLED": settings.database.startup_check,
         }
 
         if settings.server.server_name.strip():

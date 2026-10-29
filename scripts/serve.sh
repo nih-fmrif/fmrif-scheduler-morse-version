@@ -117,7 +117,8 @@ run_edge_header_gate() {
 }
 
 build_gunicorn_command() {
-  local bind_addr="0.0.0.0:${APP_PORT}"
+  local bind_host="${APP_BIND_HOST:-127.0.0.1}"
+  local bind_addr="${bind_host}:${APP_PORT}"
   local workers="${GUNICORN_WORKERS:-2}"
   local worker_class="${GUNICORN_WORKER_CLASS:-sync}"
   local timeout="${GUNICORN_TIMEOUT:-120}"
@@ -282,7 +283,7 @@ app_server="${APP_SERVER:-flask}"
 declare -a server_command=()
 case "$app_server" in
   flask)
-    server_command=(flask run --host 0.0.0.0 --port "$APP_PORT")
+    server_command=(flask run --host "${APP_BIND_HOST:-127.0.0.1}" --port "$APP_PORT")
     ;;
   gunicorn)
     mapfile -t gunicorn_command < <(build_gunicorn_command)

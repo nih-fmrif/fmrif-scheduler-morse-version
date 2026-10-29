@@ -56,6 +56,29 @@ def test_app_issues_page_shows_admin_configuration_fields(route_client):
     assert 'name="admin_default_sender"' in body
     assert 'name="admin_mailing_lists"' in body
     assert 'name="admin_group_institute_mapping"' in body
+    assert 'name="ops_backup_enabled"' in body
+    assert 'name="ops_backup_directory"' in body
+    assert 'name="ops_backup_format"' in body
+    assert 'name="ops_backup_retention_count"' in body
+    assert 'name="ops_backup_max_age_hours"' in body
+    assert 'name="ops_backup_min_free_gb"' in body
+    assert 'name="ops_restore_enabled"' in body
+    assert 'name="ops_restore_interval_days"' in body
+    assert "DB status:" in body
+    assert "Latest backup:" in body
+    assert "Restore drill:" in body
+    assert 'id="admin-run-backup"' in body
+    assert 'id="admin-run-restore-drill"' in body
+    assert "run backup now" in normalized_body
+    assert "run restore drill now" in normalized_body
+    assert (
+        "They do not snapshot cluster-global roles, grants, or other "
+        "DBA-managed objects."
+    ) in normalized_body
+    assert (
+        "operators should document any companion globals backup separately."
+        in normalized_body
+    )
     assert 'id="admin-mapping-user-dept"' in body
     assert 'id="admin-mapping-dev-dept"' in body
     assert 'id="admin-mapping-devperm"' in body
@@ -104,6 +127,14 @@ def test_app_issues_config_updates_admin_settings(route_client):
                 'Health": "NIMH"}, "group_defaults": {"DEV": "NMRF"}, '
                 '"exceptions": [{"group": "DEV", "reason": "legacy shared slot"}]}'
             ),
+            "ops_backup_enabled": "1",
+            "ops_backup_directory": "/var/lib/fmrif-scheduler/backups",
+            "ops_backup_format": "plain",
+            "ops_backup_retention_count": "14",
+            "ops_backup_max_age_hours": "48",
+            "ops_backup_min_free_gb": "9",
+            "ops_restore_enabled": "1",
+            "ops_restore_interval_days": "10",
         },
         follow_redirects=False,
     )
@@ -117,6 +148,17 @@ def test_app_issues_config_updates_admin_settings(route_client):
         "Infra": "Infrastructure",
         "Ops": "Operations",
     }
+    assert logic.get_admin_backup_operations_config().enabled is True
+    assert (
+        logic.get_admin_backup_operations_config().directory
+        == "/var/lib/fmrif-scheduler/backups"
+    )
+    assert logic.get_admin_backup_operations_config().format == "plain"
+    assert logic.get_admin_backup_operations_config().retention_count == 14
+    assert logic.get_admin_backup_operations_config().max_age_hours == 48
+    assert logic.get_admin_backup_operations_config().min_free_gb == 9
+    assert logic.get_admin_restore_drill_operations_config().enabled is True
+    assert logic.get_admin_restore_drill_operations_config().interval_days == 10
     assert logic.get_admin_group_institute_mapping() == {
         "canonical_institutes": {
             "NIMH": {
@@ -147,6 +189,106 @@ def test_app_issues_config_updates_admin_settings(route_client):
             }
         ],
     }
+
+
+@pytest.mark.covers_route("/app/issues/operations/backup", "POST")
+def test_app_issues_run_backup_invokes_shared_operation(route_client, monkeypatch):
+    ensure_admin_user()
+    set_admin_session(route_client)
+    captured: dict[str, object] = {}
+
+    def fake_run_backup_operation(*, force: bool, updated_by: str):
+        captured["force"] = force
+        captured["updated_by"] = updated_by
+        logic.record_backup_execution(
+            success=True,
+            updated_by=updated_by,
+            backup_path="/tmp/fmrif-test.dump",
+            size_bytes=321,
+            message="created fmrif-test.dump",
+        )
+        return logic.AdminOperationResult(
+            status="ok",
+            detail="created fmrif-test.dump",
+            backup_path="/tmp/fmrif-test.dump",
+            size_bytes=321,
+        )
+
+    monkeypatch.setattr(logic, "run_backup_operation", fake_run_backup_operation)
+
+    response = route_client.get("/app/issues?email_scope=user")
+    assert response.status_code == 200
+    csrf_token = extract_csrf_token(response.get_data(as_text=True))
+
+    post_response = route_client.post(
+        "/app/issues/operations/backup",
+        data={
+            "csrf_token": csrf_token,
+            "return_query": "email_scope=user",
+        },
+        follow_redirects=True,
+    )
+
+    assert captured == {"force": True, "updated_by": "test-admin"}
+    assert post_response.status_code == 200
+    assert "backup completed: created fmrif-test.dump" in post_response.get_data(
+        as_text=True
+    )
+    assert logic.collect_backup_status()["last_path"] == "/tmp/fmrif-test.dump"
+
+
+@pytest.mark.covers_route("/app/issues/operations/restore-drill", "POST")
+def test_app_issues_run_restore_drill_invokes_shared_operation(
+    route_client, monkeypatch
+):
+    ensure_admin_user()
+    set_admin_session(route_client)
+    captured: dict[str, object] = {}
+
+    def fake_run_restore_drill_operation(*, force: bool, updated_by: str):
+        captured["force"] = force
+        captured["updated_by"] = updated_by
+        logic.record_restore_drill_execution(
+            success=True,
+            updated_by=updated_by,
+            database_name="fmrif_restore_test",
+            duration_seconds=12.5,
+            message="restore drill succeeded from fmrif-test.dump",
+        )
+        return logic.AdminOperationResult(
+            status="ok",
+            detail="restore drill succeeded from fmrif-test.dump",
+            backup_path="/tmp/fmrif-test.dump",
+            database_name="fmrif_restore_test",
+            duration_seconds=12.5,
+        )
+
+    monkeypatch.setattr(
+        logic,
+        "run_restore_drill_operation",
+        fake_run_restore_drill_operation,
+    )
+
+    response = route_client.get("/app/issues?notification_search=warning")
+    assert response.status_code == 200
+    csrf_token = extract_csrf_token(response.get_data(as_text=True))
+
+    post_response = route_client.post(
+        "/app/issues/operations/restore-drill",
+        data={
+            "csrf_token": csrf_token,
+            "return_query": "notification_search=warning",
+        },
+        follow_redirects=True,
+    )
+
+    assert captured == {"force": True, "updated_by": "test-admin"}
+    assert post_response.status_code == 200
+    assert (
+        "restore drill completed: restore drill succeeded from fmrif-test.dump"
+        in post_response.get_data(as_text=True)
+    )
+    assert logic.collect_restore_drill_status()["last_database"] == "fmrif_restore_test"
 
 
 @pytest.mark.covers_route("/app/issues/mapping/import", "POST")

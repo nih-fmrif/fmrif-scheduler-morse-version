@@ -19,6 +19,8 @@ from ._rbac_admin_actions import (
     app_issues_import_mapping,
     app_issues_notification_state,
     app_issues_organization_history_scan,
+    app_issues_run_backup,
+    app_issues_run_restore_drill,
     app_issues_scan,
 )
 from ._rbac_explorer_core import (
@@ -590,6 +592,9 @@ def app_issues():
         if organization_history_scan_enabled
         else {"summary": None, "sections": []}
     )
+    admin_backup_config = logic.get_admin_backup_operations_config()
+    admin_restore_config = logic.get_admin_restore_drill_operations_config()
+    operations_status = logic.collect_admin_operations_status()
 
     return {
         "title": "Admin Panel",
@@ -625,6 +630,7 @@ def app_issues():
         "notification_return_query": notification_return_query,
         "notification_scan_form": schedule_logic.CsrfOnlyForm(),
         "notification_state_form": schedule_logic.CsrfOnlyForm(),
+        "admin_backup_form": schedule_logic.CsrfOnlyForm(),
         "potential_issue_sections": potential_issue_sections,
         "notification_category_options": [
             {
@@ -683,6 +689,7 @@ def app_issues():
         ],
         "admin_config_form": schedule_logic.CsrfOnlyForm(),
         "admin_mapping_form": schedule_logic.CsrfOnlyForm(),
+        "admin_restore_form": schedule_logic.CsrfOnlyForm(),
         "organization_history_scan_form": schedule_logic.CsrfOnlyForm(),
         "admin_listserv": logic.get_admin_listserv(),
         "admin_default_sender": logic.get_admin_default_sender(),
@@ -694,6 +701,15 @@ def app_issues():
         "admin_group_institute_mapping_uses_recommended_default": (
             logic.admin_group_institute_mapping_uses_recommended_default()
         ),
+        "admin_ops_backup_enabled": admin_backup_config.enabled,
+        "admin_ops_backup_directory": admin_backup_config.directory,
+        "admin_ops_backup_format": admin_backup_config.format,
+        "admin_ops_backup_retention_count": admin_backup_config.retention_count,
+        "admin_ops_backup_max_age_hours": admin_backup_config.max_age_hours,
+        "admin_ops_backup_min_free_gb": admin_backup_config.min_free_gb,
+        "admin_ops_restore_enabled": admin_restore_config.enabled,
+        "admin_ops_restore_interval_days": admin_restore_config.interval_days,
+        "admin_operations_status": operations_status,
         "admin_settings_available": logic.admin_settings_available(),
         "admin_mapping_kinds": _admin_mapping_kinds(),
         "organization_mapping_summary": organization_mapping_scan["summary"],
@@ -771,6 +787,18 @@ def register_rbac_blueprint(
         "/app/issues/organization/history-scan",
         methods=["POST"],
         view_func=admin_only(app_issues_organization_history_scan),
+    )
+
+    app.add_url_rule(
+        "/app/issues/operations/backup",
+        methods=["POST"],
+        view_func=admin_only(app_issues_run_backup),
+    )
+
+    app.add_url_rule(
+        "/app/issues/operations/restore-drill",
+        methods=["POST"],
+        view_func=admin_only(app_issues_run_restore_drill),
     )
 
     app.add_url_rule(

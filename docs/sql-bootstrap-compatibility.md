@@ -102,6 +102,12 @@ This is the critical stage-sensitive migration.
 
 This is an additive relationship-hydration layer, not part of the old snapshot.
 
+It is not an authentication layer.
+
+Authentication is handled by Entra. The additive layer hydrates current
+authorization and operational relationship tables after the legacy snapshot has
+been imported.
+
 Default behavior:
 
 - Keep it enabled for old-schema production-like dumps.
@@ -126,6 +132,14 @@ Operational rule:
 - Treat the additive layer as a separate authority decision.
 - The old snapshot provides historical scanner/template/schedule data.
 - The additive layer provides current relationship hydration for the current app.
+
+Supported initial-deployment role:
+
+- a production-derived `003`-contract dump supplies the rooted legacy snapshot
+- `900-import-new-data.sql` may supply the starting authorization relationships
+  for the new application
+- after deployment, the RBAC and Admin Panel surfaces become the live
+  management path for those relationships
 
 ## Recommended import modes
 

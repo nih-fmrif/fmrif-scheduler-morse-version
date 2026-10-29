@@ -28,7 +28,7 @@ jobs:
 
       - name: Setup environment and services
         run: |
-          bash setup-dotenv.sh
+          bash setup-dotenv.sh --profile compose
           {
             echo "AUTH_TEST__ENABLED=true"
             echo "AUTH_TEST__SHARED_SECRET=ci-shared-secret"
@@ -42,7 +42,7 @@ jobs:
         run: pixi run test-routes
 
       - name: Export coverage XML
-        run: pixi run python -m coverage xml -o coverage.xml
+        run: pixi run -e dev python -m coverage xml -o coverage.xml
 
       - name: Install Node.js dependencies
         run: pixi run install-js
@@ -91,12 +91,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        debian_version: ["12.13", "13.1"]
+        debian_version: ["13.1"]
     steps:
       - uses: actions/checkout@v3
 
       - name: Setup environment
-        run: bash setup-dotenv.sh
+        run: bash setup-dotenv.sh --profile compose
 
       - name: Run Debian runtime smoke
         env:
@@ -109,7 +109,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        debian_version: ["12.13", "13.1"]
+        debian_version: ["13.1"]
 
     steps:
       - uses: actions/checkout@v3
@@ -123,7 +123,7 @@ jobs:
         run: pixi --version
 
       - name: Setup environment
-        run: bash setup-dotenv.sh
+        run: bash setup-dotenv.sh --profile compose
 
       - name: Install Node.js dependencies
         run: pixi run install-js

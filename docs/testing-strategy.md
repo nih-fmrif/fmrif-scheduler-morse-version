@@ -47,10 +47,14 @@
 
 7. Debian runtime verification (`Compose` + `Playwright`, packaging-focused)
 - Scope: validates the app against Debian-packaged runtime dependencies instead of the Pixi-managed environment
-- Targets: Debian `12.13` and `13.1`
+- Baseline target: Debian `13.1`
 - CI: yes
 - Browser scope: Chromium for the Debian integration matrix; the main Pixi integration job remains the broader browser-coverage lane
-- Rationale: see [`docs/runtime-matrix.md`](./runtime-matrix.md)
+- Rationale: catches packaging, startup, migration, and proxy-path differences that the Pixi-managed path can hide. Treat failures here as deployment-relevant.
+- Expected use:
+  - run `test-debian-smoke` for changes to packaging/dependencies, startup/config loading, bootstrap/Alembic flows, DB runtime behavior, or proxy/header wiring
+  - run `test-debian-integration` when those changes can also affect auth/session flows, callback routing, CSP/static assets, or browser-visible packaged-runtime behavior
+  - skip the Debian tasks for ordinary logic changes unless there is a specific deployment-path concern
 
 ## Shared Test Infrastructure
 
@@ -91,17 +95,16 @@ pixi run test-routes
 pixi run test-routes -- tests/unit/test_some_route_file.py -q
 ```
 
-Integration tests (CI mode, mock auth):
+Integration tests (mock auth):
 ```bash
 pixi run test-integration
+pixi run test-integration-ci
 ```
 
 Debian runtime smoke/integration:
 ```bash
-DEBIAN_VERSION=12.13 pixi run test-debian-smoke
-DEBIAN_VERSION=12.13 pixi run test-debian-integration
-DEBIAN_VERSION=13.1 pixi run test-debian-smoke
-DEBIAN_VERSION=13.1 pixi run test-debian-integration
+pixi run test-debian-smoke
+pixi run test-debian-integration
 ```
 
 Heavy integration tests (manual/opt-in):

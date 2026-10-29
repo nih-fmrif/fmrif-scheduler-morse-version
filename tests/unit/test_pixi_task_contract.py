@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+DEPENDENCY_RE = re.compile(
+    r"^(?P<name>[A-Za-z0-9_.-]+)"
+    r"(?:\[(?P<extras>[A-Za-z0-9_.\-, ]+)\])?"
+    r"(?P<specifier>.*)$"
+)
 
 
 def _load_wrapper_module():
@@ -19,24 +25,79 @@ def _load_wrapper_module():
     return module
 
 
+def _normalize_project_dependencies(raw_dependencies: list[str]) -> dict[str, object]:
+    normalized: dict[str, object] = {}
+    for raw_dependency in raw_dependencies:
+        match = DEPENDENCY_RE.match(raw_dependency.strip())
+        assert match is not None, raw_dependency
+        name = match.group("name").strip().lower()
+        extras = match.group("extras")
+        specifier = match.group("specifier").strip()
+        assert specifier, raw_dependency
+        if extras:
+            normalized[name] = {
+                "version": specifier,
+                "extras": [part.strip() for part in extras.split(",") if part.strip()],
+            }
+        else:
+            normalized[name] = specifier
+    return normalized
+
+
 def test_fast_pytest_tasks_use_target_aware_wrapper():
     pixi_data = tomllib.loads((REPO_ROOT / "pixi.toml").read_text(encoding="utf-8"))
+    pyproject_data = tomllib.loads(
+        (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )
     tasks = pixi_data["tasks"]
+    environments = pixi_data["environments"]
+    default_pypi_deps = pixi_data.get("pypi-dependencies", {})
+    dev_pypi_deps = pixi_data["feature"]["dev"]["pypi-dependencies"]
+    project_pypi_deps = _normalize_project_dependencies(
+        pyproject_data["project"]["dependencies"]
+    )
+    project_dev_pypi_deps = _normalize_project_dependencies(
+        pyproject_data["project"]["optional-dependencies"]["dev"]
+    )
+    alembic_config = pyproject_data["tool"]["alembic"]
 
     assert tasks["serve"] == "bash scripts/serve.sh"
     assert tasks["serve-gunicorn"] == "APP_SERVER=gunicorn bash scripts/serve.sh"
+    assert pixi_data["workspace"]["requires-pixi"] == ">=0.66.0"
+    assert environments["default"]["features"] == []
+    assert environments["dev"]["features"] == ["dev"]
+    assert default_pypi_deps == project_pypi_deps
+    assert dev_pypi_deps == project_dev_pypi_deps
+    assert alembic_config == {
+        "script_location": "%(here)s/scheduler/alembic",
+        "version_locations": ["%(here)s/scheduler/alembic/versions"],
+        "prepend_sys_path": ["%(here)s"],
+    }
+    assert tasks["install-js"] == "pixi run -e dev npm ci --no-optional"
+    assert tasks["pre-commit-install"] == "bash scripts/install-pre-commit-hook.sh"
+    assert (
+        tasks["pre-commit"] == "pixi run -e dev bash -lc 'pre-commit run --all-files'"
+    )
+    assert tasks["check-db-health"] == "python3 scripts/check-db-health.py"
+    assert tasks["check-db-posture"] == "python3 scripts/check-db-posture.py"
+    assert (
+        tasks["rehearse-initial-deployment"]
+        == "python3 scripts/rehearse-initial-deployment.py"
+    )
     assert (
         tasks["test-unit"]
-        == 'python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route"'
+        == 'pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route"'
     )
     assert (
         tasks["test-unit-xdist"]
-        == 'python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route" -- -n auto'
+        == 'pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route" -- -n auto'
     )
     assert (
         tasks["test-routes"]
-        == "python3 scripts/run-target-aware-pytest-suite.py routes tests/unit route"
+        == "pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py routes tests/unit route"
     )
+    assert tasks["run-db-backup"] == "python3 scripts/run-db-backup.py"
+    assert tasks["run-db-restore-drill"] == "python3 scripts/run-db-restore-drill.py"
 
 
 def test_wrapper_uses_default_target_when_no_explicit_selector_is_present():
@@ -46,6 +107,8 @@ def test_wrapper_uses_default_target_when_no_explicit_selector_is_present():
         "bash",
         "scripts/run-isolated-test-suite.sh",
         "routes",
+        "python3",
+        "-m",
         "pytest",
         "tests/unit",
         "-m",
@@ -66,6 +129,8 @@ def test_wrapper_drops_default_target_when_explicit_selector_is_present():
         "bash",
         "scripts/run-isolated-test-suite.sh",
         "routes",
+        "python3",
+        "-m",
         "pytest",
         "-m",
         "route",
