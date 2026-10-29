@@ -15,6 +15,11 @@
     {% block basehead %}{% endblock %}
   </head>
   <body>
+    <div id="app-feedback" class="app-feedback" aria-live="polite"></div>
     {% block basebody %}{% endblock %}
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/notifications-bootstrap.js') }}"
+    ></script>
   </body>
 </html>

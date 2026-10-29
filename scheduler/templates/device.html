@@ -50,6 +50,9 @@ block body %} {% if never_entries %}
 <script id="human-hours" type="application/json">
   {{ hours|tojson }}
 </script>
+<script id="schedule-load-config" type="application/json">
+  {{ schedule_load_json|tojson }}
+</script>
 {{ macros.datalist("groups", groups, "invalid group") }} {{
 macros.datalist("tech", support.tech, "invalid technologist") }} {{
 macros.datalist("med", support.medical, "invalid medical support member") }} {{
@@ -75,186 +78,70 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
       schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{
       macros.edit_icons("schedule") }}
     </div>
-    <div id="scroll-container" aria-labelledby="caption" tabindex="0">
-      <table aria-labelledby="caption">
-        <thead>
-          <tr>
-            <td></td>
-            {% for h in top_row %}
-            <th>{{ h }}</th>
+    <p id="editor-load-status" class="editor-load-status" aria-live="polite">
+      preparing schedule editor...
+    </p>
+    <div class="editor-workspace">
+      <div id="scroll-container" aria-labelledby="caption" tabindex="0">
+        <table aria-labelledby="caption">
+          <thead>
+            <tr>
+              <td></td>
+              {% for h in top_row %}
+              <th>{{ h }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in range(24) %}
+            <tr
+              id="row-{{ h }}"
+              data-hour="{{ h }}"
+              data-hydrated="false"
+              {%
+              if
+              h
+              in
+              off_hours
+              %}hidden
+              data-off-hour{%
+              endif
+              %}
+            >
+              <th scope="row">{{ hours[h] }}</th>
+              {% for _ in top_row %}
+              <td data-placeholder="true"></td>
+              {% endfor %}
+            </tr>
             {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for xs in entries %} {% set h = loop.index-1 %}
-          <tr
-            id="row-{{ h }}"
-            data-hour="{{ h }}"
-            {%
-            if
-            h
-            in
-            off_hours
-            %}hidden
-            data-off-hour{%
-            endif
-            %}
-          >
-            <th scope="row">{{ hours[h] }}</th>
-            {% for x in xs %}
-            <td>
-              <entry-cell
-                data-id="{{ x.id }}"
-                data-hour="{{ x.hour }}"
-                data-date="{{ x.date }}"
-                data-old="{% if x.date < cur_date or (x.date == cur_date and x.hour <= cur_hour) %}true{% else %}false{% endif %}"
-                data-can-edit="false"
-                data-changed="false"
-                data-error="false"
-              >
-                {{ macros.entry_legend(x.group) }}
-                <entry-editor>
-                  {{ macros.entry_text("grp-" ~ x.id, "group", "groups",
-                  x.group) }} {{ macros.entry_text("mem-" ~ x.id, "member",
-                  "none", x.user) }}
-                </entry-editor>
-                <entry-support>
-                  {# bucket support requests #} {% set sr = namespace() %} {%
-                  for r in x.requests %} {% if r.supportkind == 1 %} {% set
-                  sr.medical = r %} {% elif r.supportkind == 2 %} {% set
-                  sr.train = r %} {% elif r.supportkind == 3 %} {% set sr.tech =
-                  r %} {% endif %} {% endfor %} {# macros for some repeated
-                  elements #} {% macro requested(id, checked) %}
-                  <input-set is-option>
-                    <input-widget>
-                      <input
-                        id="{{ id }}"
-                        class="requested"
-                        type="checkbox"
-                        autocomplete="off"
-                        data-orig="{{ 'true' if checked else 'false' }}"
-                        {%
-                        if
-                        checked
-                        %}checked{%
-                        endif
-                        %}
-                      />
-                    </input-widget>
-                    <label for="{{ id }}">requested</label>
-                  </input-set>
-                  {% endmacro %} {% macro handler(id, list, sr) %}
-                  <input-set label-above shrink>
-                    <label for="{{ id }}">handler</label>
-                    <input-widget>
-                      <input
-                        id="{{ id }}"
-                        class="handler"
-                        {%
-                        if
-                        list
-                        %}list="{{ list }}"
-                        {%
-                        endif
-                        %}
-                        data-orig="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
-                        value="{% if sr and sr.fulfilled_by %}{{ sr.fulfilled_by }}{% endif %}"
-                        spellcheck="false"
-                        autocomplete="off"
-                      />
-                      {{ macros.validation_icons() }}
-                    </input-widget>
-                  </input-set>
-                  {% endmacro %} {% macro tech_kind(id, kind, lbl, checked) %}
-                  <input-set is-option>
-                    <input-widget>
-                      <input
-                        id="{{ 'tech-' ~ kind ~ '-' ~ id }}"
-                        name="kind-{{ id }}"
-                        autocomplete="off"
-                        type="radio"
-                        {%
-                        if
-                        checked
-                        %}checked{%
-                        endif
-                        %}
-                        value="{{ lbl }}"
-                      />
-                    </input-widget>
-                    <label for="{{ 'tech-' ~ kind ~ '-' ~ id }}"
-                      >{{ lbl }}</label
-                    >
-                  </input-set>
-                  {% endmacro %} {% if support.tech or sr.tech %}
-                  <fieldset
-                    data-sr="tech"
-                    data-new="{% if sr.tech %}false{% else %}true{% endif %}"
-                    disabled
-                  >
-                    <legend>technologist</legend>
-                    {{ requested("tech-requested-" ~ x.id, sr.tech is defined
-                    and sr.tech.approved is not sameas false) }} {% set note
-                    %}{% if sr.tech %}{{ sr.tech.note }}{% else %}cover{% endif
-                    %}{% endset %}
-                    <fieldset class="sk-sel" data-orig="{{ note }}">
-                      <legend><span>kind</span></legend>
-                      {{ tech_kind(x.id, "cover", "cover", note != "support") }}
-                      {{ tech_kind(x.id, "support", "support", note ==
-                      "support") }}
-                    </fieldset>
-                    {{ handler("tech-handler-" ~ x.id, "tech", sr.tech) }}
-                  </fieldset>
-                  {% endif %} {% if support.training or sr.train %}
-                  <fieldset
-                    data-sr="train"
-                    data-new="{% if sr.train %}false{% else %}true{% endif %}"
-                    disabled
-                  >
-                    <legend>training</legend>
-                    {{ requested("train-requested-" ~ x.id, sr.train is defined
-                    and sr.train.approved is not sameas false) }} {{
-                    handler("train-handler-" ~ x.id, "train", sr.train) }}
-                  </fieldset>
-                  {% endif %} {% if support.medical or sr.medical %}
-                  <fieldset
-                    data-sr="med"
-                    data-new="{% if sr.medical %}false{% else %}true{% endif %}"
-                    disabled
-                  >
-                    <legend>medical coverage</legend>
-                    {{ requested("med-requested-" ~ x.id, sr.medical is defined
-                    and sr.medical.approved is not sameas false) }} {{
-                    handler("med-handler-" ~ x.id, "med", sr.medical) }}
-                  </fieldset>
-                  {% endif %}
-                </entry-support>
-                <entry-buttons>
-                  <button type="button" disabled data-reset>reset</button>
-                  <button
-                    type="button"
-                    aria-has-popup="true"
-                    data-for="{{ x.id }}"
-                    data-from-template="{{ x.template }}"
-                    hidden
-                  >
-                    {{ icons.book() }}<sr-only>view activity</sr-only> log
-                  </button>
-                </entry-buttons>
-                <entry-status>
-                  {{ macros.edit_icons("entry") }}
-                  <div class="time-use-icon">
-                    {% if x.used is none %} {{ icons.square_empty() }} {% elif
-                    x.used %} {{ icons.square_used("time used") }} {% else %} {{
-                    icons.square_unused("time unused") }} {% endif %}
-                  </div>
-                </entry-status>
-              </entry-cell>
-            </td>
-            {% endfor %} {% endfor %}
-          </tr>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
+      <aside
+        class="editor-inspector"
+        aria-live="polite"
+        aria-label="selected slot details"
+      >
+        <h2>selected slot</h2>
+        <p class="editor-inspector-target">select a slot to inspect and edit</p>
+        <p class="editor-inspector-summary">
+          use arrow keys to move and press enter to edit
+        </p>
+        <dl class="editor-inspector-meta">
+          <div>
+            <dt>mode</dt>
+            <dd class="editor-inspector-mode">read only</dd>
+          </div>
+          <div>
+            <dt>pending</dt>
+            <dd class="editor-inspector-pending">0 changes</dd>
+          </div>
+          <div>
+            <dt>errors</dt>
+            <dd class="editor-inspector-errors">0</dd>
+          </div>
+        </dl>
+      </aside>
     </div>
     <div id="focus-trap"></div>
     <button id="apply" type="submit" disabled>save</button>

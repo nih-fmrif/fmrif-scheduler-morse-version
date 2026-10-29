@@ -80,7 +80,7 @@ jobs:
 
         # Show container logs for debugging
         echo "=== Scheduler Container Logs ==="
-        docker logs scheduler
+        docker compose logs scheduler
 
         # Run tests
         pixi run test-integration-ci

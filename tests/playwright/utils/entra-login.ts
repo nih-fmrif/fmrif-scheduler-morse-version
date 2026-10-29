@@ -8,8 +8,35 @@ function normalizeUsername(username: string): string {
   return `${trimmed}@nih.gov`;
 }
 
+async function reachesEntraPrompt(page: Page): Promise<boolean> {
+  const onEntraDomain = page.url().includes('login.microsoftonline.com');
+  if (onEntraDomain) {
+    return true;
+  }
+
+  const emailInput = page.locator('input[type="email"], input[name="loginfmt"], #i0116');
+  return emailInput.first().isVisible().catch(() => false);
+}
+
+async function startEntraFlow(page: Page): Promise<void> {
+  const loginButton = page.getByRole('button', { name: /Login with NIH Credentials/i });
+  const buttonVisible = await loginButton.isVisible({ timeout: 5000 }).catch(() => false);
+
+  if (buttonVisible) {
+    await loginButton.click();
+    await page.waitForTimeout(1500);
+    if (await reachesEntraPrompt(page)) {
+      return;
+    }
+  }
+
+  // Fallback for proxied/headless runs where form submit can abort
+  // before cross-site navigation starts.
+  await page.goto('/auth/entra', { waitUntil: 'domcontentloaded' });
+}
+
 export async function signInWithCredentials(page: Page, username: string, password: string) {
-  await page.getByRole('button', { name: /Login with NIH Credentials/i }).click();
+  await startEntraFlow(page);
 
   const useAnotherAccount = page.getByText(/Use another account/i);
   if (await useAnotherAccount.isVisible({ timeout: 2000 }).catch(() => false)) {

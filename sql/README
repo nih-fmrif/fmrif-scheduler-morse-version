@@ -10,11 +10,18 @@ These SQL files are designed to:
 2. Provide a reference for the complete database schema
 3. Import synthetic test data for development
 
-## Important: Historical Data Required
+## Seed Data Contract
 
-The historical data is required for creating the development database and is not
-included in the repo. You must overwrite the various syntheticfiles that are used
-as placeholders in this directory such 003-import-data.sql.
+`003-import-data.sql` is a compact synthetic seed committed in this repository.
+It intentionally captures representative data complexity (null/non-null states,
+active/inactive entities, schedule/log variability) without historical volume.
+
+`900-import-new-data.sql` then maps `user-dept.csv`, `dev-dept.csv`, and
+`devperm.csv` into the auth model.
+
+Route tests enforce this contract in
+`tests/unit/test_seed_shape_contract.py` (under the `route` marker). If you
+change seed files, keep that test green or update it with an explicit rationale.
 
 ## Usage
 
@@ -22,10 +29,10 @@ To set up a development database:
 
 ```bash
 # Start fresh (drops existing database)
-DROP_DB=true bash 000-run-migrations.sh
+DROP_DB=true bash 000-init.sh
 
 # Try to run migrations on existing database
-bash 000-run-migrations.sh
+bash 000-init.sh
 ```
 
 ## Important Notes
@@ -41,7 +48,7 @@ bash 000-run-migrations.sh
 
 ## File Structure
 
-- `000-run-migrations.sh`: Main setup script
+- `000-init.sh`: Main setup script
 - `001-schema.sql`: Base schema definition
 - `[000-999]-*.sql`: Ordered migration files
 - `*.sample.sql`: Example data files

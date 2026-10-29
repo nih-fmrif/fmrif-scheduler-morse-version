@@ -11,6 +11,7 @@ import jwt
 import requests
 from flask import current_app
 from jwt import InvalidTokenError
+from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from scheduler.config import settings
 
@@ -31,6 +32,7 @@ class _JWKSCache:
 
 
 _CACHE = _JWKSCache()
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
 
 def _log_debug(message: str, *args: object) -> None:
@@ -41,6 +43,32 @@ def _log_debug(message: str, *args: object) -> None:
                 logger.debug(message, *args)
             else:
                 logger.debug(message)
+    except RuntimeError:
+        # Outside of Flask app context; skip logging
+        pass
+
+
+def _log_warning(message: str, *args: object) -> None:
+    try:
+        logger = getattr(current_app, "logger", None)
+        if logger:
+            if args:
+                logger.warning(message, *args)
+            else:
+                logger.warning(message)
+    except RuntimeError:
+        # Outside of Flask app context; skip logging
+        pass
+
+
+def _log_error(message: str, *args: object) -> None:
+    try:
+        logger = getattr(current_app, "logger", None)
+        if logger:
+            if args:
+                logger.error(message, *args)
+            else:
+                logger.error(message)
     except RuntimeError:
         # Outside of Flask app context; skip logging
         pass
@@ -134,34 +162,43 @@ def verify_jwt(
         return None, str(exc)
 
 
-def user_from_claims(claims: Dict) -> Optional[SessionUser]:
-    """Convert JWT claims into a SessionUser model."""
+def user_from_claims(claims: Dict) -> SessionUser:
+    """Convert validated JWT claims into a SessionUser model.
+
+    Raises ValueError when required claims are missing.
+    """
     if not claims:
-        return None
+        raise ValueError("JWT claims missing preferred_username")
 
-    email = claims.get("email")
-    source = "email"
-    if not email:
-        email = claims.get("preferred_username")
-        source = "preferred_username"
-    if not email:
-        email = claims.get("upn")
-        source = "upn"
-    if not email:
-        _log_debug("JWT claims missing email; keys=%s", sorted(claims.keys()))
-        return None
-    _log_debug("JWT email claim resolved from %s", source)
-    email = str(email).lower()
+    preferred_username_raw = str(claims.get("preferred_username") or "").strip().lower()
+    if not preferred_username_raw:
+        _log_warning(
+            "JWT claims missing preferred_username; keys=%s", sorted(claims.keys())
+        )
+        raise ValueError("JWT claims missing preferred_username")
+    try:
+        preferred_username = str(
+            _EMAIL_ADAPTER.validate_python(preferred_username_raw)
+        ).lower()
+    except ValidationError:
+        _log_error(
+            "JWT preferred_username is not a valid email address; keys=%s",
+            sorted(claims.keys()),
+        )
+        raise ValueError("JWT claims preferred_username is not a valid email address")
 
-    username = email.split("@")[0].lower()
-    display_name = claims.get("name") or username
+    # Import here to avoid importing scheduler.logic during module load.
+    from scheduler.logic import scoped_user_id_from_identifier
+
+    username = scoped_user_id_from_identifier(preferred_username)
+    display_name = claims.get("name") or preferred_username
     groups = claims.get("groups") or []
     if isinstance(groups, str):
         groups = [groups]
 
     return SessionUser(
         username=username,
-        email=email,
+        email=preferred_username,
         display_name=display_name,
         groups=list(groups),
         claims=claims,

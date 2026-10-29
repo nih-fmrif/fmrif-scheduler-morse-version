@@ -114,7 +114,7 @@ test.describe('Real Entra sign-in (credentials)', () => {
       process.env.OAUTH_TEST_PASSWORD ?? '',
     );
     await waitForAppShell(page);
-    await expect(page.getByText(/logged in as/i)).toBeVisible();
+    await expect(page.locator('#user-menu-toggle')).toBeVisible();
   });
 });
 
@@ -138,6 +138,6 @@ test.describe('Real Entra sign-in (storage state)', () => {
 
     await page.goto('/');
     await waitForAppShell(page);
-    await expect(page.getByText(/logged in as/i)).toBeVisible();
+    await expect(page.locator('#user-menu-toggle')).toBeVisible();
   });
 });

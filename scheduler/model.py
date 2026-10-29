@@ -352,6 +352,31 @@ class UserDevice(Model):
     __table_args__ = (db.PrimaryKeyConstraint("researchercode", "scannercode"),)
 
 
+class RbacAuditLog(Model):
+    __tablename__ = "rbac_audit_log"
+
+    id: int = db.Column("auditid", db.BigInteger(), primary_key=True)
+    occurred_at: Any = db.Column(
+        "occurred_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    action: str = db.Column("action", db.Text(), nullable=False)
+    actor: str = db.Column("actor", db.String(20), nullable=False)
+    ip: Optional[str] = db.Column("ip_addr", db.String(64), nullable=True)
+    where_path: str = db.Column("where_path", db.Text(), nullable=False)
+    how: str = db.Column("how", db.String(32), nullable=False)
+    what: str = db.Column("what", db.Text(), nullable=False)
+
+    group: Optional[str] = db.Column("deptcode", db.String(10), nullable=True)
+    device: Optional[str] = db.Column("scannercode", db.String(5), nullable=True)
+    user: Optional[str] = db.Column("researchercode", db.String(20), nullable=True)
+    requester: Optional[str] = db.Column("requestercode", db.String(20), nullable=True)
+
+
 class SchedLogEntry(Model):
     """SchedLogEntry is a view that should always be used with a specified id"""
 

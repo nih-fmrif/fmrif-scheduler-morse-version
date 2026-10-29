@@ -13,7 +13,7 @@ nodejs = "18.*"
 scheduler = { path = ".", editable = true, extras = ["dev"] }
 
 [tasks]
-serve = "flask run --host 0.0.0.0 --port 5051"
+serve = "bash scripts/serve.sh"
 install-js = "npm ci --no-optional"
 install-playwright = "npx playwright install --with-deps"
 pre-commit-install = "pre-commit install"
@@ -24,7 +24,7 @@ install-browsers = "playwright install chromium"
 test-integration = "npx playwright test tests/playwright/integration"
 test-integration-headed = "npx playwright test tests/playwright/integration --headed"
 test-integration-ci = "npx playwright test tests/playwright/integration --reporter=dot"
-test-auth-flow-credentials = "env -u PLAYWRIGHT_STORAGE_STATE PLAYWRIGHT_AUTH_MODE=entra npx playwright test tests/playwright/integration tests/playwright/auth-flow/oauth.spec.ts --workers=1"
-test-auth-flow-storage-state = "bash -lc 'PLAYWRIGHT_AUTH_MODE=entra PLAYWRIGHT_STORAGE_STATE=\"${PLAYWRIGHT_STORAGE_STATE:-./playwright-auth.json}\" npx playwright test tests/playwright/integration tests/playwright/auth-flow/oauth.spec.ts --workers=1'"
+test-auth-flow-credentials = "env -u PLAYWRIGHT_STORAGE_STATE PLAYWRIGHT_AUTH_MODE=entra npx playwright test tests/playwright/auth-flow/oauth.spec.ts --workers=1"
+test-auth-flow-storage-state = "bash -lc 'PLAYWRIGHT_AUTH_MODE=entra PLAYWRIGHT_STORAGE_STATE=\"${PLAYWRIGHT_STORAGE_STATE:-./playwright-auth.json}\" npx playwright test tests/playwright/auth-flow/oauth.spec.ts --workers=1'"
 generate-auth-storage-state = "bash -lc 'PLAYWRIGHT_AUTH_MODE=entra PLAYWRIGHT_STORAGE_STATE=\"${PLAYWRIGHT_STORAGE_STATE:-./playwright-auth.json}\" npx playwright test tests/playwright/auth-flow/auth-storage.spec.ts --headed --workers=1'"
 test-live-incident = "PLAYWRIGHT_AUTH_MODE=entra npx playwright test tests/playwright/live-incident --workers=1"

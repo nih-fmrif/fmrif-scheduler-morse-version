@@ -13,7 +13,7 @@ def test_login_test_user_admin_profile(app_context):
         model.db.session.add(
             model.Group(id="admin", label="admin", description="Admin", active=True)
         )
-        model.db.session.commit()
+        model.db.session.flush()
 
     with app_context.test_request_context():
         user = login_test_user("admin")
@@ -168,7 +168,7 @@ def test_require_permission_admin_blocks(app, monkeypatch):
 def test_upsert_user_avoids_local_part_collisions(app_context):
     first = logic.upsert_user("alice", "alice@dept-one.example", "Alice One")
     second = logic.upsert_user("alice", "alice@dept-two.example", "Alice Two")
-    model.db.session.commit()
+    model.db.session.flush()
 
     assert first.id == "alice"
     assert first.addr == "alice@dept-one.example"
@@ -180,8 +180,44 @@ def test_upsert_user_avoids_local_part_collisions(app_context):
 def test_upsert_user_reuses_existing_record_for_same_email(app_context):
     first = logic.upsert_user("alias-one", "same.user@example.com", "Same User")
     second = logic.upsert_user("alias-two", "same.user@example.com", "Updated Name")
-    model.db.session.commit()
+    model.db.session.flush()
 
     assert second.id == first.id
     assert second.addr == "same.user@example.com"
     assert second.label == "Updated Name"
+
+
+def test_upsert_user_proactively_migrates_to_requested_id(app_context):
+    if model.Group.query.get("DEV") is None:
+        model.db.session.add(
+            model.Group(id="DEV", label="DEV", description="DEV", active=True)
+        )
+        model.db.session.flush()
+
+    legacy_id = "legacy-migrate"
+    email = "contact006@example.org"
+    target_id = logic.scoped_user_id_from_identifier(email)
+    assert legacy_id != target_id
+
+    model.db.session.add(
+        model.User(id=legacy_id, label="Legacy User", addr=email, active=True)
+    )
+    model.db.session.flush()
+    model.db.session.add(model.GroupMember(group="DEV", user=legacy_id))
+    model.db.session.flush()
+
+    migrated = logic.upsert_user(
+        target_id,
+        email,
+        "Migrated User",
+        migrate_to_requested_id=True,
+    )
+    model.db.session.flush()
+
+    assert migrated.id == target_id
+    assert model.GroupMember.query.get(("DEV", target_id)) is not None
+    assert model.GroupMember.query.get(("DEV", legacy_id)) is None
+
+    canonical = model.User.query.filter_by(addr=email).one_or_none()
+    assert canonical is not None
+    assert canonical.id == target_id

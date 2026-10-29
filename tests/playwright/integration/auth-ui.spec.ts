@@ -14,9 +14,12 @@ test.describe('Auth UI (Mock Profiles)', () => {
     }) => {
       await page.goto('/');
       await waitForAppShell(page);
-      await expect(page.getByText(/logged in as test-admin/i)).toBeVisible();
-      await expect(page.getByRole('link', { name: 'groups' })).toBeVisible();
-      await expect(page.getByRole('link', { name: 'join form' })).toBeVisible();
+      await expect(page.locator('#user-menu-toggle')).toContainText(/test-admin/i);
+      await expect(page.locator('[data-home-section="groups"]')).toBeVisible();
+      await expect(page.locator('[data-home-section="groups"] a.list-card').first()).toBeVisible();
+      await page.locator('#user-menu-toggle').click();
+      await expect(page.locator('.user-menu-panel').getByRole('link', { name: 'join form' })).toBeVisible();
+      await expect(page.locator('.user-menu-panel').getByRole('link', { name: 'email' })).toBeVisible();
 
       await page.goto('/auth/login');
       await expect(page).toHaveURL(/\/$/);
@@ -31,9 +34,11 @@ test.describe('Auth UI (Mock Profiles)', () => {
     }) => {
       await page.goto('/');
       await waitForAppShell(page);
-      await expect(page.getByText(/logged in as test-member/i)).toBeVisible();
-      await expect(page.getByRole('link', { name: 'groups' })).toBeVisible();
-      await expect(page.getByRole('link', { name: 'join form' })).toBeVisible();
+      await expect(page.locator('#user-menu-toggle')).toContainText(/test-member/i);
+      await expect(page.locator('[data-home-section="groups"]')).toBeVisible();
+      await page.locator('#user-menu-toggle').click();
+      await expect(page.locator('.user-menu-panel').getByRole('link', { name: 'join form' })).toBeVisible();
+      await expect(page.locator('.user-menu-panel').getByRole('link', { name: 'email' })).toBeVisible();
 
       await page.goto('/auth/login');
       await expect(page).toHaveURL(/\/$/);
@@ -46,9 +51,14 @@ test.describe('Auth UI (Mock Profiles)', () => {
     test('should hide active-user links', async ({ page }) => {
       await page.goto('/');
       await waitForAppShell(page);
-      await expect(page.getByText(/logged in as test-inactive/i)).toBeVisible();
-      await expect(page.getByRole('link', { name: 'groups' })).toHaveCount(0);
-      await expect(page.getByRole('link', { name: 'join form' })).toHaveCount(0);
+      await expect(page.locator('#user-menu-toggle')).toContainText(/test-inactive/i);
+      await expect(page.locator('[data-home-section="groups"]')).toContainText(
+        /Groups are available only to active users/i
+      );
+      await expect(page.locator('[data-home-section="groups"] a.list-card')).toHaveCount(0);
+      await page.locator('#user-menu-toggle').click();
+      await expect(page.locator('.user-menu-panel').getByRole('link', { name: 'join form' })).toHaveCount(0);
+      await expect(page.locator('.user-menu-panel').getByRole('link', { name: 'email' })).toBeVisible();
 
       await page.goto('/auth/login');
       await expect(page).toHaveURL(/\/$/);

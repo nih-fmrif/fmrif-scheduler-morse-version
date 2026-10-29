@@ -1,15 +1,17 @@
 {% extends "auth/base.html" %} {% block title %}Login{% endblock %} {% block
 body %}
 <div class="login-container">
-  <h1>Device Scheduler</h1>
+  <h1>FMRIF Scheduler</h1>
 
   {% with messages = get_flashed_messages(with_categories=true) %} {% if
   messages %}
-  <div class="flash-messages">
-    {% for category, message in messages %}
-    <div class="flash-{{ category }}">{{ message }}</div>
-    {% endfor %}
-  </div>
+  <section class="flash-messages" aria-label="status messages">
+    <ul>
+      {% for category, message in messages %}
+      <li class="msg-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  </section>
   {% endif %} {% endwith %}
 
   <div id="login-content">

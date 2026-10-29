@@ -32,7 +32,7 @@ def test_test_session_creates_profile_session(app_context, monkeypatch):
         model.db.session.add(
             model.Group(id="admin", label="admin", description="Admin", active=True)
         )
-        model.db.session.commit()
+        model.db.session.flush()
 
     client = app_context.test_client()
     response = client.post(
@@ -60,7 +60,7 @@ def test_test_session_delete_clears_session(app_context, monkeypatch):
         model.db.session.add(
             model.Group(id="admin", label="admin", description="Admin", active=True)
         )
-        model.db.session.commit()
+        model.db.session.flush()
 
     client = app_context.test_client()
     create_response = client.post(

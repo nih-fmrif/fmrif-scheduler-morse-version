@@ -143,12 +143,11 @@ def callback():
     if not user:
         if logger:
             logger.warning(
-                "OAuth token missing email claim (available_claims=%s, has_preferred_username=%s, has_upn=%s)",
+                "OAuth token missing preferred_username claim (available_claims=%s, has_preferred_username=%s)",
                 sorted(claims.keys()),
                 bool(claims.get("preferred_username")),
-                bool(claims.get("upn")),
             )
-        flash("Login failed. Missing email claim.", "error")
+        flash("Login failed. Missing preferred_username claim.", "error")
         return redirect(url_for("auth.login"))
     if logger:
         logger.info("OAuth login succeeded")

@@ -1,39 +1,46 @@
-# Used for developer purposes only
-name: scheduler
 services:
   postgres:
-    container_name: scheduler-postgres
     image: postgres:15
     environment:
       PGUSER: ${PGUSER}
       PGPASSWORD: ${PGPASSWORD}
-      POSTGRES_PASSWORD: ${PGPASSWORD}
       PGDATABASE: ${PGDATABASE}
+    entrypoint:
+      - /usr/local/bin/postgres-entrypoint.sh
+    command:
+      - postgres
     ports:
-      - "${PGPORT}:5432"
+      - "${PGPORT:-5444}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres" ]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 18
+      start_period: 180s
     volumes:
       - ./sql:/sql
       - ./sql/000-init.sh:/docker-entrypoint-initdb.d/000-init.sh:ro
+      - ./scripts/postgres-entrypoint.sh:/usr/local/bin/postgres-entrypoint.sh:ro
+      - ${SCHEDULER_RUNTIME_ENV_FILE:-./.env}:/app/.env:ro
       - scheduler_pgdata:/var/lib/postgresql/data
 
   scheduler:
-    container_name: scheduler
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - .env
+      - ${SCHEDULER_COMPOSE_ENV_FILE:-.env}
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      SERVER__SERVER_NAME: "localhost:${APP_PORT:-5051}"
     ports:
-      - "5051:5051"
+      - "${APP_PORT:-5051}:5051"
 
     volumes:
       - ./scheduler:/app/scheduler
-      - ./.env:/app/.env:ro
+      - ./sql:/sql:ro
+      - ${SCHEDULER_RUNTIME_ENV_FILE:-./.env}:/app/.env:ro
     depends_on:
       postgres:
         condition: service_healthy

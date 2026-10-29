@@ -1,0 +1,194 @@
+{% extends "page.html" %} {% block title %}RBAC{% endblock %} {% block body %}
+<article
+  class="rbac-explorer"
+  data-rbac-explorer
+  data-endpoint="{{ url_for('rbac_explorer_data') }}"
+  data-mutation-endpoint="{{ url_for('rbac_explorer_mutate') }}"
+  data-audit-endpoint="{{ url_for('rbac_explorer_audit') if can_view_audit else '' }}"
+  data-initial-scope="{{ initial_scope }}"
+  data-initial-entity="{{ initial_entity }}"
+  data-initial-active="{{ '1' if initial_include_inactive else '0' }}"
+  data-initial-create="{{ initial_create }}"
+  aria-labelledby="rbac-title"
+>
+  {{ csrf_form.csrf_token(id="rbac-csrf-token") }}
+  <header class="rbac-explorer-header">
+    <h1 id="rbac-title">RBAC Explorer</h1>
+    <p>
+      Review relationships between users, groups, devices, and permissions, then
+      apply compact inline updates in-place.
+    </p>
+  </header>
+
+  <section class="rbac-controls-panel" aria-labelledby="rbac-controls-title">
+    <h2 id="rbac-controls-title">Explorer Controls</h2>
+    <form class="rbac-controls" action="#" method="get">
+      <label for="rbac-scope">view by</label>
+      <select id="rbac-scope" name="scope">
+        {% for scope_id, label in scope_labels.items() %}
+        <option value="{{ scope_id }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="rbac-entity-search">find entity</label>
+      <div class="rbac-entity-picker">
+        <input
+          id="rbac-entity-search"
+          type="search"
+          autocomplete="off"
+          placeholder="type id, label, or partial text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded="false"
+          aria-controls="rbac-entity-list"
+        />
+        <input id="rbac-entity" name="entity" type="hidden" />
+        <ul id="rbac-entity-list" class="rbac-entity-list" role="listbox"></ul>
+      </div>
+
+      <label for="rbac-include-inactive">include inactive</label>
+      <input
+        id="rbac-include-inactive"
+        name="active"
+        type="checkbox"
+        value="1"
+        {%
+        if
+        not
+        can_include_inactive
+        %}disabled{%
+        endif
+        %}
+      />
+
+      <div class="rbac-controls-actions">
+        <button
+          id="rbac-add-group"
+          type="button"
+          {%
+          if
+          not
+          can_create_group
+          %}disabled{%
+          endif
+          %}
+        >
+          + add group
+        </button>
+        <button
+          id="rbac-add-device"
+          type="button"
+          {%
+          if
+          not
+          can_create_device
+          %}disabled{%
+          endif
+          %}
+        >
+          + add device
+        </button>
+      </div>
+    </form>
+    <p id="rbac-entity-hint" class="rbac-entity-hint"></p>
+    <p id="rbac-status" class="rbac-status" role="status" aria-live="polite">
+      Loading RBAC relationships...
+    </p>
+  </section>
+
+  <section class="rbac-graph-panel" aria-labelledby="rbac-graph-title">
+    <h2 id="rbac-graph-title">Relationship Map</h2>
+    <p class="rbac-graph-note">
+      Left side points into the selected entity. Right side points away from it.
+    </p>
+    <div class="rbac-graph">
+      <div class="rbac-graph-column rbac-graph-column-sources">
+        <h3 id="rbac-sources-title"></h3>
+        <ul id="rbac-sources"></ul>
+      </div>
+      <div class="rbac-graph-focus">
+        <h3>Selected</h3>
+        <p id="rbac-focus"></p>
+      </div>
+      <div class="rbac-graph-column rbac-graph-column-targets">
+        <h3 id="rbac-targets-title"></h3>
+        <ul id="rbac-targets"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="rbac-matrix-panel" aria-labelledby="rbac-matrices-title">
+    <h2 id="rbac-matrices-title">Review And Update</h2>
+    <p class="rbac-matrix-note">
+      Linked and active rows are shown first. Edit fields directly and apply
+      updates atomically per table.
+    </p>
+    <div id="rbac-matrices"></div>
+  </section>
+
+  <section class="rbac-audit-panel" aria-labelledby="rbac-audit-title">
+    <h2 id="rbac-audit-title">RBAC Audit</h2>
+    {% if can_view_audit %}
+    <p id="rbac-audit-note" class="rbac-audit-note">
+      Loading recent RBAC audit activity...
+    </p>
+    {% else %}
+    <p id="rbac-audit-note" class="rbac-audit-note">
+      RBAC audit visibility is restricted to admins.
+    </p>
+    {% endif %}
+    <ol id="rbac-audit-list" class="rbac-audit-list"></ol>
+  </section>
+
+  <noscript>
+    <section aria-labelledby="rbac-noscript-title">
+      <h2 id="rbac-noscript-title">No JavaScript Fallback</h2>
+      <p>
+        The consolidated RBAC admin workflow requires JavaScript to render
+        relationship maps and atomic matrix updates.
+      </p>
+      <p>Enable JavaScript to continue.</p>
+    </section>
+  </noscript>
+</article>
+<section id="rbac-modal" class="rbac-modal" hidden aria-hidden="true">
+  <div class="rbac-modal-backdrop" data-rbac-modal-close></div>
+  <div
+    class="rbac-modal-card"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="rbac-modal-title"
+  >
+    <header class="rbac-modal-header">
+      <h2 id="rbac-modal-title"></h2>
+      <button
+        id="rbac-modal-close"
+        type="button"
+        aria-label="close dialog"
+        data-rbac-modal-close
+      >
+        x
+      </button>
+    </header>
+    <form id="rbac-modal-form" class="rbac-modal-form" action="#" method="post">
+      <div id="rbac-modal-fields" class="rbac-modal-fields"></div>
+      <p id="rbac-modal-error" class="rbac-modal-error" role="alert"></p>
+      <div class="rbac-modal-actions">
+        <button id="rbac-modal-cancel" type="button" data-rbac-modal-close>
+          cancel
+        </button>
+        <button id="rbac-modal-submit" type="submit">apply</button>
+      </div>
+    </form>
+  </div>
+</section>
+<datalist id="rbac-institutes-options">
+  {% for institute_id, institute_label in institutes %}
+  <option value="{{ institute_id }}">{{ institute_label }}</option>
+  {% endfor %}
+</datalist>
+<script
+  type="module"
+  src="{{ url_for('static', filename='js/rbac-explorer.js') }}"
+></script>
+{% endblock %}

@@ -17,15 +17,15 @@ from route_contract import (
 from route_seed import seeded_dev_user_id, seeded_scanner_id, seeded_sched_log_id
 
 from scheduler import model
-from scheduler.app import app
+from scheduler.auth import views as auth_views
 from scheduler.config import settings
 
 pytestmark = pytest.mark.route
 
 
-def _registered_route_methods() -> dict[str, set[str]]:
+def _registered_route_methods(route_app) -> dict[str, set[str]]:
     registered: dict[str, set[str]] = {}
-    for rule in app.url_map.iter_rules():
+    for rule in route_app.url_map.iter_rules():
         if rule.endpoint == "static":
             continue
         methods = {m for m in rule.methods if m not in {"HEAD", "OPTIONS"}}
@@ -97,21 +97,20 @@ def _rbac_mutating_route_cases() -> list[tuple[str, str, str]]:
 
 def _seed_rbac_contract_data() -> None:
     scanner_id = seeded_scanner_id()
-    with app.app_context():
-        # RBAC contract paths for template edit routes depend on a concrete template id.
-        existing = model.Template.query.get(("A", scanner_id))
-        if existing is not None:
-            return
-        model.db.session.add(
-            model.Template(
-                id="A",
-                device=scanner_id,
-                label="RBAC Template",
-                description="RBAC contract seed",
-                hidden=False,
-            )
+    # RBAC contract paths for template edit routes depend on a concrete template id.
+    existing = model.Template.query.get(("A", scanner_id))
+    if existing is not None:
+        return
+    model.db.session.add(
+        model.Template(
+            id="A",
+            device=scanner_id,
+            label="RBAC Template",
+            description="RBAC contract seed",
+            hidden=False,
         )
-        model.db.session.commit()
+    )
+    model.db.session.flush()
 
 
 def _resolve_seeded_device_sample_path(sample_path: str) -> str:
@@ -131,8 +130,8 @@ def _resolve_seeded_device_sample_path(sample_path: str) -> str:
     return resolved
 
 
-def _client_for_profile(profile: str):
-    client = app.test_client()
+def _client_for_profile(profile: str, route_app):
+    client = route_app.test_client()
     response = client.post(
         "/auth/test/session",
         json={"profile": profile},
@@ -149,6 +148,8 @@ def _client_for_profile(profile: str):
 def _enable_mock_auth(monkeypatch):
     monkeypatch.setattr(settings.auth_test, "enabled", True)
     monkeypatch.setattr(settings.auth_test, "shared_secret", "unit-secret")
+    monkeypatch.setattr(settings.security, "auth_rate_limit_max_requests", 100000)
+    auth_views._AUTH_RATE_LIMIT_BUCKETS.clear()
 
 
 def _covers_route_markers_from_tests() -> set[tuple[str, str]]:
@@ -188,8 +189,8 @@ def _covers_route_markers_from_tests() -> set[tuple[str, str]]:
     return covered
 
 
-def test_route_contract_tracks_all_registered_route_methods():
-    registered = _registered_route_methods()
+def test_route_contract_tracks_all_registered_route_methods(route_app):
+    registered = _registered_route_methods(route_app)
     expected = _expected_route_methods()
 
     missing_rules = sorted(set(registered) - set(expected))
@@ -306,10 +307,10 @@ def test_rbac_mutating_contract_tracks_all_protected_mutating_route_methods():
     _route_method_cases(),
     ids=[f"{method} {rule}" for rule, method in _route_method_cases()],
 )
-def test_route_contract_smoke(rule: str, method: str):
+def test_route_contract_smoke(rule: str, method: str, route_app):
     expectation = ROUTE_EXPECTATIONS[rule]
 
-    client = app.test_client()
+    client = route_app.test_client()
     request_fn = getattr(client, method.lower())
     response = request_fn(
         expectation.sample_path,
@@ -326,13 +327,13 @@ def test_route_contract_smoke(rule: str, method: str):
     _rbac_route_cases(),
     ids=[f"{role} {rule}" for rule, role in _rbac_route_cases()],
 )
-def test_rbac_get_contract(rule: str, role: str):
+def test_rbac_get_contract(rule: str, role: str, route_app, route_app_context):
     _seed_rbac_contract_data()
     expectation = RBAC_GET_EXPECTATIONS[rule]
     if rule == "/device/<the_device>/users/<the_user>":
         # Ensure at least one DEV user exists for this concrete sample path.
-        _client_for_profile("dev")
-    client = _client_for_profile(role)
+        _client_for_profile("dev", route_app)
+    client = _client_for_profile(role, route_app)
 
     response = client.get(
         _resolve_seeded_device_sample_path(expectation.sample_path),
@@ -346,8 +347,6 @@ def test_rbac_get_contract(rule: str, role: str):
         except AssertionError:
             expected_status = 404
     assert response.status_code == expected_status
-    with app.app_context():
-        model.db.session.rollback()
 
 
 @pytest.mark.parametrize(
@@ -357,10 +356,12 @@ def test_rbac_get_contract(rule: str, role: str):
         f"{role} {method} {rule}" for rule, method, role in _rbac_mutating_route_cases()
     ],
 )
-def test_rbac_mutating_contract(rule: str, method: str, role: str):
+def test_rbac_mutating_contract(
+    rule: str, method: str, role: str, route_app, route_app_context
+):
     _seed_rbac_contract_data()
     expectation = RBAC_MUTATING_EXPECTATIONS[(rule, method)]
-    client = _client_for_profile(role)
+    client = _client_for_profile(role, route_app)
     request_fn = getattr(client, expectation.method.lower())
 
     response = request_fn(
@@ -373,8 +374,6 @@ def test_rbac_mutating_contract(rule: str, method: str, role: str):
         assert response.status_code != 403
     else:
         assert response.status_code == 403
-    with app.app_context():
-        model.db.session.rollback()
 
 
 def test_mutating_route_methods_have_explicit_behavior_policy():
@@ -414,8 +413,7 @@ def test_required_behavior_route_methods_have_marked_tests():
     )
 
 
-def test_robots_txt_body_shape():
-    client = app.test_client()
-    response = client.get("/robots.txt")
+def test_robots_txt_body_shape(route_client):
+    response = route_client.get("/robots.txt")
     assert response.status_code == 200
     assert "Disallow: /" in response.get_data(as_text=True)

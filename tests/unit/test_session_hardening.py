@@ -71,7 +71,11 @@ def test_persist_user_updates_session_identity_from_db_record(monkeypatch):
         label="Scoped User",
     )
 
-    monkeypatch.setattr(session_helpers, "upsert_user", lambda *_: persisted)
+    def _mock_upsert(*_, **kwargs):
+        assert kwargs.get("migrate_to_requested_id") is True
+        return persisted
+
+    monkeypatch.setattr(session_helpers, "upsert_user", _mock_upsert)
     monkeypatch.setattr(session_helpers.model.db.session, "commit", lambda: None)
 
     with app.test_request_context("/"):

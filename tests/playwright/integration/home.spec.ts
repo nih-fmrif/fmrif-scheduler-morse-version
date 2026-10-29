@@ -17,6 +17,7 @@ test.describe('Home Page', () => {
   });
 
   test('should log out and redirect to login page', async ({ page }) => {
+    await homePage.openUserMenu();
     await page.getByRole('button', { name: 'Logout' }).click();
     await expect(page).toHaveURL(/\/auth\/login(?:\?.*)?$/);
     await expect(page.getByRole('button', { name: /Login with NIH Credentials/i })).toBeVisible();

@@ -69,10 +69,9 @@ test.describe('Technologist Join Access', () => {
 
     test('should deny /join/tech for users outside DEV', async ({ page }) => {
       await page.goto('/join/tech');
+      await expect(page.getByRole('heading', { name: /access denied/i })).toBeVisible();
       await expect(
-        page.getByText(
-          /Only DEV members who have not become technologists already may access this form/i
-        )
+        page.getByText(/The application administrators have been notified/i)
       ).toBeVisible();
     });
   });
@@ -97,10 +96,9 @@ test.describe('Technologist Join Access', () => {
 
     test('should deny /join/tech for users already on technologist list', async ({ page }) => {
       await page.goto('/join/tech');
+      await expect(page.getByRole('heading', { name: /access denied/i })).toBeVisible();
       await expect(
-        page.getByText(
-          /Only DEV members who have not become technologists already may access this form/i
-        )
+        page.getByText(/The application administrators have been notified/i)
       ).toBeVisible();
     });
   });

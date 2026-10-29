@@ -7,21 +7,34 @@ use of python types to validate the configuration. It is a powerful, concise,
 and flexible approach to organizing configuration. It can be overwritten during
 development/deployment using .env files or environment variables.
 
-In order to further organize the configuration we have broken it down into
-different classes that are nested in the main configuration class. In python
-this is easy to understand and work with; however, it results in a slightly odd
-naming patter in the .env files or environment variables when overwriting the
-defaults. Each nested class is prepended to the variable name with a double
-underscore connection e.g. the "user" that is part of the "database" class can be
-overwritten with the environment variable "DATABASE__USER".
+For organized settings, values are grouped into nested config blocks, so most
+namespaced settings use `SECTION__VALUE` (for example `CORE__SECRET_KEY`).
+
+Database credentials are intentionally top-level `PG*` variables so they are shared
+between application runtime and the SQL bootstrap script without extra mapping.
+
+Bootstrap dataflow uses three stable stages:
+
+- Base schema migration
+- Snapshot data import (client-provided dump via `SQL_SEED_DUMP_FILE`)
+- Relationship hydration import (CSV mappings into auth/relationship tables)
 
 Running `setup-dotenv.sh` will create an .env file (from .env.sample.local) in the root of the project
 with the default values. This file can be modified to set the desired values for
 the environment.
+The script also replaces the auth-test shared-secret placeholder with a random per-worktree value.
 
-Note that CI and local development use the .env.docker files instantiated from
-.env.sample files. These can be ignored unless you are working on the CI/CD
-pipeline.
+Run `./run-compose.sh --check` to validate env and compose inputs before starting containers.
+For network/port semantics when the app runs inside or outside containers, see
+[`containerized-postgres.md`](containerized-postgres.md).
+
+`run-compose.sh` also neutralizes Docker Compose `$`-interpolation edge cases by generating a
+minimal temp env file for compose metadata (`APP_PORT`, `PGPORT`) while passing the
+full raw `.env` only as application config. If you run `docker compose` directly,
+values in `.env` containing `$` may still trigger interpolation warnings.
+
+CI and local development use the root `.env` file created from `.env.sample.local`.
+`.env.docker` is no longer required for this workflow.
 
 Some useful variables that one might consider setting are listed below.
 
@@ -37,30 +50,51 @@ FLASK_ENV=development
 
 #### Server Settings
 ```env
-SERVER__SERVER_NAME=localhost:5051
+APP_PORT=5051
+# Optional: usually leave unset in local workflows.
+# In compose mode, SERVER__SERVER_NAME is derived from APP_PORT.
+# SERVER__SERVER_NAME=localhost:5051
+# Optional: isolate docker-compose resources across worktrees.
+# COMPOSE_PROJECT_NAME=scheduler-worktree-name
 SERVER__APPLICATION_ROOT=
 ```
 
+For local development, treat `APP_PORT` as the source of truth for app port wiring.
+`run-compose.sh --check` warns when local `SERVER__SERVER_NAME` or `PLAYWRIGHT_BASE_URL`
+conflicts with `APP_PORT`.
+
 #### Database Settings
 ```env
-DATABASE__HOST=postgres
-DATABASE__PORT=5432
-DATABASE__USER=postgres
-DATABASE__PASSWORD=postgres
-DATABASE__DB=scheduler
+PGHOST=localhost
+PGPORT=5444
+PGUSER=postgres
+PGPASSWORD=password
+PGDATABASE=fmrif_scheduler
 ```
 
-#### Authentication Settings
+For containerized startup via `run-compose.sh`, PostgreSQL credentials are loaded inside
+the container from `.env` by the wrapper script (`scripts/postgres-entrypoint.sh`),
+which then sets the image-required `POSTGRES_*` variables.
+
+To run multiple compose stacks on the same host, set `COMPOSE_PROJECT_NAME` so
+compose resource names (`scheduler` service containers, volumes, network) stay
+isolated. If you leave it unset, `run-compose.sh` derives a default project
+name from `<workdir>-<APP_PORT>`.
+
 ```env
-## LDAP Settings (when not in superuser mode)
-LDAP__HOST=ldap
-LDAP__PORT=389
-LDAP__USE_SSL=false
-LDAP__BIND_DN=cn=read-only-admin,dc=example,dc=com
-
-## Superuser Mode
-RBAC__SUPERUSER_MODE=true
+COMPOSE_PROJECT_NAME=scheduler-worktree-01
 ```
+
+For Playwright integration tests, local `PLAYWRIGHT_BASE_URL` is optional.
+If unset (recommended), local runs derive/sync the port from `APP_PORT`.
+
+### Test Database Override
+
+```env
+SCHEDULER_TEST_DB_NAME=fmrif_scheduler_test
+```
+
+Use a unique value per worktree or CI job when running suites in parallel.
 
 #### Mail Settings
 ```env
@@ -73,7 +107,7 @@ MAIL__PASSWORD=test
 ### Deployment Specific Configuration
 
 1. **Docker Environment**
-   - Uses `.env.docker`
+   - Uses `.env` (or a copied variant per worktree)
    - Services communicate via Docker network
    - Database host is `postgres`
 

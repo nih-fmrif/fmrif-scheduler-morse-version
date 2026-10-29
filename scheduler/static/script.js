@@ -494,10 +494,11 @@ function wire_log_buttons() {
 }
 
 class Grid {
-  constructor(container, table, cells) {
+  constructor(container, table, cells, onSelect = null) {
     this.container = container;
     this.table = table;
     this.cells = cells;
+    this.onSelect = onSelect;
     const firstRow = this.firstVisibleRow();
     this.setRow(firstRow);
     this.setCol(firstRow >= 0 ? 0 : -1);
@@ -687,6 +688,9 @@ class Grid {
 
     this.setRow(row);
     this.setCol(col);
+    if (this.onSelect) {
+      this.onSelect(row, col, this.selectedCell());
+    }
     return true;
   }
   focus(row, col, force = false) {
@@ -771,6 +775,9 @@ function editor_grid() {
     return;
   }
   const editor = container.querySelector(":scope>table");
+  editor
+    .querySelectorAll("entry-cell")
+    .forEach((entry) => (entry.dataset.active = "false"));
 
   // create matrix indexing cells by (row, col)
   // and add extra attributes while we're in there
@@ -786,7 +793,26 @@ function editor_grid() {
     });
   });
 
-  const grid = new Grid(container, editor, cells);
+  let activeCell = null;
+  const grid = new Grid(container, editor, cells, (row, col, selected) => {
+    if (activeCell != null && activeCell !== selected) {
+      const oldEntry = activeCell.querySelector("entry-cell");
+      if (oldEntry) {
+        oldEntry.dataset.active = "false";
+      }
+    }
+    activeCell = selected;
+    const entry = selected?.querySelector("entry-cell") ?? null;
+    if (entry != null) {
+      entry.dataset.active = "true";
+    }
+    editor.dispatchEvent(
+      new CustomEvent("grid_selection", {
+        bubbles: true,
+        detail: { row, col, cell: selected, entry },
+      }),
+    );
+  });
 
   // we use these when handling tab from within the grid
   const [focusableBefore, focusableAfter] = focusables_around(container);
@@ -955,6 +981,7 @@ function editor_grid() {
     }
     evt.preventDefault();
   });
+  grid.select(...grid.pos());
   editor.setAttribute("role", "grid");
   container.classList.add("js-grid");
 }
@@ -1165,6 +1192,10 @@ class Cell {
     this.member = elm.querySelector("input[id^=mem-]");
     this.legend = elm.querySelector("entry-legend");
     this.resetBtn = elm.querySelector("button[data-reset]");
+    this.summaryKind = elm.dataset.summaryKind ?? "schedule";
+    this.summaryPrimary = elm.querySelector(".entry-summary-primary");
+    this.summarySecondary = elm.querySelector(".entry-summary-secondary");
+    this.summaryTertiary = elm.querySelector(".entry-summary-tertiary");
 
     this.id = elm.dataset.id;
 
@@ -1191,6 +1222,7 @@ class Cell {
       new SupportRequestSubForm(sr, this, cfg),
     ]);
     this.sr = Object.fromEntries(kv);
+    this.update_summary();
 
     // nothing further to do unless this is an editable cell
     if (!this.editable) {
@@ -1315,6 +1347,7 @@ class Cell {
       sr.reset();
     }
     this.update_list();
+    this.update_summary();
     this.fire_change();
   }
   update_list() {
@@ -1342,6 +1375,54 @@ class Cell {
       : "none";
     this.legend.classList.add(`${classPrefix}${token}`);
   }
+  update_summary() {
+    if (
+      !this.summaryPrimary &&
+      !this.summarySecondary &&
+      !this.summaryTertiary
+    ) {
+      return;
+    }
+    const group = this.group.value || "open";
+    const member = this.member.value || "unassigned";
+    if (this.summaryPrimary) {
+      this.summaryPrimary.innerText = group;
+    }
+    if (this.summarySecondary) {
+      this.summarySecondary.innerText = member;
+    }
+
+    if (this.summaryTertiary) {
+      if (this.summaryKind == "template") {
+        const institute = this.institute?.value || "none";
+        this.summaryTertiary.innerText = `institute: ${institute}`;
+      } else {
+        const support = [];
+        if (this.sr.tech?.requested.checked) {
+          support.push("tech");
+        }
+        if (this.sr.train?.requested.checked) {
+          support.push("training");
+        }
+        if (this.sr.med?.requested.checked) {
+          support.push("medical");
+        }
+        if (support.length > 0) {
+          this.summaryTertiary.innerText = `support: ${support.join(", ")}`;
+        } else {
+          this.summaryTertiary.innerText = "no support requests";
+        }
+      }
+    }
+
+    const tooltip = [`group: ${group}`, `member: ${member}`];
+    if (this.summaryKind == "template") {
+      tooltip.push(`institute: ${this.institute?.value || "none"}`);
+    } else {
+      tooltip.push(this.summaryTertiary?.innerText || "no support requests");
+    }
+    this.elm.title = tooltip.join("; ");
+  }
   fire_change() {
     this.elm.dispatchEvent(
       new CustomEvent("cell_change", {
@@ -1353,9 +1434,10 @@ class Cell {
   update() {
     this.update_list();
     this.update_swatch();
-    this.fire_change();
+    this.update_summary();
     this.elm.dataset.changed = this.changed;
     this.elm.dataset.error = this.changed && this.invalid;
+    this.fire_change();
   }
   resetAndLock() {
     // this cell was submitted to and rejected by the server
@@ -1589,6 +1671,12 @@ function fmt_save_results(data, cells, human_hours) {
   acc.push("please review before resubmitting</p><dl>");
   for (const [id, errs] of errors) {
     const cell = cells.get(id);
+    if (cell == null) {
+      acc.push(
+        `<dt>entry ${id}</dt><dd>this entry was not loaded in the current view; refresh and retry</dd>`,
+      );
+      continue;
+    }
     // prevent future edits to this cell
     cell.resetAndLock();
     acc.push(`<dt>${humanize_date_if_needed(cell.date)}: `);
@@ -1641,13 +1729,18 @@ function fmt_save_results(data, cells, human_hours) {
 }
 
 function wire_cell_editors() {
-  const container = document.querySelector(".editor #scroll-container tbody");
+  const scrollContainer = document.querySelector(".editor #scroll-container");
+  const container = scrollContainer?.querySelector("tbody");
   if (container == null) {
     return;
   }
-  const templateEditor = document
-    .querySelector("form.editor")
-    .classList.contains("template-editor");
+  const form = document.querySelector("form.editor");
+  const templateEditor = form.classList.contains("template-editor");
+  const scheduleLoad = json_from_script_or("schedule-load-config", null);
+  const remoteScheduleRows =
+    scheduleLoad != null &&
+    typeof scheduleLoad.endpoint == "string" &&
+    typeof scheduleLoad.start == "string";
 
   // if this is missing, we're on a template page so everything is true
   const perms = json_from_script_or("user-perms", {
@@ -1690,33 +1783,370 @@ function wire_cell_editors() {
     },
   };
 
-  // create a map of id => Cell from the entry-cell tags in the grid
-  const cells = new Map(
-    [...container.querySelectorAll("td entry-cell")].map((elm) => {
-      const cell = new Cell(elm, cfg);
-      return [cell.id, cell];
-    }),
-  );
-
   // keep track of changed and invalid cells
+  const cells = new Map();
   const changed = new Set();
   const any_changed = () => Boolean(changed.size);
   const invalid = new Set();
   const any_invalid = () => Boolean(invalid.size);
   const changedInvalid = new Set();
-  // no cells can be changed yet but they could have come invalid
-  for (const cell of cells.entries()) {
-    if (cell.invalid) {
-      invalid.add(cell);
-    }
-  }
 
   // keep caption in sync with cell updates
   const caption = document.querySelector("#caption");
   const update_caption = (which, bool) => {
     caption.dataset[which] = from_bool(bool);
   };
+  const inspector = {
+    target: document.querySelector(".editor-inspector-target"),
+    summary: document.querySelector(".editor-inspector-summary"),
+    mode: document.querySelector(".editor-inspector-mode"),
+    pending: document.querySelector(".editor-inspector-pending"),
+    errors: document.querySelector(".editor-inspector-errors"),
+  };
+  const loadStatus = document.querySelector("#editor-load-status");
+  const rows = [...container.querySelectorAll("tr[data-hour]")];
+  const rowsByHour = new Map(rows.map((row) => [row.dataset.hour, row]));
+  const dayHeaders = [
+    ...scrollContainer.querySelectorAll("thead th:not(:first-child)"),
+  ].map((elm) => elm.innerText.trim());
+  let activeEntry = null;
+
+  for (const row of rows) {
+    if (!remoteScheduleRows || row.querySelector("entry-cell")) {
+      row.dataset.loaded = "true";
+    } else {
+      row.dataset.loaded = "false";
+    }
+  }
+
+  const update_inspector_counts = () => {
+    if (inspector.pending) {
+      const suffix = changed.size == 1 ? "" : "s";
+      inspector.pending.innerText = `${changed.size} change${suffix}`;
+    }
+    if (inspector.errors) {
+      inspector.errors.innerText = String(changedInvalid.size);
+    }
+  };
+
+  const update_inspector_selection = (entry) => {
+    if (!entry) {
+      return;
+    }
+    if (inspector.target) {
+      const date = humanize_date_if_needed(entry.dataset.date ?? "");
+      const hour =
+        human_hours?.[entry.dataset.hour] ?? entry.dataset.hour ?? "";
+      inspector.target.innerText = `${date}, ${hour}`;
+    }
+    if (inspector.summary) {
+      const primary =
+        entry.querySelector(".entry-summary-primary")?.innerText ?? "open";
+      const secondary =
+        entry.querySelector(".entry-summary-secondary")?.innerText ??
+        "unassigned";
+      const tertiary = entry.querySelector(
+        ".entry-summary-tertiary",
+      )?.innerText;
+      const pieces = [primary, secondary];
+      if (tertiary) {
+        pieces.push(tertiary);
+      }
+      inspector.summary.innerText = pieces.join(" | ");
+    }
+    if (inspector.mode) {
+      if (entry.dataset.locked == "true") {
+        inspector.mode.innerText = "locked";
+      } else if (entry.dataset.canEdit == "true") {
+        inspector.mode.innerText = "editable";
+      } else {
+        inspector.mode.innerText = "read only";
+      }
+    }
+  };
+
+  const update_inspector_empty = (row, col) => {
+    if (!row) {
+      return;
+    }
+    if (inspector.target) {
+      const hour = human_hours?.[row.dataset.hour] ?? row.dataset.hour ?? "";
+      const day = dayHeaders[col] ?? "";
+      inspector.target.innerText = `${day}, ${hour}`.replace(/^,\s*/, "");
+    }
+    if (inspector.summary) {
+      inspector.summary.innerText = "no sched entry for this slot";
+    }
+    if (inspector.mode) {
+      inspector.mode.innerText = "read only";
+    }
+  };
+
+  const update_load_status = () => {
+    if (!loadStatus) {
+      return;
+    }
+    const total = rows.length;
+    const hydrated = rows.filter(
+      (row) => row.dataset.hydrated == "true",
+    ).length;
+    if (total == 0) {
+      loadStatus.hidden = true;
+      return;
+    }
+    if (hydrated < total) {
+      loadStatus.innerText = `progressive loading: ${hydrated} of ${total} rows ready`;
+    } else {
+      loadStatus.innerText = `all ${total} rows ready`;
+    }
+  };
+
+  const load_rows = async (hoursToLoad) => {
+    if (!remoteScheduleRows) {
+      return;
+    }
+
+    const requested = [];
+    for (const h of hoursToLoad) {
+      const hour = String(h);
+      const row = rowsByHour.get(hour);
+      if (
+        !row ||
+        row.dataset.loaded == "true" ||
+        row.dataset.loading == "true"
+      ) {
+        continue;
+      }
+      row.dataset.loading = "true";
+      requested.push(hour);
+    }
+    if (requested.length == 0) {
+      return;
+    }
+
+    const chunks = [];
+    for (let i = 0; i < requested.length; i += 12) {
+      chunks.push(requested.slice(i, i + 12));
+    }
+
+    for (const chunk of chunks) {
+      try {
+        const url = new URL(scheduleLoad.endpoint, window.location.href);
+        url.searchParams.set("start", scheduleLoad.start);
+        url.searchParams.set("days", String(scheduleLoad.days));
+        url.searchParams.set("hours", chunk.join(","));
+
+        const resp = await fetch(url.toString(), {
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        if (!resp.ok) {
+          throw new Error(`api returned ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        const payloadRows = Array.isArray(data.rows) ? data.rows : [];
+        const payloadByHour = new Map(
+          payloadRows.map((row) => [String(row.hour), row]),
+        );
+
+        for (const hour of chunk) {
+          const row = rowsByHour.get(hour);
+          if (!row) {
+            continue;
+          }
+          const payload = payloadByHour.get(hour);
+          const slots = [...row.querySelectorAll("td")];
+          const cells = Array.isArray(payload?.cells) ? payload.cells : [];
+          for (let i = 0; i < slots.length; i++) {
+            const markup = typeof cells[i] == "string" ? cells[i] : "";
+            slots[i].innerHTML = markup;
+          }
+          row.dataset.loaded = "true";
+          row.dataset.loading = "false";
+          row.querySelectorAll("entry-cell").forEach((entry) => {
+            if (!("active" in entry.dataset)) {
+              entry.dataset.active = "false";
+            }
+          });
+        }
+      } catch (err) {
+        for (const hour of chunk) {
+          const row = rowsByHour.get(hour);
+          if (!row) {
+            continue;
+          }
+          row.dataset.loading = "false";
+        }
+        if (loadStatus) {
+          const msg = err instanceof Error ? err.message : "unknown";
+          loadStatus.innerText = `error loading schedule rows: ${msg}`;
+        }
+      }
+    }
+  };
+
+  const ensure_cell = (entry) => {
+    if (!entry) {
+      return null;
+    }
+    const id = entry.dataset.id;
+    if (!id) {
+      return null;
+    }
+    const preexisting = cells.get(id);
+    if (preexisting) {
+      return preexisting;
+    }
+
+    const cell = new Cell(entry, cfg);
+    cells.set(id, cell);
+    if (cell.invalid) {
+      invalid.add(cell);
+    }
+    if (cell.changed) {
+      changed.add(cell);
+      if (cell.invalid) {
+        changedInvalid.add(cell);
+      }
+    }
+    update_caption("error", any_invalid());
+    update_caption("changed", any_changed());
+    update_inspector_counts();
+    return cell;
+  };
+
+  const hydrate_rows = async (targets) => {
+    const rowsToHydrate = targets.filter(
+      (row) => row && row.dataset.hydrated != "true",
+    );
+    if (rowsToHydrate.length == 0) {
+      return;
+    }
+
+    const hours = rowsToHydrate
+      .map((row) => row.dataset.hour)
+      .filter((hour) => typeof hour == "string");
+    if (hours.length > 0) {
+      await load_rows(hours);
+    }
+
+    for (const row of rowsToHydrate) {
+      if (row.dataset.loaded != "true") {
+        continue;
+      }
+      row.querySelectorAll("td entry-cell").forEach((entry) => {
+        ensure_cell(entry);
+      });
+      row.dataset.hydrated = "true";
+    }
+    update_load_status();
+  };
+
+  const hydrate_row = async (row) => {
+    await hydrate_rows([row]);
+  };
+
+  const initialRows = rows.filter((row) => !row.hidden).slice(0, 4);
+  void hydrate_rows(initialRows);
+
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = [];
+        for (const observed of entries) {
+          if (!observed.isIntersecting) {
+            continue;
+          }
+          visible.push(observed.target);
+          io.unobserve(observed.target);
+        }
+        if (visible.length > 0) {
+          void hydrate_rows(visible);
+        }
+      },
+      {
+        root: scrollContainer,
+        rootMargin: "160px 0px",
+      },
+    );
+    for (const row of rows) {
+      if (row.dataset.hydrated == "true") {
+        continue;
+      }
+      io.observe(row);
+    }
+  } else {
+    void hydrate_rows(rows);
+  }
+
   update_caption("error", any_invalid());
+  update_caption("changed", any_changed());
+  update_load_status();
+  update_inspector_counts();
+
+  const editorTable = scrollContainer.querySelector(":scope>table");
+  if (editorTable) {
+    editorTable.addEventListener("grid_selection", (evt) => {
+      const row = parseInt(evt.detail?.row, 10);
+      const col = parseInt(evt.detail?.col, 10);
+      const entry = evt.detail?.entry;
+      const rowElm = rows[row];
+      if (!entry && rowElm == null) {
+        return;
+      }
+      if (entry) {
+        void hydrate_row(entry.closest("tr"));
+        ensure_cell(entry);
+        activeEntry = entry;
+        update_inspector_selection(entry);
+        return;
+      }
+
+      void hydrate_row(rowElm).then(() => {
+        const tds = rowElm.querySelectorAll("td");
+        const td = tds[col];
+        if (!td) {
+          update_inspector_empty(rowElm, col);
+          return;
+        }
+        const hydrated = td.querySelector("entry-cell");
+        if (!hydrated) {
+          activeEntry = null;
+          update_inspector_empty(rowElm, col);
+          return;
+        }
+        ensure_cell(hydrated);
+        hydrated.dataset.active = "true";
+        activeEntry = hydrated;
+        update_inspector_selection(hydrated);
+      });
+    });
+  }
+
+  const expando = document.querySelector("#expando");
+  if (expando) {
+    expando.addEventListener("click", () => {
+      const newlyVisible = rows
+        .filter((row) => !row.hidden && row.dataset.hydrated != "true")
+        .slice(0, 2);
+      if (newlyVisible.length > 0) {
+        void hydrate_rows(newlyVisible);
+      }
+    });
+  }
+
+  const preselected = scrollContainer.querySelector(
+    "entry-cell[data-active=true]",
+  );
+  if (preselected) {
+    void hydrate_row(preselected.closest("tr"));
+    ensure_cell(preselected);
+    activeEntry = preselected;
+    update_inspector_selection(preselected);
+  }
+
   container.addEventListener("cell_change", (evt) => {
     const cell = evt.detail;
 
@@ -1743,6 +2173,10 @@ function wire_cell_editors() {
     // add the beforeunload handler if there are changes
     // and remove it if not
     setBeforeUnload(any_changed());
+    update_inspector_counts();
+    if (activeEntry != null && activeEntry.dataset.id == cell.id) {
+      update_inspector_selection(activeEntry);
+    }
   });
 
   const apply = document.querySelector("#apply");

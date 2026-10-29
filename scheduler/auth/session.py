@@ -6,6 +6,7 @@ from functools import wraps
 from typing import Dict, List, Optional
 
 from flask import abort, current_app, g, request, session
+from sqlalchemy import func
 
 from scheduler import model
 from scheduler.config import settings
@@ -17,12 +18,66 @@ from .models import SessionUser
 
 def _persist_user(user: SessionUser) -> SessionUser:
     """Ensure the user exists in the local database."""
-    persisted = upsert_user(user.username, user.email, user.display_name)
+    persisted = upsert_user(
+        user.username,
+        user.email,
+        user.display_name,
+        migrate_to_requested_id=True,
+    )
     model.db.session.commit()
     user.username = persisted.id
     user.email = persisted.addr
     user.display_name = persisted.label
     return user
+
+
+def _find_existing_user_by_email(email: str):
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        return None
+    return model.User.query.filter(
+        func.lower(model.User.addr) == normalized_email
+    ).first()
+
+
+def _is_bearer_auto_provision_allowed(user: SessionUser) -> bool:
+    if _find_existing_user_by_email(user.email) is not None:
+        return True
+
+    if not settings.entra.bearer_auto_provision_enabled:
+        if current_app and current_app.logger:
+            current_app.logger.warning(
+                "Bearer auto-provision blocked for %s (disabled by policy)", user.email
+            )
+        return False
+
+    allowed_domains = settings.entra.bearer_auto_provision_domains
+    if allowed_domains:
+        email_domain = user.email.rsplit("@", 1)[1].lower() if "@" in user.email else ""
+        if email_domain not in allowed_domains:
+            if current_app and current_app.logger:
+                current_app.logger.warning(
+                    "Bearer auto-provision blocked for %s (domain not allowed)",
+                    user.email,
+                )
+            return False
+
+    required_groups = settings.entra.bearer_auto_provision_groups
+    if required_groups:
+        claim_groups = {
+            str(group).strip().lower()
+            for group in (user.groups or [])
+            if str(group).strip()
+        }
+        if not claim_groups.intersection(required_groups):
+            if current_app and current_app.logger:
+                current_app.logger.warning(
+                    "Bearer auto-provision blocked for %s (group policy not met)",
+                    user.email,
+                )
+            return False
+
+    return True
 
 
 def _rotate_session_identifier() -> None:
@@ -65,10 +120,14 @@ def authenticate_bearer_token(
             current_app.logger.warning("JWT verification failed: %s", error)
         return None
 
-    user = user_from_claims(claims)
-    if not user:
+    try:
+        user = user_from_claims(claims)
+    except ValueError as exc:
         if current_app and current_app.logger:
-            current_app.logger.warning("JWT claims missing email")
+            current_app.logger.warning("JWT claims invalid: %s", exc)
+        return None
+
+    if not _is_bearer_auto_provision_allowed(user):
         return None
 
     _persist_user(user)
@@ -88,10 +147,14 @@ def login_user_with_token(token: str) -> Optional[SessionUser]:
             )
         return None
 
-    user = user_from_claims(claims)
-    if not user:
+    try:
+        user = user_from_claims(claims)
+    except ValueError as exc:
         if current_app and current_app.logger:
-            current_app.logger.warning("JWT claims missing email during login")
+            current_app.logger.warning("JWT claims invalid during login: %s", exc)
+        return None
+
+    if not _is_bearer_auto_provision_allowed(user):
         return None
 
     _persist_user(user)
@@ -102,10 +165,11 @@ def login_user_with_token(token: str) -> Optional[SessionUser]:
 
 def login_user_with_claims(claims: Dict) -> Optional[SessionUser]:
     """Create a session from already-validated JWT claims."""
-    user = user_from_claims(claims)
-    if not user:
+    try:
+        user = user_from_claims(claims)
+    except ValueError as exc:
         if current_app and current_app.logger:
-            current_app.logger.warning("JWT claims missing email during login")
+            current_app.logger.warning("JWT claims invalid during login: %s", exc)
         return None
 
     _persist_user(user)
@@ -172,7 +236,6 @@ def _set_admin_membership(user_id: str, enabled: bool) -> None:
         return
 
     membership = model.GroupMember.query.get(("admin", user_id))
-    primary = model.PrimaryGroupMember.query.get(("admin", user_id))
 
     if enabled:
         approved_at = datetime.now(timezone.utc)
@@ -185,13 +248,12 @@ def _set_admin_membership(user_id: str, enabled: bool) -> None:
             membership.approved = approved_at
             model.db.session.add(membership)
 
-        if primary is None:
-            model.db.session.add(model.PrimaryGroupMember(group="admin", user=user_id))
     else:
         if membership is not None:
             model.db.session.delete(membership)
-        if primary is not None:
-            model.db.session.delete(primary)
+
+        # Admin role checks key off approved membership, not PI designation.
+        # Keep any pre-existing admin PI row from seeded data untouched.
 
 
 def _normalize_profile_groups(groups: List[str]) -> List[str]:

@@ -9,15 +9,13 @@ from route_seed import (
     set_session_user,
 )
 
-from scheduler.app import app
 from scheduler.config import settings
 
 pytestmark = pytest.mark.route
 
 
-def test_security_headers_present_on_http():
-    client = app.test_client()
-    response = client.get("/auth/login")
+def test_security_headers_present_on_http(route_client):
+    response = route_client.get("/auth/login")
 
     assert response.headers.get("X-Content-Type-Options") == "nosniff"
     assert response.headers.get("X-Frame-Options") == "DENY"
@@ -31,21 +29,22 @@ def test_security_headers_present_on_http():
     assert "Strict-Transport-Security" not in response.headers
 
 
-def test_hsts_present_on_https_requests():
-    client = app.test_client()
-    response = client.get("/auth/login", environ_overrides={"wsgi.url_scheme": "https"})
+def test_hsts_present_on_https_requests(route_client):
+    response = route_client.get(
+        "/auth/login",
+        environ_overrides={"wsgi.url_scheme": "https"},
+    )
     assert response.headers.get("Strict-Transport-Security", "").startswith("max-age=")
 
 
-def test_csp_report_only_mode(monkeypatch):
+def test_csp_report_only_mode(monkeypatch, route_client):
     monkeypatch.setattr(settings.security, "csp_report_only", True)
-    client = app.test_client()
-    response = client.get("/auth/login")
+    response = route_client.get("/auth/login")
     assert "Content-Security-Policy" not in response.headers
     assert "Content-Security-Policy-Report-Only" in response.headers
 
 
-def test_device_page_inline_style_nonce_matches_csp():
+def test_device_page_inline_style_nonce_matches_csp(route_client):
     ensure_group(
         "DEV",
         label="Development",
@@ -57,15 +56,14 @@ def test_device_page_inline_style_nonce_matches_csp():
     ensure_active_user("nonce-route", "nonce-route@example.com", "Nonce Route")
     set_group_membership("DEV", "nonce-route", approved=True, pi=False)
 
-    client = app.test_client()
     set_session_user(
-        client,
+        route_client,
         username="nonce-route",
         email="nonce-route@example.com",
         display_name="Nonce Route",
         groups=["DEV"],
     )
-    response = client.get(f"/device/{seeded_scanner_id()}")
+    response = route_client.get(f"/device/{seeded_scanner_id()}")
 
     assert response.status_code == 200
 

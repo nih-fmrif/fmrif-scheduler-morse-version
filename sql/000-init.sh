@@ -12,7 +12,7 @@ set -euo pipefail
 
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+SCRIPT_DIR_ABS="$( cd "$SCRIPT_DIR" && pwd )"
 
 # Function to log messages with timestamp
 log() {
@@ -98,9 +98,9 @@ execute_sql_file() {
         -v ON_ERROR_STOP=1
         -U "$PGUSER"
         -d "$PGDATABASE"
-        -v "USER_DEPT_CSV='$user_dept_csv'"
-        -v "DEV_DEPT_CSV='$dev_dept_csv'"
-        -v "DEVPERM_CSV='$devperm_csv'"
+        -v "USER_DEPT_CSV=${user_dept_csv}"
+        -v "DEV_DEPT_CSV=${dev_dept_csv}"
+        -v "DEVPERM_CSV=${devperm_csv}"
     )
 
     log "Executing $file..."
@@ -143,6 +143,73 @@ SQL
     return 0
 }
 
+# Validate that every COPY data row has the same field count as its COPY header.
+# This catches accidental delimiter corruption in large seed dumps early.
+validate_seed_dump_copy_shape() {
+    local dump_file=$1
+    local max_samples=20
+    local report
+
+    report="$(awk -v max_samples="$max_samples" '
+BEGIN {
+  FS="\t"
+  in_copy=0
+  expected=0
+  table=""
+  total=0
+  samples=0
+}
+/^COPY / {
+  in_copy=1
+  line=$0
+  sub(/^COPY[ ]+/, "", line)
+  table=line
+  sub(/[ ]*\(.*/, "", table)
+
+  cols=$0
+  sub(/^COPY [^\(]*\(/, "", cols)
+  sub(/\) FROM stdin;.*/, "", cols)
+  gsub(/[^,]/, "", cols)
+  expected=length(cols)+1
+  next
+}
+in_copy && $0 == "\\." {
+  in_copy=0
+  expected=0
+  table=""
+  next
+}
+in_copy {
+  got=NF
+  if (got != expected) {
+    total++
+    if (samples < max_samples) {
+      samples++
+      print NR "|" table "|expected=" expected "|got=" got
+    }
+  }
+}
+END {
+  print "TOTAL_MISMATCHES=" total
+}
+' "$dump_file")" || {
+        log_error "Failed to validate COPY row shape in $dump_file"
+        exit 1
+    }
+
+    local mismatch_total
+    mismatch_total="$(echo "$report" | awk -F= '/^TOTAL_MISMATCHES=/{print $2}')"
+
+    if [ "${mismatch_total:-0}" -gt 0 ]; then
+        log_error "Seed dump has malformed COPY rows (${mismatch_total} mismatches): $dump_file"
+        echo "$report" | grep -v '^TOTAL_MISMATCHES='
+        echo "Fix the seed dump tab-delimited row shape and retry."
+        exit 1
+    fi
+
+    log "Seed dump COPY row shape validated: $dump_file"
+}
+
 # Verify essential variables are set
 essential_vars=("PGUSER" "PGPASSWORD" "PGDATABASE")
 missing_vars=()
@@ -152,12 +219,48 @@ for var in "${essential_vars[@]}"; do
     fi
 done
 
-# Seed file locations (defaults point to repo-tracked synthetic equivalents)
-SCRIPT_DIR_ABS=$(cd "$SCRIPT_DIR" && pwd)
-SEED_DUMP_FILE=${SQL_SEED_DUMP_FILE:-"$SCRIPT_DIR_ABS/003-import-data.sql"}
-SQL_USER_DEPT_CSV=${SQL_USER_DEPT_CSV:-"$SCRIPT_DIR_ABS/user-dept.sample.csv"}
-SQL_DEV_DEPT_CSV=${SQL_DEV_DEPT_CSV:-"$SCRIPT_DIR_ABS/dev-dept.sample.csv"}
-SQL_DEVPERM_CSV=${SQL_DEVPERM_CSV:-"$SCRIPT_DIR_ABS/devperm.sample.csv"}
+# Support both default and custom seed file locations.
+if [ -z "${SQL_SEED_DUMP_FILE:-}" ] || [ -z "${SQL_USER_DEPT_CSV:-}" ] || [ -z "${SQL_DEV_DEPT_CSV:-}" ] || [ -z "${SQL_DEVPERM_CSV:-}" ]; then
+  # Support both local execution and container init contexts.
+  SQL_DIR_CANDIDATES=(
+    "/sql"
+    "${SCRIPT_DIR_ABS}"
+    "${SCRIPT_DIR_ABS}/.."
+    "${SCRIPT_DIR_ABS}/../sql"
+  )
+  SQL_DIR=""
+  for candidate in "${SQL_DIR_CANDIDATES[@]}"; do
+    if [ -d "$candidate" ] && [ -f "$candidate/001-schema.sql" ] && [ -f "$candidate/003-import-data.sql" ]; then
+      SQL_DIR="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "${SQL_DIR}" ]; then
+    cat <<EOF >&2
+Missing required SQL root. Checked:
+$(printf '  - %s\n' "${SQL_DIR_CANDIDATES[@]}")
+Please set SQL_SEED_DUMP_FILE, SQL_USER_DEPT_CSV, SQL_DEV_DEPT_CSV, SQL_DEVPERM_CSV
+or ensure the expected SQL files are mounted in /sql or the script directory.
+EOF
+    exit 1
+  fi
+
+  log "Using SQL directory: ${SQL_DIR}"
+
+  SEED_DUMP_FILE=${SQL_SEED_DUMP_FILE:-"$SQL_DIR/003-import-data.sql"}
+  SQL_USER_DEPT_CSV=${SQL_USER_DEPT_CSV:-"$SQL_DIR/user-dept.csv"}
+  SQL_DEV_DEPT_CSV=${SQL_DEV_DEPT_CSV:-"$SQL_DIR/dev-dept.csv"}
+  SQL_DEVPERM_CSV=${SQL_DEVPERM_CSV:-"$SQL_DIR/devperm.csv"}
+else
+  # Preserve custom explicit paths.
+  SEED_DUMP_FILE="$SQL_SEED_DUMP_FILE"
+  SQL_USER_DEPT_CSV="$SQL_USER_DEPT_CSV"
+  SQL_DEV_DEPT_CSV="$SQL_DEV_DEPT_CSV"
+  SQL_DEVPERM_CSV="$SQL_DEVPERM_CSV"
+  SQL_DIR="${SCRIPT_DIR_ABS}"
+  log "Using custom seed paths from environment variables"
+fi
 
 for seed_file in "$SEED_DUMP_FILE" "$SQL_USER_DEPT_CSV" "$SQL_DEV_DEPT_CSV" "$SQL_DEVPERM_CSV"; do
     if [ ! -f "$seed_file" ]; then
@@ -169,6 +272,12 @@ done
 if [[ ${#missing_vars[@]} -gt 0 ]]; then
     log "Error: Missing required environment variables: ${missing_vars[*]}"
     exit 1
+fi
+
+if [ "${SQL_VALIDATE_SEED_DUMP:-true}" = "true" ]; then
+    validate_seed_dump_copy_shape "$SEED_DUMP_FILE"
+else
+    log "Skipping seed dump COPY row shape validation (SQL_VALIDATE_SEED_DUMP=false)"
 fi
 
 log "Database connection settings:"
@@ -234,13 +343,12 @@ fi
 export PGDATABASE="$TARGET_DB"
 echo "Switched to target database: $PGDATABASE"
 
-# Attempt to cd into Docker environment (PROJECT_ROOT/sql)
-if cd "${PROJECT_ROOT}/sql" 2>/dev/null; then
-  echo "Entered container-style directory: ${PROJECT_ROOT}/sql"
-# Otherwise, fall back to local setup (SCRIPT_DIR)
+# Attempt to operate in the resolved SQL directory.
+if cd "${SQL_DIR}" 2>/dev/null; then
+  echo "Using SQL directory: ${SQL_DIR}"
 else
-  echo "Falling back to local directory: ${SCRIPT_DIR}"
-  cd "${SCRIPT_DIR}"
+  echo "Falling back to local directory: ${SCRIPT_DIR_ABS}"
+  cd "${SCRIPT_DIR_ABS}"
 fi
 
 # First execute schema file explicitly
@@ -251,7 +359,7 @@ else
     exit 1
 fi
 
-# Then execute the legacy-style seed dump (or replacement from environment)
+# Then execute the snapshot data import SQL dump (or replacement from environment)
 if [ -f "$SEED_DUMP_FILE" ]; then
     execute_sql_file "$SEED_DUMP_FILE"
 fi
@@ -270,7 +378,16 @@ for sql in $(ls [0-9][0-9][0-9]-*.sql | sort); do
     fi
 done
 
-# Optional additive data layers run after core schema/data migration.
+# Default relationship hydration import for CSV mappings:
+# hydrate auth and relationship tables after the base schema and snapshot import.
+if [ -z "${SQL_ADDITIVE_LAYER_FILES+x}" ]; then
+    default_mapping_layer="${SQL_DIR}/900-import-new-data.sql"
+    if [ -f "$default_mapping_layer" ]; then
+        SQL_ADDITIVE_LAYER_FILES="$default_mapping_layer"
+    fi
+fi
+
+# Optional relationship hydration scripts run after core schema/data migration.
 if [ -n "${SQL_ADDITIVE_LAYER_FILES:-}" ]; then
     log "Running additive data layers: ${SQL_ADDITIVE_LAYER_FILES}"
     OLDIFS="$IFS"

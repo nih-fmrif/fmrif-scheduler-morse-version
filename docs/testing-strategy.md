@@ -1,0 +1,122 @@
+# Testing Strategy
+
+## Suite Taxonomy
+
+1. Unit tests (`pytest`, fast)
+- Location: `tests/unit/`
+- Scope: Python-only logic, helpers, auth internals
+- Network/browser: none
+- CI: yes
+
+2. Route tests (`pytest`, no browser)
+- Location: `tests/unit/` (marked with `@pytest.mark.route`)
+- Scope: Flask route/HTTP behavior (status codes, redirects, CSRF, auth/session behavior)
+- Network/browser: none
+- CI: yes
+- Database bootstrap: `tests/unit/conftest.py` initializes `fmrif_scheduler_test` via `sql/000-init.sh` so route tests use production-like SQL objects.
+- Contract enforcement: `tests/unit/route_contract.py` and `tests/unit/test_route_contract.py`
+  - Every registered Flask route rule and method must be declared in `ROUTE_EXPECTATIONS`.
+  - Every protected `GET` route must declare per-role expected status in `RBAC_GET_EXPECTATIONS` for mock roles (`admin`, `member`, `dev`, `tech`, `inactive`).
+  - Every protected mutating route method must define gate expectations in `RBAC_MUTATING_EXPECTATIONS` or explicit exemptions.
+  - Mutating routes must either be in `BEHAVIOR_TEST_REQUIREMENTS` (with a `@pytest.mark.covers_route(rule, method)` test) or `BEHAVIOR_TEST_EXEMPTIONS`.
+
+3. Integration tests (`Playwright`, CI-friendly)
+- Location: `tests/playwright/integration/`
+- Scope: end-to-end workflows using test-only mock auth sessions
+- Auth mode: `PLAYWRIGHT_AUTH_MODE=mock`, `AUTH_TEST__ENABLED=true`
+- CI: yes
+
+4. Auth-flow tests (`Playwright`, real Entra)
+- Location: `tests/playwright/auth-flow/`
+- Scope: real Entra login behavior
+- Auth mode: `PLAYWRIGHT_AUTH_MODE=entra`
+- CI: no (requires NIH VPN / staging-capable environment)
+
+5. Live-incident tests (`Playwright`, manually gated)
+- Location: `tests/playwright/live-incident/`
+- Scope: issues reproducible only against live environments or evolving production-like data
+- CI: no
+
+## Shared Test Infrastructure
+
+- Authenticated Playwright integration tests share `tests/playwright/support/auth-fixture.ts`.
+- Mode behavior:
+  - `PLAYWRIGHT_AUTH_MODE=mock`: creates a test session via `POST /auth/test/session` with `AUTH_TEST__SHARED_SECRET`.
+  - `PLAYWRIGHT_AUTH_MODE=entra`: uses saved storage state or interactive credentials path.
+- This enables identical integration specs across mock CI and real-auth workflows.
+
+## New Test Placement Guide
+
+1. If it validates pure Python logic without browser interaction, add it to `tests/unit/`.
+2. If it validates Flask route/HTTP behavior without browser interaction, add it to `tests/unit/` with `@pytest.mark.route` (run via `pixi run test-routes`) and update RBAC route contracts as needed.
+3. If it validates UI workflows and can run without external NIH VPN/staging access, add it to `tests/playwright/integration/`.
+4. If it requires live Entra/NIH VPN/staging access, add it to `tests/playwright/auth-flow/`.
+5. If only reproducible against live environments/data, use `tests/playwright/live-incident/` and include a migration plan.
+
+## Commands (Pixi-first)
+
+Prerequisites:
+- `pixi` installed
+- `.env` created (`bash setup-dotenv.sh`)
+
+Unit tests:
+```bash
+AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=unit-test-secret pixi run test-unit
+```
+
+Route tests:
+```bash
+AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=unit-test-secret pixi run test-routes
+```
+
+Integration tests (CI mode, mock auth):
+```bash
+AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=local-test-secret pixi run test-integration
+```
+
+Auth-flow tests (credentials mode):
+```bash
+PLAYWRIGHT_AUTH_MODE=entra \
+OAUTH_TEST_USERNAME=contact005@example.org \
+OAUTH_TEST_PASSWORD=your-password \
+pixi run test-auth-flow-credentials
+```
+
+Auth-flow tests (storage-state mode):
+```bash
+PLAYWRIGHT_AUTH_MODE=entra \
+PLAYWRIGHT_STORAGE_STATE=./playwright-auth.json \
+pixi run test-auth-flow-storage-state
+```
+`PLAYWRIGHT_STORAGE_STATE` is optional; Pixi defaults to `./playwright-auth.json`.
+
+Generate storage state (headed):
+```bash
+PLAYWRIGHT_AUTH_MODE=entra \
+PLAYWRIGHT_STORAGE_STATE=./playwright-auth.json \
+OAUTH_TEST_USERNAME=contact005@example.org \
+OAUTH_TEST_PASSWORD=your-password \
+pixi run generate-auth-storage-state
+```
+`PLAYWRIGHT_STORAGE_STATE` is optional; Pixi defaults to `./playwright-auth.json`.
+
+Live-incident tests (manual/gated):
+```bash
+PLAYWRIGHT_AUTH_MODE=entra pixi run test-live-incident
+```
+
+Run pre-commit hooks:
+```bash
+pixi run pre-commit-install
+pixi run pre-commit
+```
+
+## Live-Incident Test Lifecycle
+
+- Add an incident header with date/reason.
+- Keep assertions robust to data drift.
+- Keep scope minimal to one behavior.
+- Review periodically:
+  - If the behavior becomes reproducible in local fixtures, migrate to `tests/playwright/integration/`.
+  - If business logic only, migrate to `tests/unit/`.
+  - Remove the live-incident variant after migration.

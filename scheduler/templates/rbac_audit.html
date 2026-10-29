@@ -1,0 +1,130 @@
+{% extends "page.html" %} {% block title %}Potential issues{% endblock %} {%
+block body %}
+<article class="rbac-audit-page">
+  <header class="rbac-audit-page-header">
+    <h1>Potential issues</h1>
+    <p>
+      Operational warnings are listed first, followed by the full RBAC audit
+      history.
+    </p>
+    <p><a href="{{ url_for('rbac') }}">back to RBAC explorer</a></p>
+  </header>
+
+  <section
+    class="potential-issues-panel"
+    aria-labelledby="potential-issues-title"
+  >
+    <h2 id="potential-issues-title">Potential issues</h2>
+    <p>
+      These checks identify configuration and workflow gaps that can block
+      approvals, notifications, or audit visibility.
+    </p>
+    {% if potential_issues|length == 0 %}
+    <p class="none">No potential issues detected.</p>
+    {% else %}
+    <ul class="potential-issues-list">
+      {% for issue in potential_issues %}
+      <li
+        class="potential-issue potential-issue-{{ issue.severity }}"
+        data-category="{{ issue.category }}"
+      >
+        <p class="potential-issue-title">
+          <strong>{{ issue.title }}</strong>
+          <span class="potential-issue-category">{{ issue.category }}</span>
+        </p>
+        <p class="potential-issue-detail">{{ issue.detail }}</p>
+        {% if issue.href %}
+        <p class="potential-issue-link">
+          <a href="{{ issue.href }}">{{ issue.link_label }}</a>
+        </p>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <section class="rbac-audit-log-panel" aria-labelledby="rbac-audit-log-title">
+    <h2 id="rbac-audit-log-title">RBAC audit log</h2>
+    <p>Global RBAC change history across groups, devices, and users.</p>
+    <form
+      class="rbac-audit-filters"
+      action="{{ url_for('app_issues') }}"
+      method="get"
+    >
+      <label for="rbac-audit-scope">scope</label>
+      <select id="rbac-audit-scope" name="scope">
+        {% for option in audit_scopes %}
+        <option
+          value="{{ option.id }}"
+          {%
+          if
+          option.selected
+          %}selected{%
+          endif
+          %}
+        >
+          {{ option.label }}
+        </option>
+        {% endfor %}
+      </select>
+
+      <label for="rbac-audit-entity">entity</label>
+      <input
+        id="rbac-audit-entity"
+        type="text"
+        name="entity"
+        value="{{ entity }}"
+        placeholder="optional id"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <label for="rbac-audit-limit">limit</label>
+      <input
+        id="rbac-audit-limit"
+        type="number"
+        min="1"
+        max="500"
+        name="limit"
+        value="{{ limit }}"
+      />
+
+      <button type="submit">apply</button>
+    </form>
+
+    {% if events|length == 0 %}
+    <p class="none">No RBAC audit events found.</p>
+    {% else %}
+    <div class="rbac-audit-table-wrap">
+      <table class="rbac-audit-table">
+        <thead>
+          <tr>
+            <th>when</th>
+            <th>action</th>
+            <th>actor</th>
+            <th>ip</th>
+            <th>where</th>
+            <th>how</th>
+            <th>what</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr>
+            <td>{{ event.when or "-" }}</td>
+            <td>{{ event.action }}</td>
+            <td>{{ event.actor }}</td>
+            <td>{{ event.ip or "-" }}</td>
+            <td>{{ event.where }}</td>
+            <td>{{ event.how }}</td>
+            <td>{{ event.what }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+</article>
+{% endblock %}

@@ -41,6 +41,8 @@ def clean_env(monkeypatch):
     env_vars = [
         "PGHOST",
         "PGPORT",
+        "SCHEDULER_TEST_DB_NAME",
+        "SCHEDULER_TEST_DB_TEMPLATE_NAME",
         "PGUSER",
         "PGPASSWORD",
         "PGDATABASE",
@@ -279,6 +281,9 @@ def test_entra_config_validation():
     assert config.issuer == ""
     assert config.audiences == []
     assert config.allowed_algorithms == ["RS256"]
+    assert config.bearer_auto_provision_enabled is False
+    assert config.bearer_auto_provision_domains == []
+    assert config.bearer_auto_provision_groups == []
 
     custom_config = EntraConfig(
         client_id="client-id",
@@ -290,6 +295,16 @@ def test_entra_config_validation():
     assert "client-id" in custom_config.audiences
     assert "api://client-id" in custom_config.audiences
     assert "custom-audience" in custom_config.audiences
+
+
+def test_entra_bearer_auto_provision_lists_are_normalized():
+    config = EntraConfig(
+        bearer_auto_provision_domains=["@NIH.gov", "nih.gov", " ", "@Nih.Gov "],
+        bearer_auto_provision_groups=[" Team-A ", "team-a", "", "TEAM-B"],
+    )
+
+    assert config.bearer_auto_provision_domains == ["nih.gov"]
+    assert config.bearer_auto_provision_groups == ["team-a", "team-b"]
 
 
 def test_server_config():

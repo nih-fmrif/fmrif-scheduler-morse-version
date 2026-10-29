@@ -1,8 +1,41 @@
 import { PlaywrightTestConfig } from '@playwright/test';
-import * as dotenv from 'dotenv';
+import * as fs from 'fs';
 import * as path from 'path';
 
-dotenv.config({ path: path.resolve(__dirname, '.env'), override: false });
+function loadEnvFile(filePath: string): void {
+  let data = '';
+  try {
+    data = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return;
+  }
+
+  for (const rawLine of data.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+    const sep = line.indexOf('=');
+    if (sep <= 0) {
+      continue;
+    }
+    const key = line.slice(0, sep).trim();
+    if (!key || process.env[key] !== undefined) {
+      continue;
+    }
+    let value = line.slice(sep + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+loadEnvFile(path.resolve(__dirname, '.env'));
 
 const configuredBaseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
 const flaskApp = process.env.FLASK_APP || 'scheduler.app';
@@ -38,8 +71,26 @@ function normalizeBaseURL(urlString: string): string {
       if (parsed.protocol === 'https:') {
         parsed.protocol = 'http:';
       }
-      parsed.hostname = '127.0.0.1';
     }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return urlString;
+  }
+}
+
+function syncLocalBaseURLPort(urlString: string): string {
+  const appPort = process.env.APP_PORT?.trim();
+  if (!appPort) {
+    return urlString;
+  }
+
+  try {
+    const parsed = new URL(urlString);
+    const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (!isLocalhost) {
+      return urlString;
+    }
+    parsed.port = appPort;
     return parsed.toString().replace(/\/$/, '');
   } catch {
     return urlString;
@@ -57,7 +108,7 @@ function shouldIgnoreHTTPSErrorsByDefault(urlString: string): boolean {
   }
 }
 
-const baseURL = normalizeBaseURL(configuredBaseURL);
+const baseURL = normalizeBaseURL(syncLocalBaseURLPort(configuredBaseURL));
 process.env.PLAYWRIGHT_BASE_URL = baseURL;
 const proxyServer = normalizeProxyServer(
   process.env.PLAYWRIGHT_PROXY_SERVER ||
@@ -87,9 +138,11 @@ function buildWebServerConfig() {
 
     const port = parsedBaseURL.port || '5051';
     const host = parsedBaseURL.hostname;
+    const readinessUrl = `${parsedBaseURL.protocol}//${host}:${port}/robots.txt`;
     return {
       command: `FLASK_APP=${flaskApp} flask run --host ${host} --port ${port}`,
-      url: `${parsedBaseURL.protocol}//${host}:${port}`,
+      // "/" requires auth in this app; use a public route for server readiness.
+      url: readinessUrl,
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
     };

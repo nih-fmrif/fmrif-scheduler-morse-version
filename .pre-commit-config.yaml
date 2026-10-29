@@ -39,15 +39,21 @@ repos:
           language: system
           pass_filenames: false
           files: "^scheduler/templates/.*\\.html$"
+        - id: no-global-route-app-import
+          name: no global route app import in unit tests
+          entry: bash scripts/check-no-global-route-app-import.sh
+          language: system
+          pass_filenames: false
+          files: "^tests/unit/test_.*\\.py$"
 
     - repo: https://github.com/pre-commit/pre-commit-hooks
       rev: v4.6.0
       hooks:
         - id: trailing-whitespace
-          exclude: "docs-basecamp-materials|tests/data"
+          exclude: "docs-basecamp-materials|tests/data|sql"
         - id: check-added-large-files
         - id: check-toml
         - id: check-yaml
         - id: check-json
         - id: end-of-file-fixer
-          exclude: "docs-basecamp-materials|tests/data"
+          exclude: "docs-basecamp-materials|tests/data|sql"

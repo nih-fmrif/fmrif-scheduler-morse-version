@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from scheduler.auth import jwt_utils
 from scheduler.config import EntraConfig, settings
+from scheduler.logic import scoped_user_id_from_identifier
 
 
 @pytest.fixture(autouse=True)
@@ -119,9 +120,31 @@ def test_extract_bearer_token():
     assert jwt_utils.extract_bearer_token(None) is None
 
 
-def test_user_from_claims_handles_missing_email():
-    assert jwt_utils.user_from_claims({}) is None
+def test_user_from_claims_requires_preferred_username():
+    with pytest.raises(ValueError, match="preferred_username"):
+        jwt_utils.user_from_claims({})
+    with pytest.raises(ValueError, match="preferred_username"):
+        jwt_utils.user_from_claims({"email": "contact003@example.org"})
+
+
+def test_user_from_claims_rejects_invalid_preferred_username_email(monkeypatch):
+    errors: list[str] = []
+    monkeypatch.setattr(
+        jwt_utils,
+        "_log_error",
+        lambda message, *args: errors.append(message % args if args else message),
+    )
+
+    with pytest.raises(ValueError, match="valid email"):
+        jwt_utils.user_from_claims({"preferred_username": "not-an-email"})
+
+    assert any("not a valid email address" in error for error in errors)
+
+
+def test_user_from_claims_uses_preferred_username_only():
     claims = {"preferred_username": "contact003@example.org", "name": "Tester"}
     user = jwt_utils.user_from_claims(claims)
-    assert user is not None
-    assert user.username == "tester"
+
+    assert user.username == scoped_user_id_from_identifier("contact003@example.org")
+    assert user.email == "contact003@example.org"
+    assert user.display_name == "Tester"

@@ -21,6 +21,7 @@ import itsdangerous
 from flask import current_app
 from flask.helpers import url_for
 from flask_wtf import FlaskForm
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import func
@@ -30,6 +31,222 @@ from . import message, model
 
 _MAX_USER_ID_LENGTH = 20
 _USER_ID_PATTERN = re.compile(r"[^a-z0-9_-]+")
+_RBAC_AUDIT_KV_PATTERN = re.compile(
+    r"([a-z_]+)=([^,]+(?:,(?!\s*[a-z_]+=)[^,]+)*)",
+    flags=re.IGNORECASE,
+)
+_RBAC_AUDIT_GROUP_PATH_PATTERN = re.compile(r"^/group/([^/]+)")
+_RBAC_AUDIT_JOIN_PATH_PATTERN = re.compile(r"^/join/(?:(?:approve|deny)/)?([^/]+)$")
+_RBAC_AUDIT_DEVICE_PATH_PATTERN = re.compile(r"^/device/([^/]+)")
+_RBAC_AUDIT_DEVICE_USER_PATH_PATTERN = re.compile(r"^/device/[^/]+/users/([^/]+)$")
+_RBAC_AUDIT_TABLE_READY: Optional[bool] = None
+_RBAC_AUDIT_IP_COLUMN_READY: Optional[bool] = None
+
+
+def _rbac_audit_inspection_bind() -> Any:
+    try:
+        bind = model.db.session.bind
+        if bind is not None:
+            return bind
+    except Exception:
+        pass
+    try:
+        bind = model.db.session().get_bind()
+        if bind is not None:
+            return bind
+    except Exception:
+        pass
+    return model.db.engine
+
+
+def _rbac_audit_table_exists() -> bool:
+    global _RBAC_AUDIT_TABLE_READY
+    if _RBAC_AUDIT_TABLE_READY is True:
+        return True
+    try:
+        exists = inspect(_rbac_audit_inspection_bind()).has_table("rbac_audit_log")
+    except Exception:
+        return False
+    if exists:
+        _RBAC_AUDIT_TABLE_READY = True
+    return exists
+
+
+def rbac_audit_table_available() -> bool:
+    return _rbac_audit_table_exists()
+
+
+def _rbac_audit_ip_column_exists() -> bool:
+    global _RBAC_AUDIT_IP_COLUMN_READY
+    if _RBAC_AUDIT_IP_COLUMN_READY is True:
+        return True
+    if not _rbac_audit_table_exists():
+        return False
+    try:
+        columns = {
+            column["name"]
+            for column in inspect(_rbac_audit_inspection_bind()).get_columns(
+                "rbac_audit_log"
+            )
+        }
+        has_ip_column = "ip_addr" in columns
+    except Exception:
+        return False
+    if has_ip_column:
+        _RBAC_AUDIT_IP_COLUMN_READY = True
+    return has_ip_column
+
+
+def rbac_audit_ip_column_available() -> bool:
+    return _rbac_audit_ip_column_exists()
+
+
+def _parse_rbac_audit_details(what: str) -> Dict[str, str]:
+    details: Dict[str, str] = {}
+    for key, raw_value in _RBAC_AUDIT_KV_PATTERN.findall(what or ""):
+        value = raw_value.strip()
+        if value == "":
+            continue
+        details[key.strip().lower()] = value
+    return details
+
+
+def _infer_rbac_audit_targets(
+    where: str, details: Dict[str, str]
+) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    group_id = details.get("group")
+    device_id = details.get("device")
+    user_id = details.get("user")
+    requester_id = details.get("requester")
+
+    if user_id is None:
+        user_id = details.get("to")
+
+    where_path = where or ""
+
+    if group_id is None:
+        group_match = _RBAC_AUDIT_GROUP_PATH_PATTERN.match(where_path)
+        if group_match:
+            group_id = group_match.group(1)
+        else:
+            join_match = _RBAC_AUDIT_JOIN_PATH_PATTERN.match(where_path)
+            if join_match and join_match.group(1) != "tech":
+                group_id = join_match.group(1)
+
+    if device_id is None:
+        device_match = _RBAC_AUDIT_DEVICE_PATH_PATTERN.match(where_path)
+        if device_match:
+            device_id = device_match.group(1)
+
+    if user_id is None:
+        device_user_match = _RBAC_AUDIT_DEVICE_USER_PATH_PATTERN.match(where_path)
+        if device_user_match:
+            user_id = device_user_match.group(1)
+
+    return group_id, device_id, user_id, requester_id
+
+
+def _record_rbac_audit_event(
+    action: str,
+    actor: str,
+    where: str,
+    how: str,
+    what: str,
+    source_ip: str = "",
+) -> None:
+    if not _rbac_audit_table_exists():
+        return
+
+    ip = (source_ip or "").strip()
+    stored_what = what
+    if ip != "" and "ip=" not in (stored_what or "").lower():
+        stored_what = f"{stored_what}, ip={ip}" if stored_what else f"ip={ip}"
+
+    details = _parse_rbac_audit_details(stored_what)
+    group_id, device_id, user_id, requester_id = _infer_rbac_audit_targets(
+        where, details
+    )
+    base_params = {
+        "action": action,
+        "actor": actor,
+        "where_path": where,
+        "how": how,
+        "what": stored_what,
+        "deptcode": group_id,
+        "scannercode": device_id,
+        "researchercode": user_id,
+        "requestercode": requester_id,
+    }
+    if _rbac_audit_ip_column_exists():
+        params = {
+            **base_params,
+            "ip_addr": ip or None,
+        }
+        model.db.session.execute(
+            text(
+                """
+                insert into rbac_audit_log (
+                    action, actor, ip_addr, where_path, how, what,
+                    deptcode, scannercode, researchercode, requestercode
+                ) values (
+                    :action, :actor, :ip_addr, :where_path, :how, :what,
+                    :deptcode, :scannercode, :researchercode, :requestercode
+                )
+                """
+            ),
+            params,
+        )
+        return
+    model.db.session.execute(
+        text(
+            """
+            insert into rbac_audit_log (
+                action, actor, where_path, how, what,
+                deptcode, scannercode, researchercode, requestercode
+            ) values (
+                :action, :actor, :where_path, :how, :what,
+                :deptcode, :scannercode, :researchercode, :requestercode
+            )
+            """
+        ),
+        base_params,
+    )
+
+
+def log_rbac_audit_event(
+    action: str,
+    actor: str,
+    where: str,
+    how: str,
+    what: str,
+    source_ip: str = "",
+) -> None:
+    """Log RBAC mutations with a dedicated category prefix.
+
+    The message format is stable for easier filtering in log pipelines:
+      RBAC_AUDIT action=... actor=... ip=... where=... when=... how=... what=...
+    """
+    current_app.logger.info(
+        "RBAC_AUDIT action=%s actor=%s ip=%s where=%s when=%s how=%s what=%s",
+        action,
+        actor,
+        source_ip or "",
+        where,
+        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        how,
+        what,
+    )
+    try:
+        _record_rbac_audit_event(
+            action=action,
+            actor=actor,
+            where=where,
+            how=how,
+            what=what,
+            source_ip=source_ip,
+        )
+    except Exception:
+        current_app.logger.exception("Failed to persist RBAC_AUDIT record")
 
 
 def constraint_of(ex: IntegrityError) -> Tuple[str, str]:
@@ -71,11 +288,15 @@ def record_tech_join(user: model.User) -> None:
 
 def notify_dev_pi_of_tech_join_form(user: model.User) -> None:
     M = model.Membership
-    m = M.query.filter(M.group == "DEV").filter(M.pi).first()
-    u = get_user(m.user)
     current_app.logger.info(f"{user.id} submitted the technologist join form")
-    if u is None:
+    m = M.query.filter(M.group == "DEV").filter(M.pi).first()
+    if m is None:
         current_app.logger.warning("no DEV PI found")
+        return
+
+    u = get_user(m.user)
+    if u is None:
+        current_app.logger.warning(f"no DEV PI user found for id {m.user}")
         return
     if u.addr == "":
         current_app.logger.warning("could not find email address for dev pi")
@@ -253,9 +474,15 @@ def notify_group_pi_of_join_form(user: model.User, group: str) -> None:
 
     M = model.Membership
     m = M.query.filter(M.group == group).filter(M.pi).first()
+    if m is None:
+        current_app.logger.warning(f"no PI to notify for {user.id} joining {group}")
+        return
+
     u = get_user(m.user)
     if u is None:
-        current_app.logger.warning(f"no PI to notify for {user.id} joining {group}")
+        current_app.logger.warning(
+            f"no PI user found for {user.id} joining {group}: {m.user}"
+        )
         return
     if u.addr == "":
         current_app.logger.warning(
@@ -323,23 +550,174 @@ def _normalize_user_id(value: str) -> str:
     return token[:_MAX_USER_ID_LENGTH]
 
 
-def _scoped_user_id_from_email(email: str) -> str:
-    normalized_email = (email or "").strip().lower()
-    local_part = normalized_email.split("@", 1)[0]
+def scoped_user_id_from_identifier(identifier: str) -> str:
+    normalized_identifier = (identifier or "").strip().lower()
+    local_part = normalized_identifier.split("@", 1)[0]
     local_token = _normalize_user_id(local_part) or "user"
-    digest = hashlib.sha256(normalized_email.encode("utf-8")).hexdigest()[:6]
+    digest = hashlib.sha256(normalized_identifier.encode("utf-8")).hexdigest()[:6]
     max_local_len = _MAX_USER_ID_LENGTH - len(digest) - 1
     if max_local_len <= 0:
         return digest[:_MAX_USER_ID_LENGTH]
     return f"{local_token[:max_local_len]}-{digest}"
 
 
-def upsert_user(user: str, mail: str, name: str) -> model.User:
+def _sync_user_profile(
+    user: model.User, normalized_mail: str, normalized_name: str
+) -> model.User:
+    changed = False
+    if normalized_mail and user.addr != normalized_mail:
+        user.addr = normalized_mail
+        changed = True
+    if normalized_name and user.label != normalized_name:
+        user.label = normalized_name
+        changed = True
+    if changed:
+        model.db.session.add(user)
+    return user
+
+
+def _try_rekey_user_primary_id(old_id: str, new_id: str) -> bool:
+    if old_id == new_id:
+        return True
+    try:
+        with model.db.session.begin_nested():
+            record = model.User.query.get(old_id)
+            if record is None or model.User.query.get(new_id) is not None:
+                return False
+            record.id = new_id
+            model.db.session.flush()
+        return True
+    except IntegrityError:
+        return False
+
+
+def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
+    if old_id == new_id:
+        return
+
+    memberships = model.GroupMember.query.filter_by(user=old_id).all()
+    for row in memberships:
+        existing = model.GroupMember.query.get((row.group, new_id))
+        if existing is not None:
+            if existing.approved is None and row.approved is not None:
+                existing.approved = row.approved
+                model.db.session.add(existing)
+            model.db.session.delete(row)
+            continue
+        row.user = new_id
+        model.db.session.add(row)
+
+    primary_memberships = model.PrimaryGroupMember.query.filter_by(user=old_id).all()
+    for row in primary_memberships:
+        existing = model.PrimaryGroupMember.query.get((row.group, new_id))
+        if existing is not None:
+            model.db.session.delete(row)
+            continue
+        row.user = new_id
+        model.db.session.add(row)
+
+    technologist = model.Technologist.query.get(old_id)
+    if technologist is not None:
+        if model.Technologist.query.get(new_id) is not None:
+            model.db.session.delete(technologist)
+        else:
+            technologist.user = new_id
+            model.db.session.add(technologist)
+
+    permissions = model.UserDevice.query.filter_by(user=old_id).all()
+    for row in permissions:
+        existing = model.UserDevice.query.get((new_id, row.device))
+        if existing is not None:
+            existing.templates = bool(existing.templates or row.templates)
+            existing.slot = bool(existing.slot or row.slot)
+            existing.tech = bool(existing.tech or row.tech)
+            existing.medical = bool(existing.medical or row.medical)
+            existing.training = bool(existing.training or row.training)
+            model.db.session.add(existing)
+            model.db.session.delete(row)
+            continue
+        row.user = new_id
+        model.db.session.add(row)
+
+    model.ScheduleEntry.query.filter_by(user=old_id).update(
+        {"user": new_id}, synchronize_session=False
+    )
+    model.TemplateEntry.query.filter_by(user=old_id).update(
+        {"user": new_id}, synchronize_session=False
+    )
+    model.SupportRequest.query.filter_by(filed_by=old_id).update(
+        {"filed_by": new_id}, synchronize_session=False
+    )
+    model.SupportRequest.query.filter_by(fulfilled_by=old_id).update(
+        {"fulfilled_by": new_id}, synchronize_session=False
+    )
+    model.SupportRequest.query.filter_by(modified_by=old_id).update(
+        {"modified_by": new_id}, synchronize_session=False
+    )
+
+
+def _migrate_user_identity(
+    old_user: model.User, new_id: str, normalized_mail: str, normalized_name: str
+) -> model.User:
+    old_id = old_user.id
+    if old_id == new_id:
+        return _sync_user_profile(old_user, normalized_mail, normalized_name)
+
+    if _try_rekey_user_primary_id(old_id, new_id):
+        # Some test/local DB backends may not enforce ON UPDATE CASCADE consistently.
+        # Ensure dependent rows are rewritten even when primary-key rekey succeeds.
+        _rekey_user_foreign_keys(old_id, new_id)
+        migrated = model.User.query.get(new_id)
+        if migrated is None:
+            raise RuntimeError(f"Failed to migrate user id from {old_id} to {new_id}")
+        return _sync_user_profile(migrated, normalized_mail, normalized_name)
+
+    target = model.User.query.get(new_id)
+    if target is None:
+        model.db.session.execute(
+            """
+            insert into tlkpresearcher(researchercode, name, email, active, chg_at)
+            values (:user, :name, :mail, :active, :chg_at)
+            on conflict (researchercode) do nothing
+            """,
+            {
+                "user": new_id,
+                "name": normalized_name or old_user.label or new_id,
+                "mail": normalized_mail or old_user.addr or "",
+                "active": bool(old_user.active),
+                "chg_at": datetime.datetime.utcnow(),
+            },
+        )
+        target = model.User.query.get(new_id)
+        if target is None:
+            raise RuntimeError(f"Failed to create migration target user {new_id}")
+
+    _rekey_user_foreign_keys(old_id, new_id)
+
+    stale = model.User.query.get(old_id)
+    if stale is not None and stale.id != new_id:
+        try:
+            with model.db.session.begin_nested():
+                model.db.session.delete(stale)
+                model.db.session.flush()
+        except IntegrityError:
+            stale.addr = ""
+            model.db.session.add(stale)
+
+    target = model.User.query.get(new_id)
+    if target is None:
+        raise RuntimeError(f"Failed to load migrated user id {new_id}")
+    return _sync_user_profile(target, normalized_mail, normalized_name)
+
+
+def upsert_user(
+    user: str, mail: str, name: str, *, migrate_to_requested_id: bool = False
+) -> model.User:
     normalized_mail = (mail or "").strip().lower()
     normalized_name = (name or "").strip()
     requested_id = _normalize_user_id(user)
     if not requested_id:
-        requested_id = _scoped_user_id_from_email(normalized_mail)
+        requested_id = scoped_user_id_from_identifier(normalized_mail)
 
     # Email is authoritative when present. Reuse any existing record for it.
     if normalized_mail:
@@ -347,16 +725,13 @@ def upsert_user(user: str, mail: str, name: str) -> model.User:
             func.lower(model.User.addr) == normalized_mail
         ).first()
         if existing_by_mail is not None:
-            changed = False
-            if existing_by_mail.addr != normalized_mail:
-                existing_by_mail.addr = normalized_mail
-                changed = True
-            if normalized_name and existing_by_mail.label != normalized_name:
-                existing_by_mail.label = normalized_name
-                changed = True
-            if changed:
-                model.db.session.add(existing_by_mail)
-            return existing_by_mail
+            if migrate_to_requested_id and existing_by_mail.id != requested_id:
+                return _migrate_user_identity(
+                    existing_by_mail, requested_id, normalized_mail, normalized_name
+                )
+            return _sync_user_profile(
+                existing_by_mail, normalized_mail, normalized_name
+            )
 
     resolved_id = requested_id
     existing_by_id = model.User.query.get(resolved_id)
@@ -367,7 +742,7 @@ def upsert_user(user: str, mail: str, name: str) -> model.User:
         and existing_by_id.addr.strip().lower() != normalized_mail
     ):
         # Existing id belongs to another email; derive a stable scoped id.
-        resolved_id = _scoped_user_id_from_email(normalized_mail)
+        resolved_id = scoped_user_id_from_identifier(normalized_mail)
         existing_by_id = model.User.query.get(resolved_id)
 
     if existing_by_id is None:
@@ -390,17 +765,7 @@ def upsert_user(user: str, mail: str, name: str) -> model.User:
     if existing_by_id is None:
         raise RuntimeError(f"Failed to upsert user record for {resolved_id}")
 
-    changed = False
-    if normalized_mail and existing_by_id.addr != normalized_mail:
-        existing_by_id.addr = normalized_mail
-        changed = True
-    if normalized_name and existing_by_id.label != normalized_name:
-        existing_by_id.label = normalized_name
-        changed = True
-    if changed:
-        model.db.session.add(existing_by_id)
-
-    return existing_by_id
+    return _sync_user_profile(existing_by_id, normalized_mail, normalized_name)
 
 
 def is_admin(user: model.User) -> bool:
@@ -1591,6 +1956,36 @@ def schedule_for(
     q = q.filter(M.date.between(start, end))
     q = q.order_by(M.date, M.hour)
     return q.all()
+
+
+def schedule_for_hours(
+    device: model.Device, start: datetime.date, end: datetime.date, hours: List[int]
+) -> List[model.ScheduleEntry]:
+    M = model.ScheduleEntry
+    q = M.query.filter(M.device == device.id)
+    q = q.filter(M.date.between(start, end))
+    q = q.filter(M.hour.in_(hours))
+    q = q.order_by(M.hour, M.date)
+    return q.all()
+
+
+def schedule_exists_for(
+    device: model.Device, start: datetime.date, end: datetime.date
+) -> bool:
+    M = model.ScheduleEntry
+    q = model.db.session.query(M.id)
+    q = q.filter(M.device == device.id)
+    q = q.filter(M.date.between(start, end))
+    return q.first() is not None
+
+
+def schedule_used_hours_for(
+    device: model.Device, start: datetime.date, end: datetime.date
+) -> Set[int]:
+    M = model.ScheduleEntry
+    q = model.db.session.query(M.hour).filter(M.device == device.id)
+    q = q.filter(M.date.between(start, end)).distinct()
+    return set(hour for (hour,) in q.all())
 
 
 def group_schedule_entries(

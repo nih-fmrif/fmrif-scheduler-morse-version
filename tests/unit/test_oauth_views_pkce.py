@@ -98,7 +98,7 @@ def test_consume_oauth_state_returns_and_deletes_code_verifier(app_context):
         code_verifier="pkce-delete-me",
     )
     model.db.session.add(record)
-    model.db.session.commit()
+    model.db.session.flush()
 
     payload = views._consume_oauth_state("state-delete-me")
 

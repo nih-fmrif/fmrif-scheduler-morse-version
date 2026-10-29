@@ -1,4 +1,28 @@
-{% extends "base.html" %} {% block title %}{{msg}}{% endblock %} {% block
-basebody %} {{code}} - {{msg}} {% if show_login %}
-<a class="login-link" href="{{ url_for('auth.login') }}">Log in</a>
-{% endif %} {% endblock %}
+{% extends "page.html" %} {% import "svg/icons.html" as icons %} {% block title
+%}{{ title }}{% endblock %} {% block body %}
+<section class="error-panel" aria-labelledby="error-title">
+  <p class="error-code">error {{ code }}</p>
+  <h1 id="error-title">{{ title }}</h1>
+  <p>
+    {{ icons.exclaim_triangle() }}
+    <span>An error occurred while processing your request.</span>
+  </p>
+  {% if detail %}
+  <p>{{ detail }}</p>
+  {% endif %}
+  <p class="error-assurance">{{ assurance }}</p>
+  <div class="error-actions">
+    {% if user %}
+    <a class="menu-action" href="{{ url_for('home') }}">
+      {{ icons.arrow_left() }}
+      <span>home</span>
+    </a>
+    {% endif %} {% if show_login %}
+    <a class="menu-action" href="{{ url_for('auth.login') }}">
+      {{ icons.box_arrow_right() }}
+      <span>log in</span>
+    </a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

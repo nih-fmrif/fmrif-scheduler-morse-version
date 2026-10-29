@@ -11,14 +11,17 @@ from dotenv import load_dotenv
 from flask import Flask
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from sqlalchemy import create_engine, event
 
 # Explicitly load .env from project root before importing scheduler
 project_root = Path(__file__).parent.parent.parent
 load_dotenv(project_root / ".env")
 
-# Safety guard: all unit/route tests must use the dedicated test database.
-TEST_DB_NAME = "fmrif_scheduler_test"
-TEST_DB_TEMPLATE_NAME = f"{TEST_DB_NAME}_template"
+# Safety guard: all unit/route tests must use a dedicated test database.
+TEST_DB_NAME = os.getenv("SCHEDULER_TEST_DB_NAME", "fmrif_scheduler_test")
+TEST_DB_TEMPLATE_NAME = os.getenv(
+    "SCHEDULER_TEST_DB_TEMPLATE_NAME", f"{TEST_DB_NAME}_template"
+)
 os.environ["PGDATABASE"] = TEST_DB_NAME
 os.environ.setdefault("AUTH_TEST__ENABLED", "true")
 os.environ.setdefault("AUTH_TEST__SHARED_SECRET", "unit-test-secret")
@@ -28,6 +31,7 @@ from scheduler import model  # noqa: E402
 from scheduler.config import app_config  # noqa: E402
 
 _ROUTE_DB_BOOTSTRAPPED = False
+_ROUTE_TEST_ENGINE = None
 
 
 def _parse_positive_int(value: str | None, default: int) -> int:
@@ -42,11 +46,40 @@ def _build_bootstrap_env(target_database: str) -> dict[str, str]:
     env = os.environ.copy()
     env["PGDATABASE"] = target_database
     env["DROP_DB"] = "true"
+    env.setdefault(
+        "SQL_ADDITIVE_LAYER_FILES",
+        str(project_root / "sql" / "900-import-new-data.sql"),
+    )
     env.setdefault("PGHOST", "localhost")
     env.setdefault("PGPORT", "5444")
     env.setdefault("PGUSER", "postgres")
     env.setdefault("PGPASSWORD", "password")
     return env
+
+
+def _test_db_uri() -> str:
+    pghost = os.getenv("PGHOST", "localhost")
+    pgport = int(os.getenv("PGPORT", "5444"))
+    pguser = os.getenv("PGUSER", "postgres")
+    pgpassword = os.getenv("PGPASSWORD", "password")
+    test_db_name = os.getenv("PGDATABASE", TEST_DB_NAME)
+    return (
+        f"postgresql+psycopg2://{quote(pguser)}:{quote(pgpassword)}@"
+        f"{pghost}:{pgport}/{quote(test_db_name)}"
+    )
+
+
+def _route_test_engine():
+    global _ROUTE_TEST_ENGINE
+    if _ROUTE_TEST_ENGINE is None:
+        _ROUTE_TEST_ENGINE = create_engine(_test_db_uri())
+    return _ROUTE_TEST_ENGINE
+
+
+def _get_route_app():
+    from scheduler.app import app as route_app
+
+    return route_app
 
 
 def _run_sql_bootstrap(init_script: Path, env: dict[str, str]) -> None:
@@ -169,9 +202,9 @@ def _seed_file_signatures(env: dict[str, str]) -> list[str]:
     sql_dir = project_root / "sql"
     seed_paths = [
         Path(env.get("SQL_SEED_DUMP_FILE", str(sql_dir / "003-import-data.sql"))),
-        Path(env.get("SQL_USER_DEPT_CSV", str(sql_dir / "user-dept.sample.csv"))),
-        Path(env.get("SQL_DEV_DEPT_CSV", str(sql_dir / "dev-dept.sample.csv"))),
-        Path(env.get("SQL_DEVPERM_CSV", str(sql_dir / "devperm.sample.csv"))),
+        Path(env.get("SQL_USER_DEPT_CSV", str(sql_dir / "user-dept.csv"))),
+        Path(env.get("SQL_DEV_DEPT_CSV", str(sql_dir / "dev-dept.csv"))),
+        Path(env.get("SQL_DEVPERM_CSV", str(sql_dir / "devperm.csv"))),
     ]
 
     signatures = []
@@ -206,9 +239,7 @@ def _route_template_fingerprint(env: dict[str, str]) -> str:
 def _ensure_route_template_database(init_script: Path) -> str:
     template_db_name = os.getenv("ROUTE_DB_TEMPLATE_NAME", TEST_DB_TEMPLATE_NAME)
     if template_db_name == TEST_DB_NAME:
-        raise RuntimeError(
-            "ROUTE_DB_TEMPLATE_NAME must differ from fmrif_scheduler_test"
-        )
+        raise RuntimeError(f"ROUTE_DB_TEMPLATE_NAME must differ from {TEST_DB_NAME}")
 
     template_env = _build_bootstrap_env(template_db_name)
     template_marker = f"route-template:{_route_template_fingerprint(template_env)}"
@@ -311,6 +342,67 @@ def create_test_database():
         print(f"Warning: Could not create test database: {e}")
 
 
+@pytest.fixture(autouse=True)
+def db_test_isolation(request):
+    """Isolate each test in a rollback-only outer transaction.
+
+    A nested transaction/savepoint is restarted after each commit so tests may
+    call session.commit() without leaking state across tests.
+    """
+    fixtureinfo = getattr(request.node, "_fixtureinfo", None)
+    direct_fixtures = set(getattr(fixtureinfo, "argnames", ()))
+    uses_test_app_fixture = bool(
+        {"app", "app_context", "client", "runner"} & direct_fixtures
+    )
+    is_route_test = request.node.get_closest_marker("route") is not None
+
+    if not (uses_test_app_fixture or is_route_test):
+        yield
+        return
+
+    if uses_test_app_fixture:
+        app = request.getfixturevalue("app")
+
+        def connect():
+            return model.db.engine.connect()
+    else:
+        app = _get_route_app()
+
+        def connect():
+            return _route_test_engine().connect()
+
+    app_ctx = app.app_context()
+    app_ctx.push()
+
+    connection = connect()
+    transaction = connection.begin()
+
+    previous_session = model.db.session
+    scoped_session = model.db.create_scoped_session(
+        options={"bind": connection, "binds": {}}
+    )
+    model.db.session = scoped_session
+
+    session = scoped_session()
+    session.begin_nested()
+
+    @event.listens_for(session, "after_transaction_end")
+    def _restart_nested_transaction(sess, trans):
+        parent = getattr(trans, "_parent", None)
+        if trans.nested and (parent is None or not parent.nested):
+            sess.begin_nested()
+
+    try:
+        yield
+    finally:
+        event.remove(session, "after_transaction_end", _restart_nested_transaction)
+        scoped_session.remove()
+        transaction.rollback()
+        connection.close()
+        model.db.session = previous_session
+        app_ctx.pop()
+
+
 @pytest.fixture
 def app():
     # Create test database if it doesn't exist
@@ -319,20 +411,11 @@ def app():
     app = Flask(__name__)
     test_config = dict(app_config)
 
-    # Always use a separate test database for all test environments
-    test_db_name = TEST_DB_NAME
-    pghost = os.getenv("PGHOST", "localhost")
-    pgport = int(os.getenv("PGPORT", "5444"))  # Matches .env file
-    pguser = os.getenv("PGUSER", "postgres")
-    pgpassword = os.getenv("PGPASSWORD", "password")
+    # Always use a separate test database for all test environments.
+    test_config["SQLALCHEMY_DATABASE_URI"] = _test_db_uri()
 
-    # Build test database URI with proper URL encoding for special characters
-    test_config["SQLALCHEMY_DATABASE_URI"] = (
-        f"postgresql+psycopg2://{quote(pguser)}:{quote(pgpassword)}@"
-        f"{pghost}:{pgport}/{test_db_name}"
-    )
-
-    test_config["SERVER_NAME"] = "localhost.localdomain:5051"
+    app_port = os.getenv("APP_PORT", "5051")
+    test_config["SERVER_NAME"] = f"localhost.localdomain:{app_port}"
     app.config.update(**test_config)
     model.db.init_app(app)
     return app
@@ -349,13 +432,25 @@ def runner(app):
 
 
 @pytest.fixture
+def route_app():
+    return _get_route_app()
+
+
+@pytest.fixture
+def route_client(route_app_context):
+    return route_app_context.test_client()
+
+
+@pytest.fixture
+def route_app_context(route_app):
+    with route_app.app_context():
+        yield route_app
+
+
+@pytest.fixture
 def app_context(app, request):
     with app.app_context():
-        model.db.session.begin_nested()
         if request.node.get_closest_marker("route") is None:
             # Non-route unit tests can rely on ORM-created tables.
             model.db.create_all()
         yield app
-        # Rollback the transaction after test
-        model.db.session.rollback()
-        model.db.session.remove()

@@ -186,7 +186,7 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
     "/auth/test/session": public_route(
         "/auth/test/session", {"POST": 403, "DELETE": 403}
     ),
-    "/device-add": protected_route("/device-add", ["GET", "POST"]),
+    "/app/issues": protected_route("/app/issues", ["GET"]),
     "/device/<the_device>": protected_route("/device/test-device", ["GET", "POST"]),
     "/device/<the_device>/edit": protected_route(
         "/device/test-device/edit", ["GET", "POST"]
@@ -220,7 +220,6 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
         "/device/test-device/users/test-user", ["GET", "POST"]
     ),
     "/devices": protected_route("/devices", ["GET"]),
-    "/devices/inactive": protected_route("/devices/inactive", ["GET"]),
     "/group/<the_group>": protected_route("/group/test-group", ["GET"]),
     "/group/<the_group>/edit": protected_route(
         "/group/test-group/edit", ["GET", "POST"]
@@ -230,14 +229,20 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
     ),
     "/group/<the_group>/pi": protected_route("/group/test-group/pi", ["GET", "POST"]),
     "/groups": protected_route("/groups", ["GET"]),
-    "/groups/add": protected_route("/groups/add", ["GET", "POST"]),
-    "/groups/inactive": protected_route("/groups/inactive", ["GET"]),
+    "/rbac": protected_route("/rbac", ["GET"]),
     "/join": protected_route("/join", ["GET", "POST"]),
     "/join/approve/<token>": protected_route(
         "/join/approve/test-token", ["GET", "POST"]
     ),
     "/join/deny/<token>": protected_route("/join/deny/test-token", ["GET", "POST"]),
     "/join/tech": protected_route("/join/tech", ["GET", "POST"]),
+    "/json/v1/device/<the_device>/schedule-rows": protected_route(
+        "/json/v1/device/TEST/schedule-rows?start=2026-02-01&days=7&hours=8,9",
+        ["GET"],
+    ),
+    "/json/v1/rbac/mutate": protected_route("/json/v1/rbac/mutate", ["POST"]),
+    "/json/v1/rbac/audit": protected_route("/json/v1/rbac/audit", ["GET"]),
+    "/json/v1/rbac/explorer": protected_route("/json/v1/rbac/explorer", ["GET"]),
     "/json/v1/log/<id>": protected_route("/json/v1/log/1", ["GET"]),
     "/mailing-lists": protected_route("/mailing-lists", ["GET", "POST"]),
     "/robots.txt": public_route("/robots.txt", {"GET": 200}),
@@ -249,16 +254,39 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
 RBAC_GET_EXPECTATIONS: Dict[str, RbacRouteExpectation] = {
     "/": rbac_login_required("/"),
     "/mailing-lists": rbac_login_required("/mailing-lists"),
-    "/devices": rbac_login_required("/devices"),
-    "/devices/inactive": rbac_admin_only("/devices/inactive"),
-    "/device-add": rbac_admin_only("/device-add"),
+    "/devices": rbac_custom(
+        "/devices", admin=404, member=200, dev=200, tech=200, inactive=200
+    ),
     "/device/<the_device>": rbac_login_required("/device/TEST"),
-    "/device/<the_device>/edit": rbac_admin_only("/device/TEST/edit"),
-    "/device/<the_device>/groups": rbac_admin_only("/device/TEST/groups"),
-    "/device/<the_device>/groups/add": rbac_admin_only("/device/TEST/groups/add"),
-    "/device/<the_device>/users": rbac_admin_only("/device/TEST/users"),
-    "/device/<the_device>/users/<the_user>": rbac_admin_only(
-        "/device/TEST/users/testuser"
+    "/device/<the_device>/edit": rbac_custom(
+        "/device/TEST/edit", admin=404, member=404, dev=404, tech=404, inactive=403
+    ),
+    "/device/<the_device>/groups": rbac_custom(
+        "/device/TEST/groups",
+        admin=404,
+        member=404,
+        dev=404,
+        tech=404,
+        inactive=403,
+    ),
+    "/device/<the_device>/groups/add": rbac_custom(
+        "/device/TEST/groups/add",
+        admin=404,
+        member=404,
+        dev=404,
+        tech=404,
+        inactive=403,
+    ),
+    "/device/<the_device>/users": rbac_custom(
+        "/device/TEST/users", admin=404, member=404, dev=404, tech=404, inactive=403
+    ),
+    "/device/<the_device>/users/<the_user>": rbac_custom(
+        "/device/TEST/users/testuser",
+        admin=404,
+        member=404,
+        dev=404,
+        tech=404,
+        inactive=403,
     ),
     "/device/<the_device>/templates": rbac_admin_only("/device/TEST/templates"),
     "/device/<the_device>/templates/list": rbac_admin_only(
@@ -274,15 +302,30 @@ RBAC_GET_EXPECTATIONS: Dict[str, RbacRouteExpectation] = {
     "/device/<the_device>/templates/edit-metadata/<the_template>": rbac_admin_only(
         "/device/TEST/templates/edit-metadata/A"
     ),
-    "/groups": rbac_active_user_required("/groups"),
-    "/groups/inactive": rbac_admin_only("/groups/inactive"),
-    "/groups/add": rbac_admin_only("/groups/add"),
-    "/group/<the_group>": rbac_custom(
-        "/group/DEV", admin=200, member=403, dev=200, tech=200, inactive=403
+    "/groups": rbac_custom(
+        "/groups", admin=404, member=200, dev=200, tech=200, inactive=403
     ),
-    "/group/<the_group>/edit": rbac_admin_only("/group/DEV/edit"),
-    "/group/<the_group>/membership": rbac_admin_only("/group/DEV/membership"),
-    "/group/<the_group>/pi": rbac_admin_only("/group/DEV/pi"),
+    "/rbac": rbac_custom(
+        "/rbac", admin=200, member=403, dev=403, tech=403, inactive=403
+    ),
+    "/app/issues": rbac_admin_only("/app/issues"),
+    "/group/<the_group>": rbac_custom(
+        "/group/DEV", admin=404, member=403, dev=200, tech=200, inactive=403
+    ),
+    "/group/<the_group>/edit": rbac_custom(
+        "/group/DEV/edit", admin=404, member=404, dev=404, tech=404, inactive=403
+    ),
+    "/group/<the_group>/membership": rbac_custom(
+        "/group/DEV/membership",
+        admin=404,
+        member=404,
+        dev=404,
+        tech=404,
+        inactive=403,
+    ),
+    "/group/<the_group>/pi": rbac_custom(
+        "/group/DEV/pi", admin=404, member=404, dev=404, tech=404, inactive=403
+    ),
     "/join": rbac_active_user_required("/join"),
     "/join/tech": rbac_custom(
         "/join/tech", admin=403, member=403, dev=200, tech=403, inactive=403
@@ -303,6 +346,11 @@ RBAC_GET_EXPECTATIONS: Dict[str, RbacRouteExpectation] = {
         tech=400,
         inactive=403,
     ),
+    "/json/v1/device/<the_device>/schedule-rows": rbac_login_required(
+        "/json/v1/device/TEST/schedule-rows?start=2026-02-01&days=7&hours=8,9"
+    ),
+    "/json/v1/rbac/audit": rbac_admin_only("/json/v1/rbac/audit"),
+    "/json/v1/rbac/explorer": rbac_admin_only("/json/v1/rbac/explorer"),
     "/json/v1/log/<id>": rbac_login_required("/json/v1/log/1"),
 }
 
@@ -311,7 +359,6 @@ RBAC_GET_EXPECTATIONS: Dict[str, RbacRouteExpectation] = {
 # "allow" means role should pass authorization checks (may still fail validation).
 # "deny" means role should be rejected with 403 before mutation logic.
 RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
-    ("/device-add", "POST"): rbac_mutating_admin_only("/device-add"),
     ("/device/<the_device>", "POST"): rbac_mutating_custom(
         "/device/TEST",
         admin=True,
@@ -320,14 +367,29 @@ RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
         tech=False,
         inactive=False,
     ),
-    ("/device/<the_device>/edit", "POST"): rbac_mutating_admin_only(
-        "/device/TEST/edit"
+    ("/device/<the_device>/edit", "POST"): rbac_mutating_custom(
+        "/device/TEST/edit",
+        admin=True,
+        member=True,
+        dev=True,
+        tech=True,
+        inactive=False,
     ),
-    ("/device/<the_device>/groups", "POST"): rbac_mutating_admin_only(
-        "/device/TEST/groups"
+    ("/device/<the_device>/groups", "POST"): rbac_mutating_custom(
+        "/device/TEST/groups",
+        admin=True,
+        member=True,
+        dev=True,
+        tech=True,
+        inactive=False,
     ),
-    ("/device/<the_device>/groups/add", "POST"): rbac_mutating_admin_only(
-        "/device/TEST/groups/add"
+    ("/device/<the_device>/groups/add", "POST"): rbac_mutating_custom(
+        "/device/TEST/groups/add",
+        admin=True,
+        member=True,
+        dev=True,
+        tech=True,
+        inactive=False,
     ),
     ("/device/<the_device>/templates", "POST"): rbac_mutating_admin_only(
         "/device/TEST/templates"
@@ -343,17 +405,41 @@ RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
         "/device/<the_device>/templates/edit/<the_template>",
         "POST",
     ): rbac_mutating_admin_only("/device/TEST/templates/edit/A"),
-    ("/device/<the_device>/users/<the_user>", "POST"): rbac_mutating_admin_only(
-        "/device/TEST/users/testuser"
+    ("/device/<the_device>/users/<the_user>", "POST"): rbac_mutating_custom(
+        "/device/TEST/users/testuser",
+        admin=True,
+        member=True,
+        dev=True,
+        tech=True,
+        inactive=False,
     ),
-    ("/group/<the_group>/edit", "POST"): rbac_mutating_admin_only("/group/DEV/edit"),
-    ("/group/<the_group>/membership", "POST"): rbac_mutating_admin_only(
-        "/group/DEV/membership"
+    ("/group/<the_group>/edit", "POST"): rbac_mutating_custom(
+        "/group/DEV/edit",
+        admin=True,
+        member=True,
+        dev=True,
+        tech=True,
+        inactive=False,
     ),
-    ("/group/<the_group>/pi", "POST"): rbac_mutating_admin_only("/group/DEV/pi"),
-    ("/groups/add", "POST"): rbac_mutating_admin_only("/groups/add"),
+    ("/group/<the_group>/membership", "POST"): rbac_mutating_custom(
+        "/group/DEV/membership",
+        admin=True,
+        member=True,
+        dev=True,
+        tech=True,
+        inactive=False,
+    ),
+    ("/group/<the_group>/pi", "POST"): rbac_mutating_custom(
+        "/group/DEV/pi",
+        admin=True,
+        member=True,
+        dev=True,
+        tech=True,
+        inactive=False,
+    ),
     ("/join", "POST"): rbac_mutating_active_user_required("/join"),
     ("/join/tech", "POST"): rbac_mutating_dev_only("/join/tech"),
+    ("/json/v1/rbac/mutate", "POST"): rbac_mutating_admin_only("/json/v1/rbac/mutate"),
     ("/mailing-lists", "POST"): rbac_mutating_login_required("/mailing-lists"),
 }
 
@@ -400,46 +486,17 @@ BEHAVIOR_TEST_REQUIREMENTS: Dict[tuple[str, str], str] = {
         "POST",
     ): "Join denial must enforce CSRF and remove pending requests.",
     (
-        "/groups/add",
+        "/json/v1/rbac/mutate",
         "POST",
-    ): "Group creation must persist the new group and PI membership.",
-    (
-        "/group/<the_group>/edit",
-        "POST",
-    ): "Group edit must persist updated group metadata.",
-    (
-        "/group/<the_group>/membership",
-        "POST",
-    ): "Membership actions must update/deletes the targeted group member rows.",
-    (
-        "/group/<the_group>/pi",
-        "POST",
-    ): "PI reassignment must update primary group membership.",
-    ("/device-add", "POST"): "Device creation must persist new devices.",
+    ): "RBAC explorer mutations must enforce CSRF and admin-only write permissions.",
     (
         "/device/<the_device>",
         "POST",
     ): "Scheduler route must process JSON diff submissions safely.",
     (
-        "/device/<the_device>/edit",
-        "POST",
-    ): "Device edit must persist updated device metadata.",
-    (
         "/device/<the_device>/templates",
         "POST",
     ): "Template application must validate submitted template selections.",
-    (
-        "/device/<the_device>/groups",
-        "POST",
-    ): "Device-group removal must delete group-device mappings.",
-    (
-        "/device/<the_device>/groups/add",
-        "POST",
-    ): "Device-group add must create group-device mappings.",
-    (
-        "/device/<the_device>/users/<the_user>",
-        "POST",
-    ): "Device user permission updates must persist userdevice entries.",
     (
         "/device/<the_device>/templates/add",
         "POST",
@@ -469,4 +526,33 @@ BEHAVIOR_TEST_REQUIREMENTS: Dict[tuple[str, str], str] = {
 # Route methods intentionally not required in no-browser route tests yet.
 # Keep this list explicit so adding/changing mutating routes always requires
 # deciding whether to add a behavioral test or document why it is deferred.
-BEHAVIOR_TEST_EXEMPTIONS: Dict[tuple[str, str], str] = {}
+BEHAVIOR_TEST_EXEMPTIONS: Dict[tuple[str, str], str] = {
+    (
+        "/group/<the_group>/edit",
+        "POST",
+    ): "Legacy delegated-management endpoint retired in favor of /rbac.",
+    (
+        "/group/<the_group>/membership",
+        "POST",
+    ): "Legacy delegated-management endpoint retired in favor of /rbac.",
+    (
+        "/group/<the_group>/pi",
+        "POST",
+    ): "Legacy delegated-management endpoint retired in favor of /rbac.",
+    (
+        "/device/<the_device>/edit",
+        "POST",
+    ): "Legacy delegated-management endpoint retired in favor of /rbac.",
+    (
+        "/device/<the_device>/groups",
+        "POST",
+    ): "Legacy delegated-management endpoint retired in favor of /rbac.",
+    (
+        "/device/<the_device>/groups/add",
+        "POST",
+    ): "Legacy delegated-management endpoint retired in favor of /rbac.",
+    (
+        "/device/<the_device>/users/<the_user>",
+        "POST",
+    ): "Legacy delegated-management endpoint retired in favor of /rbac.",
+}

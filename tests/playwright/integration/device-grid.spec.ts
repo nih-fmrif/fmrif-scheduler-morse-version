@@ -69,13 +69,19 @@ async function gotoSeededSparseDevice(page: Page): Promise<{ path: string; spars
 }
 
 test.describe('Device Grid', () => {
-  test.skip(!isMockMode, 'Device grid sparse-row coverage requires mock fixtures.');
+  test.skip(!isMockMode, 'Device grid editor assertions require mock fixtures.');
 
-  test('should initialize editor grid for sparse schedules without nonce/CSP or row errors', async ({
+  test('should initialize editor grid with progressive row loading and no CSP/grid errors', async ({
     page,
   }) => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
+    const firstRowPayload = page.waitForResponse(
+      (resp) =>
+        /\/json\/v1\/device\/[^/]+\/schedule-rows/.test(resp.url()) &&
+        resp.request().method() === 'GET',
+      { timeout: 10000 }
+    );
 
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
@@ -88,6 +94,15 @@ test.describe('Device Grid', () => {
 
     const selected = await gotoSeededSparseDevice(page);
     expect(selected.path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
+    const expando = page.locator('#expando');
+    if (await expando.isVisible().catch(() => false)) {
+      await expando.click();
+    }
+
+    await firstRowPayload;
+    await expect(page.locator('.editor #scroll-container')).toBeVisible();
+    await expect(page.locator('.editor #scroll-container')).toHaveClass(/js-grid/);
+    await expect(page.locator('#editor-load-status')).toContainText(/rows ready|loading/i);
 
     const sparseRowCount = await page
       .locator('.editor #scroll-container tbody tr')

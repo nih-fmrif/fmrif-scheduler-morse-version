@@ -48,6 +48,9 @@ class EntraConfig(BaseModel):
     redirect_uri: str = ""
     allowed_audiences: List[str] = Field(default_factory=list)
     allowed_algorithms: List[str] = Field(default_factory=lambda: ["RS256"])
+    bearer_auto_provision_enabled: bool = False
+    bearer_auto_provision_domains: List[str] = Field(default_factory=list)
+    bearer_auto_provision_groups: List[str] = Field(default_factory=list)
     scope: str = "openid profile email offline_access"  # OAuth 2.0 OIDC scopes + offline_access for refresh tokens
     jwks_cache_ttl: int = 60 * 60  # seconds
 
@@ -63,6 +66,26 @@ class EntraConfig(BaseModel):
             raise ValueError(
                 "ENTRA__ALLOWED_ALGORITHMS must include at least one value"
             )
+        return normalized
+
+    @field_validator("bearer_auto_provision_domains")
+    @classmethod
+    def normalize_bearer_auto_provision_domains(cls, value: List[str]) -> List[str]:
+        normalized: List[str] = []
+        for domain in value:
+            token = str(domain).strip().lower().lstrip("@")
+            if token and token not in normalized:
+                normalized.append(token)
+        return normalized
+
+    @field_validator("bearer_auto_provision_groups")
+    @classmethod
+    def normalize_bearer_auto_provision_groups(cls, value: List[str]) -> List[str]:
+        normalized: List[str] = []
+        for group in value:
+            token = str(group).strip().lower()
+            if token and token not in normalized:
+                normalized.append(token)
         return normalized
 
     @property

@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import re
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Sequence
+
+from flask import has_app_context
 
 from scheduler import logic, model
 from scheduler.app import app
@@ -46,12 +49,31 @@ def set_admin_session(client) -> None:
     )
 
 
-def ensure_active_user(user_id: str, email: str, display_name: str) -> None:
+@contextmanager
+def _route_app_context():
+    if has_app_context():
+        yield False
+        return
+
     with app.app_context():
+        yield True
+
+
+def _finalize_session_write(created_context: bool) -> None:
+    # Keep writes visible in the current test transaction, but avoid extra commits
+    # when an app context is already active for the test.
+    if created_context:
+        model.db.session.commit()
+    else:
+        model.db.session.flush()
+
+
+def ensure_active_user(user_id: str, email: str, display_name: str) -> None:
+    with _route_app_context() as created_context:
         user = logic.upsert_user(user_id, email, display_name)
         user.active = True
         model.db.session.add(user)
-        model.db.session.commit()
+        _finalize_session_write(created_context)
 
 
 def ensure_group(
@@ -63,7 +85,7 @@ def ensure_group(
     active: bool = True,
     has_membership: bool = True,
 ) -> None:
-    with app.app_context():
+    with _route_app_context() as created_context:
         group = model.Group.query.get(group_id)
         if group is None:
             group = model.Group(id=group_id)
@@ -76,7 +98,7 @@ def ensure_group(
         group.active = active
         group.has_membership = has_membership
         model.db.session.add(group)
-        model.db.session.commit()
+        _finalize_session_write(created_context)
 
 
 def create_group(
@@ -100,7 +122,7 @@ def create_device() -> tuple[str, str]:
     suffix = uuid.uuid4().hex[:4]
     device_id = f"D{suffix}"
     device_label = f"Device {suffix}"
-    with app.app_context():
+    with _route_app_context() as created_context:
         model.db.session.add(
             model.Device(
                 id=device_id,
@@ -109,13 +131,13 @@ def create_device() -> tuple[str, str]:
                 active=True,
             )
         )
-        model.db.session.commit()
+        _finalize_session_write(created_context)
     return device_id, device_label
 
 
 def seeded_scanner_id() -> str:
     """Return a scanner id guaranteed to exist in SQL-seeded route-test data."""
-    with app.app_context():
+    with _route_app_context():
         for scanner_id in ("TEST", "test"):
             scanner = model.Device.query.get(scanner_id)
             if scanner is not None and scanner.active:
@@ -141,7 +163,7 @@ def seeded_scanner_id() -> str:
 
 def seeded_dev_user_id() -> str:
     """Return an existing approved DEV member id from seeded route-test data."""
-    with app.app_context():
+    with _route_app_context():
         row = model.db.session.execute(
             """
             select m."user"
@@ -165,7 +187,7 @@ def seeded_dev_user_id() -> str:
 
 def seeded_sched_log_id() -> str:
     """Return an existing schedule id for /json/v1/log/<id> contract checks."""
-    with app.app_context():
+    with _route_app_context():
         row = model.db.session.execute(
             """
             select s.schedid
@@ -195,7 +217,7 @@ def set_group_membership(
     approved: bool = True,
     pi: bool = False,
 ) -> None:
-    with app.app_context():
+    with _route_app_context() as created_context:
         membership = model.GroupMember.query.get((group_id, user_id))
         approved_at = datetime.now(timezone.utc) if approved else None
         if membership is None:
@@ -227,7 +249,7 @@ def set_group_membership(
                 )
         elif pi_entry is not None:
             model.db.session.delete(pi_entry)
-        model.db.session.commit()
+        _finalize_session_write(created_context)
 
 
 def ensure_admin_user() -> None:

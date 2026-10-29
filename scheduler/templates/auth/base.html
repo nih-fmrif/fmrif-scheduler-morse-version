@@ -10,6 +10,11 @@
     />
   </head>
   <body>
+    <div id="app-feedback" class="app-feedback" aria-live="polite"></div>
     <main id="main">{% block body %}{% endblock %}</main>
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/notifications-bootstrap.js') }}"
+    ></script>
   </body>
 </html>

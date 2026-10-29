@@ -16,35 +16,69 @@ basehead %} {% block head %}
   <div class="top-inner">
     <nav class="breadcrumb" aria-label="breadcrumb">
       <ul>
-        {% for (name, url) in breadcrumb %}
+        {% for (name, url) in breadcrumb %} {% set is_current = request.path is
+        equalto(url) %} {% set is_section = name in ["devices", "groups"] %}
         <li>
-          <a
-            href="{{ url }}"
+          {% if loop.first %}
+          <a href="{{ url }}" {% if is_current %}aria-current="page" {% endif %}
+            >{{name}}</a
+          >
+          {% elif is_section %}
+          <span
+            class="breadcrumb-label"
             {%
             if
-            request.path
-            is
-            equalto(url)
+            is_current
             %}aria-current="page"
             {%
             endif
             %}
+            >{{ name }}</span
+          >
+          {% else %}
+          <a href="{{ url }}" {% if is_current %}aria-current="page" {% endif %}
             >{{name}}</a
           >
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
     </nav>
     <section class="login-info" aria-label="login info">
-      <p>
-        {% if user %}logged in as {{user.id}}{% if not user.active %}
-        (inactive){% endif %}{% else %}not logged in{% endif %}
-      </p>
       {% if user %}
-      <form method="post" action="{{ url_for('auth.logout') }}">
-        {{ logout_form.csrf_token }}
-        <button id="logout-btn" type="submit">Logout</button>
-      </form>
+      <details class="user-menu">
+        <summary id="user-menu-toggle">
+          {{ icons.person_circle("account menu") }}
+          <span>{{ user.id }}</span>
+          {% if not user.active %}<small>(inactive)</small>{% endif %}
+        </summary>
+        <div class="user-menu-panel">
+          <div class="user-menu-title">{{ icons.gear() }} settings</div>
+          <ul>
+            {% for label, href, icon in user_menu_links %}
+            <li>
+              <a class="menu-action" href="{{ href }}">
+                {% if icon == "join" %} {{ icons.arrow_right() }} {% elif icon
+                == "tech" %} {{ icons.check() }} {% elif icon == "lock" %} {{
+                icons.lock() }} {% elif icon == "warning" %} {{
+                icons.exclaim_triangle() }} {% else %} {{ icons.envelope() }} {%
+                endif %}
+                <span>{{ label }}</span>
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+          <form method="post" action="{{ url_for('auth.logout') }}">
+            {{ logout_form.csrf_token }}
+            <button id="logout-btn" class="menu-action" type="submit">
+              {{ icons.box_arrow_right() }}
+              <span>Logout</span>
+            </button>
+          </form>
+        </div>
+      </details>
+      {% else %}
+      <p>not logged in</p>
       {% endif %}
     </section>
   </div>

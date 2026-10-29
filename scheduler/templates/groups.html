@@ -1,14 +1,20 @@
-{% extends "page.html" %} {% block title %}{{ title }}{% endblock %} {% block
-body %}
+{% extends "page.html" %} {% import "svg/icons.html" as icons %} {% block title
+%}{{ title }}{% endblock %} {% block body %}
 <article class="list-with-description" aria-labelledby="list-lbl">
-  <span id="list-lbl">Group</span>
+  <h1 id="list-lbl">{{ icons.person_circle() }} Groups</h1>
   <ul>
     {% for group in groups %}
     <li>
-      <a href="{{ url_for('group', the_group=group.id) }}">{{group.label}}</a>
-      {% if group.description %}
-      <p>{{group.description}}</p>
-      {% endif %}
+      <a class="list-card" href="{{ url_for('group', the_group=group.id) }}">
+        <strong>{{ group.label }}</strong>
+        {% if group.description %}
+        <p>{{ group.description }}</p>
+        {% endif %}
+      </a>
+    </li>
+    {% else %}
+    <li>
+      <p class="none">No groups found.</p>
     </li>
     {% endfor %}
   </ul>

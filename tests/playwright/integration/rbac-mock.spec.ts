@@ -24,7 +24,7 @@ async function ensureProfileSession(
 
   expect(response.ok()).toBeTruthy();
   await page.goto('/');
-  await expect(page.getByText(new RegExp(`logged in as ${username}`, 'i'))).toBeVisible();
+  await expect(page.locator('#user-menu-toggle')).toContainText(new RegExp(username, 'i'));
 }
 
 test.describe('Mock Role Coverage', () => {
@@ -33,37 +33,30 @@ test.describe('Mock Role Coverage', () => {
   test.describe('admin profile', () => {
     test.use({ authProfile: 'admin' });
 
-    test('should access inactive groups and devices pages', async ({ page }) => {
+    test('should access consolidated RBAC admin pages', async ({ page }) => {
       await ensureProfileSession(page, 'admin', 'test-admin');
 
-      await page.goto('/groups/inactive');
-      await expect(page).toHaveURL(/\/groups\/inactive$/);
-      await expect(page.locator('article.list-with-description')).toBeVisible();
+      await page.goto('/rbac');
+      await expect(page).toHaveURL(/\/rbac$/);
+      await expect(page.getByRole('heading', { name: /rbac explorer/i })).toBeVisible();
 
-      await page.goto('/devices/inactive');
-      await expect(page).toHaveURL(/\/devices\/inactive$/);
-      await expect(page.locator('article.list-with-description')).toBeVisible();
+      await page.goto('/app/issues');
+      await expect(page).toHaveURL(/\/app\/issues$/);
+      await expect(page.getByRole('heading', { name: /potential issues/i })).toBeVisible();
     });
   });
 
   test.describe('member profile', () => {
     test.use({ authProfile: 'member' });
 
-    test('should be denied on group creation page', async ({ page }) => {
+    test('should be denied on consolidated admin RBAC pages', async ({ page }) => {
       await ensureProfileSession(page, 'member', 'test-member');
 
-      await page.goto('/groups/add');
-      await expect(page.getByText(/access denied/i)).toBeVisible();
-    });
+      await page.goto('/rbac');
+      await expect(page.getByRole('heading', { name: /access denied/i })).toBeVisible();
 
-    test('should be denied on inactive-only routes', async ({ page }) => {
-      await ensureProfileSession(page, 'member', 'test-member');
-
-      await page.goto('/groups/inactive');
-      await expect(page.getByText(/403 - access denied/i)).toBeVisible();
-
-      await page.goto('/devices/inactive');
-      await expect(page.getByText(/403 - access denied/i)).toBeVisible();
+      await page.goto('/app/issues');
+      await expect(page.getByRole('heading', { name: /access denied/i })).toBeVisible();
     });
   });
 
@@ -74,7 +67,8 @@ test.describe('Mock Role Coverage', () => {
       await ensureProfileSession(page, 'inactive', 'test-inactive');
 
       await page.goto('/groups');
-      await expect(page.getByText(/limited to active users/i)).toBeVisible();
+      await expect(page.getByRole('heading', { name: /access denied/i })).toBeVisible();
+      await expect(page.getByText(/do not have permission to view this page/i)).toBeVisible();
     });
   });
 });

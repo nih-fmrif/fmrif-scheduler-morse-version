@@ -1,5 +1,5 @@
-{% extends "page.html" %} {% block title %}become a technologist{% endblock %}
-{% block body %}
+{% extends "page.html" %} {% block title %}apply to be a technologist{% endblock
+%} {% block body %}
 <form method="POST">
   {{ form.csrf_token }} {# content between this and the next comment is user
   editable #}
@@ -155,6 +155,6 @@
     >
   </input-set>
   {# end user editable section #}
-  <button type="submit">submit</button>
+  <button type="submit">submit application</button>
 </form>
 {% endblock %}

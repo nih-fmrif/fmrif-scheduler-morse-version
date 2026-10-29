@@ -9,7 +9,7 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: /Device Scheduler/i });
+    this.heading = page.getByRole('heading', { name: /FMRIF Scheduler/i });
     this.subtitle = page.getByText(/Sign in with your NIH credentials/i);
     this.loginButton = page.getByRole('button', { name: /Login with NIH Credentials/i });
   }
@@ -29,6 +29,6 @@ export class LoginPage {
   }
 
   async verifyLoggedIn() {
-    await expect(this.page.getByText(/logged in as/i)).toBeVisible();
+    await expect(this.page.locator('#user-menu-toggle')).toBeVisible();
   }
 }
