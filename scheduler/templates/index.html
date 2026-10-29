@@ -4,16 +4,44 @@
 <div class="home-panels">
   <article class="list-with-description home-panel" data-home-section="devices">
     <h2>{{ icons.book() }} Devices</h2>
+    <div class="home-device-controls">
+      <label>
+        <input id="home-show-readonly" type="checkbox" />
+        show read-only devices
+      </label>
+    </div>
     <ul>
-      {% for device in devices %}
-      <li>
+      {% for device in devices %} {% set perms =
+      device_permissions.get(device.id, {}) %} {% set can_edit =
+      perms.get("can_edit", False) %} {% set extra_privileges =
+      perms.get("extra_privileges", []) %}
+      <li
+        {%
+        if
+        not
+        can_edit
+        %}data-home-readonly-device="true"
+        hidden{%
+        endif
+        %}
+      >
         <a
-          class="list-card"
+          class="list-card{% if not can_edit %} home-device-readonly{% endif %}"
+          data-device-permission="{% if can_edit %}editable{% else %}read-only{% endif %}"
           href="{{ url_for('device', the_device=device.id) }}"
         >
           <strong>{{ device.label }}</strong>
           {% if device.description %}
           <p>{{ device.description }}</p>
+          {% endif %} {% if not can_edit or extra_privileges %}
+          <p class="home-device-perms">
+            {% if not can_edit %} {{ icons.lock() }} read-only {% endif %} {% if
+            extra_privileges %} {% if not can_edit %}
+            <span> · </span>
+            {% endif %}
+            <span>{{ extra_privileges|join(", ") }}</span>
+            {% endif %}
+          </p>
           {% endif %}
         </a>
       </li>

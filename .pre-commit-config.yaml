@@ -33,6 +33,11 @@ repos:
 
     - repo: local
       hooks:
+        - id: no-unsafe-html-sinks
+          name: no unsafe html sinks
+          entry: bash scripts/check-no-unsafe-html-sinks.sh
+          language: system
+          pass_filenames: false
         - id: csp-inline-style-nonce
           name: csp inline style nonce
           entry: bash scripts/check-csp-inline-style-nonce.sh

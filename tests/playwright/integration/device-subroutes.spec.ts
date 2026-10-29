@@ -4,11 +4,12 @@ const isMockMode = (process.env.PLAYWRIGHT_AUTH_MODE ?? 'mock').toLowerCase() ==
 
 test.describe('Device Subroutes', () => {
   test.skip(!isMockMode, 'Device template subroute assertions require mock fixtures.');
+  test.use({ authProfile: 'admin' });
 
   test('should navigate from devices list through template subroutes', async ({ page }) => {
-    await page.goto('/devices');
+    await page.goto('/');
 
-    const deviceLink = page.locator('article.list-with-description ul li a').first();
+    const deviceLink = page.locator('[data-home-section="devices"] a.list-card').first();
     await expect(deviceLink).toBeVisible();
 
     const href = await deviceLink.getAttribute('href');

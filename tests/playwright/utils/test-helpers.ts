@@ -1,7 +1,6 @@
 import { Page, expect } from '@playwright/test';
 
 export async function waitForAppShell(page: Page) {
-  await expect(page.locator('nav.breadcrumb')).toBeVisible();
   await expect(page.locator('section.login-info')).toBeVisible();
 }
 

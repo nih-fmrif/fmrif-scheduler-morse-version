@@ -34,6 +34,7 @@ class User(Model):
         "chg_at",
         db.DateTime(),
         db.FetchedValue(for_update=False),
+        server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
     )
@@ -272,6 +273,7 @@ class Membership(Model):
 
     pi: bool = db.Column("pi", db.Boolean(), nullable=False)
     approved: bool = db.Column("approved", db.Boolean(), nullable=False)
+    email_status: str = db.Column("email_status", db.String(10), nullable=False)
     group_active: bool = db.Column("group_active", db.Boolean(), nullable=False)
     user_active: bool = db.Column("user_active", db.Boolean(), nullable=False)
 
@@ -291,6 +293,9 @@ class GroupMember(Model):
     )
 
     approved: Any = db.Column("approved", db.DateTime(timezone=True), nullable=True)
+    email_status: str = db.Column(
+        "email_status", db.String(10), nullable=False, default="none"
+    )
 
     __table_args__ = (db.PrimaryKeyConstraint("deptcode", "researchercode"),)
 
@@ -317,6 +322,15 @@ class Technologist(Model):
         db.String(20),
         db.ForeignKey("tlkpresearcher.researchercode"),
         primary_key=True,
+    )
+    applied_on: Any = db.Column(
+        "applied_on", db.DateTime(timezone=True), nullable=False, default=func.now()
+    )
+    approved_on: Any = db.Column(
+        "approved_on", db.DateTime(timezone=True), nullable=True
+    )
+    email_status: str = db.Column(
+        "email_status", db.String(10), nullable=False, default="none"
     )
 
 
@@ -371,10 +385,95 @@ class RbacAuditLog(Model):
     how: str = db.Column("how", db.String(32), nullable=False)
     what: str = db.Column("what", db.Text(), nullable=False)
 
-    group: Optional[str] = db.Column("deptcode", db.String(10), nullable=True)
-    device: Optional[str] = db.Column("scannercode", db.String(5), nullable=True)
-    user: Optional[str] = db.Column("researchercode", db.String(20), nullable=True)
-    requester: Optional[str] = db.Column("requestercode", db.String(20), nullable=True)
+    group: Optional[str] = db.Column("deptcode", db.Text(), nullable=True)
+    device: Optional[str] = db.Column("scannercode", db.Text(), nullable=True)
+    user: Optional[str] = db.Column("researchercode", db.Text(), nullable=True)
+    requester: Optional[str] = db.Column("requestercode", db.Text(), nullable=True)
+
+
+class EmailAuditLog(Model):
+    __tablename__ = "email_audit_log"
+
+    id: int = db.Column("auditid", db.BigInteger(), primary_key=True)
+    occurred_at: Any = db.Column(
+        "occurred_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    action: str = db.Column("action", db.Text(), nullable=False)
+    actor: str = db.Column("actor", db.String(20), nullable=False)
+    ip: Optional[str] = db.Column("ip_addr", db.String(64), nullable=True)
+    where_path: str = db.Column("where_path", db.Text(), nullable=False)
+    how: str = db.Column("how", db.String(32), nullable=False)
+    status: str = db.Column("status", db.String(16), nullable=False)
+    recipient: str = db.Column("recipient", db.Text(), nullable=False)
+    subject: str = db.Column("subject", db.Text(), nullable=False)
+    details: str = db.Column("details", db.Text(), nullable=False)
+    issue_key: Optional[str] = db.Column("issue_key", db.Text(), nullable=True)
+    issue_state: str = db.Column("issue_state", db.String(16), nullable=False)
+
+    group: Optional[str] = db.Column("deptcode", db.Text(), nullable=True)
+    device: Optional[str] = db.Column("scannercode", db.Text(), nullable=True)
+    user: Optional[str] = db.Column("researchercode", db.Text(), nullable=True)
+    requester: Optional[str] = db.Column("requestercode", db.Text(), nullable=True)
+
+
+class NotificationIncident(Model):
+    __tablename__ = "notification_incident"
+
+    issue_key: str = db.Column("issue_key", db.Text(), primary_key=True)
+    issue_type: str = db.Column("issue_type", db.Text(), nullable=False)
+    category: str = db.Column("category", db.Text(), nullable=False)
+    severity: str = db.Column("severity", db.String(16), nullable=False)
+    title: str = db.Column("title", db.Text(), nullable=False)
+    detail: str = db.Column("detail", db.Text(), nullable=False)
+    href: Optional[str] = db.Column("href", db.Text(), nullable=True)
+    link_label: str = db.Column("link_label", db.Text(), nullable=False, default="")
+
+    active: bool = db.Column("active", db.Boolean(), nullable=False, default=True)
+    state: str = db.Column("state", db.String(16), nullable=False, default="open")
+    state_note: str = db.Column("state_note", db.Text(), nullable=False, default="")
+    state_changed_by: Optional[str] = db.Column(
+        "state_changed_by", db.String(20), nullable=True
+    )
+    state_changed_at: Any = db.Column(
+        "state_changed_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+    ignored_until: Optional[Any] = db.Column(
+        "ignored_until", db.DateTime(timezone=True), nullable=True
+    )
+
+    first_seen_at: Any = db.Column(
+        "first_seen_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+    last_seen_at: Any = db.Column(
+        "last_seen_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+    last_detected_at: Optional[Any] = db.Column(
+        "last_detected_at", db.DateTime(timezone=True), nullable=True
+    )
+    last_resolved_at: Optional[Any] = db.Column(
+        "last_resolved_at", db.DateTime(timezone=True), nullable=True
+    )
+    occurrence_count: int = db.Column(
+        "occurrence_count", db.Integer(), nullable=False, default=1
+    )
+    fingerprint: str = db.Column("fingerprint", db.Text(), nullable=False, default="")
 
 
 class SchedLogEntry(Model):

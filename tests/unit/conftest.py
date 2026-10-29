@@ -8,7 +8,6 @@ from urllib.parse import quote
 import psycopg2
 import pytest
 from dotenv import load_dotenv
-from flask import Flask
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from sqlalchemy import create_engine, event
@@ -25,13 +24,14 @@ TEST_DB_TEMPLATE_NAME = os.getenv(
 os.environ["PGDATABASE"] = TEST_DB_NAME
 os.environ.setdefault("AUTH_TEST__ENABLED", "true")
 os.environ.setdefault("AUTH_TEST__SHARED_SECRET", "unit-test-secret")
+os.environ.setdefault("APP_ENV", "development")
 
 # Import scheduler config
 from scheduler import model  # noqa: E402
-from scheduler.config import app_config  # noqa: E402
 
 _ROUTE_DB_BOOTSTRAPPED = False
 _ROUTE_TEST_ENGINE = None
+_ROUTE_APP = None
 
 
 def _parse_positive_int(value: str | None, default: int) -> int:
@@ -77,9 +77,12 @@ def _route_test_engine():
 
 
 def _get_route_app():
-    from scheduler.app import app as route_app
+    global _ROUTE_APP
+    if _ROUTE_APP is None:
+        from scheduler.app import create_app
 
-    return route_app
+        _ROUTE_APP = create_app()
+    return _ROUTE_APP
 
 
 def _run_sql_bootstrap(init_script: Path, env: dict[str, str]) -> None:
@@ -332,7 +335,7 @@ def create_test_database():
         exists = cur.fetchone()
 
         if not exists:
-            cur.execute(f"CREATE DATABASE {test_db}")
+            cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(test_db)))
 
         cur.close()
         conn.close()
@@ -408,16 +411,11 @@ def app():
     # Create test database if it doesn't exist
     create_test_database()
 
-    app = Flask(__name__)
-    test_config = dict(app_config)
+    from scheduler.app import create_app
 
-    # Always use a separate test database for all test environments.
-    test_config["SQLALCHEMY_DATABASE_URI"] = _test_db_uri()
-
+    app = create_app()
     app_port = os.getenv("APP_PORT", "5051")
-    test_config["SERVER_NAME"] = f"localhost.localdomain:{app_port}"
-    app.config.update(**test_config)
-    model.db.init_app(app)
+    app.config["SERVER_NAME"] = f"localhost.localdomain:{app_port}"
     return app
 
 

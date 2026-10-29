@@ -7,8 +7,8 @@ const AUTH_MODE = (process.env.PLAYWRIGHT_AUTH_MODE ?? 'mock').toLowerCase();
 
 async function appShellVisible(page: Page): Promise<boolean> {
   try {
-    await page.locator('nav.breadcrumb').waitFor({ state: 'visible', timeout: 4000 });
     await page.locator('section.login-info').waitFor({ state: 'visible', timeout: 4000 });
+    await page.locator('.user-menu summary').waitFor({ state: 'visible', timeout: 4000 });
     return true;
   } catch {
     return false;

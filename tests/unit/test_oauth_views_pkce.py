@@ -40,7 +40,7 @@ def test_start_login_redirect_contains_pkce_params(monkeypatch):
     monkeypatch.setattr(settings.entra, "scope", "openid profile email")
 
     client = app.test_client()
-    response = client.get("/auth/entra?next=%2Fdevices")
+    response = client.get("/auth/entra?next=%2Fmailing-lists")
 
     assert response.status_code == 302
     location = response.headers["Location"]
@@ -51,7 +51,7 @@ def test_start_login_redirect_contains_pkce_params(monkeypatch):
     assert params["nonce"] == ["nonce-123"]
     assert params["code_challenge_method"] == ["S256"]
     assert "code_challenge" in params
-    assert captured["next_url"] == "/devices"
+    assert captured["next_url"] == "/mailing-lists"
     assert captured["code_verifier"]
 
 
@@ -94,7 +94,7 @@ def test_consume_oauth_state_returns_and_deletes_code_verifier(app_context):
     record = model.OAuthState(
         state="state-delete-me",
         nonce="nonce-delete-me",
-        redirect_next="/devices",
+        redirect_next="/mailing-lists",
         code_verifier="pkce-delete-me",
     )
     model.db.session.add(record)
@@ -110,7 +110,7 @@ def test_consume_oauth_state_returns_and_deletes_code_verifier(app_context):
 
 
 def test_create_oauth_state_persists_code_verifier(app_context):
-    state, nonce = views._create_oauth_state("/devices", "pkce-persist-me")
+    state, nonce = views._create_oauth_state("/mailing-lists", "pkce-persist-me")
 
     assert state is not None
     assert nonce is not None

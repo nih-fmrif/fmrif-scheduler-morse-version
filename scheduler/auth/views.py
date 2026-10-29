@@ -181,7 +181,7 @@ def start_login():
 
     try:
         auth_endpoint = get_authorization_endpoint()
-    except Exception:
+    except (ValueError, requests.RequestException):
         if current_app and current_app.logger:
             current_app.logger.exception("Failed to load authorization endpoint")
         flash("Login unavailable. Please try again later.", "error")
@@ -357,7 +357,7 @@ def _exchange_code_for_token(code: str, code_verifier: Optional[str]) -> Optiona
         return None
     try:
         token_endpoint = get_token_endpoint()
-    except Exception:
+    except (ValueError, requests.RequestException):
         if current_app and current_app.logger:
             current_app.logger.exception("Failed to load token endpoint")
         return None

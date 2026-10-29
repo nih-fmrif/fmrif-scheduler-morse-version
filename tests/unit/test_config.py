@@ -24,6 +24,9 @@ from scheduler.config import (
 
 def make_settings(**kwargs) -> Settings:
     kwargs.setdefault("auth_test", {"enabled": True, "shared_secret": "test-secret"})
+    mail_config = dict(kwargs.get("mail", {}))
+    mail_config.setdefault("default_sender", "noreply@example.com")
+    kwargs["mail"] = mail_config
     return Settings(**kwargs)
 
 
@@ -39,6 +42,7 @@ def temp_env_file() -> Generator[Path, None, None]:
 def clean_env(monkeypatch):
     """Clear relevant environment variables before each test"""
     env_vars = [
+        "APP_ENV",
         "PGHOST",
         "PGPORT",
         "SCHEDULER_TEST_DB_NAME",
@@ -47,10 +51,10 @@ def clean_env(monkeypatch):
         "PGPASSWORD",
         "PGDATABASE",
         "CORE__SECRET_KEY",
-        "CORE__SITE_SENDER",
         "CORE__DEBUG",
         "MAIL__SERVER",
         "MAIL__PORT",
+        "MAIL__DEFAULT_SENDER",
         "MAIL__USE_TLS",
         "ENTRA__CLIENT_ID",
         "ENTRA__TENANT_ID",
@@ -60,6 +64,7 @@ def clean_env(monkeypatch):
         "SERVER__SERVER_NAME",
         "SERVER__APPLICATION_ROOT",
         "SESSION__COOKIE_NAME",
+        "SESSION__COOKIE_SECURE",
         "SESSION__TYPE",
         "AUTH_TEST__ENABLED",
         "AUTH_TEST__SHARED_SECRET",
@@ -81,13 +86,7 @@ def clean_env(monkeypatch):
 @pytest.mark.parametrize(
     "config_class,field,default,valid_value,invalid_value",
     [
-        (
-            CoreConfig,
-            "site_sender",
-            "noreply@example.com",
-            "test@example.com",
-            "invalid-email",
-        ),
+        (MailConfig, "default_sender", None, "test@example.com", "invalid-email"),
         (EntraConfig, "jwks_cache_ttl", 3600, 7200, "invalid"),
         (MailConfig, "port", 25, 587, "invalid"),
         (LoggingConfig, "level", "INFO", "DEBUG", "invalid"),
@@ -143,6 +142,7 @@ def test_config_hierarchy(
             [
                 "AUTH_TEST__ENABLED=true",
                 "AUTH_TEST__SHARED_SECRET=test-secret",
+                "MAIL__DEFAULT_SENDER=test-sender@example.com",
                 f"{env_var}={env_value}",
             ]
         )
@@ -224,6 +224,12 @@ def test_app_config_maps_mail_suppress_send_flag():
     settings = make_settings(mail={"suppress_send": True})
     app_config = AppConfig(settings)
     assert app_config["MAIL_SUPPRESS_SEND"] is True
+
+
+def test_app_config_maps_mail_default_sender():
+    settings = make_settings(mail={"default_sender": "scheduler@example.com"})
+    app_config = AppConfig(settings)
+    assert app_config["MAIL_DEFAULT_SENDER"] == "scheduler@example.com"
 
 
 def test_proxy_count_validation(clean_env):
@@ -343,22 +349,14 @@ def test_core_config_validation():
     config = CoreConfig()
     assert config.debug is True
     assert config.secret_key == "dev-key-change-in-prod"
-    assert isinstance(config.site_sender, str)
-    assert "@" in config.site_sender
 
-    # Test custom values with valid email
+    # Test custom values
     config = CoreConfig(
         debug=False,
         secret_key="production-key",
-        site_sender="test@example.com",
     )
     assert config.debug is False
     assert config.secret_key == "production-key"
-    assert config.site_sender == "test@example.com"
-
-    # Test invalid email validation
-    with pytest.raises(ValidationError):
-        CoreConfig(site_sender="invalid-email")
 
 
 def test_server_config_validation():
@@ -379,18 +377,21 @@ def test_mail_config_validation():
     assert config.port == 25
     assert config.use_tls is False
     assert config.use_ssl is False
+    assert config.default_sender is None
     assert isinstance(config.mailing_lists, dict)
 
     config = MailConfig(
         server="smtp.test.com",
         port=587,
         use_tls=True,
+        default_sender="noreply@example.com",
         username="test",
         password="secret",
     )
     assert config.server == "smtp.test.com"
     assert config.port == 587
     assert config.use_tls is True
+    assert config.default_sender == "noreply@example.com"
     assert config.username == "test"
     assert config.password == "secret"
 
@@ -454,8 +455,11 @@ def _valid_entra_settings() -> dict[str, str]:
 def test_settings_production_rejects_debug_enabled():
     with pytest.raises((ValidationError, ValueError), match="CORE__DEBUG"):
         Settings(
+            app_env="production",
+            _env_file=None,
             auth_test={"enabled": False},
             core={"debug": True, "secret_key": "prod-secret"},
+            mail={"default_sender": "noreply@example.com"},
             entra=_valid_entra_settings(),
         )
 
@@ -463,8 +467,11 @@ def test_settings_production_rejects_debug_enabled():
 def test_settings_production_rejects_default_secret():
     with pytest.raises((ValidationError, ValueError), match="CORE__SECRET_KEY"):
         Settings(
+            app_env="production",
+            _env_file=None,
             auth_test={"enabled": False},
             core={"debug": False, "secret_key": "dev-key-change-in-prod"},
+            mail={"default_sender": "noreply@example.com"},
             entra=_valid_entra_settings(),
         )
 
@@ -472,10 +479,58 @@ def test_settings_production_rejects_default_secret():
 def test_settings_production_requires_secure_cookie():
     with pytest.raises((ValidationError, ValueError), match="SESSION__COOKIE_SECURE"):
         Settings(
+            app_env="production",
+            _env_file=None,
             auth_test={"enabled": False},
             core={"debug": False, "secret_key": "prod-secret"},
             session={"cookie_secure": False},
+            mail={"default_sender": "noreply@example.com"},
             entra=_valid_entra_settings(),
+        )
+
+
+def test_settings_production_rejects_auth_test_enabled():
+    with pytest.raises((ValidationError, ValueError), match="AUTH_TEST__ENABLED"):
+        Settings(
+            app_env="production",
+            _env_file=None,
+            auth_test={"enabled": True, "shared_secret": "test-secret"},
+            core={"debug": False, "secret_key": "prod-secret"},
+            mail={"default_sender": "noreply@example.com"},
+            entra=_valid_entra_settings(),
+        )
+
+
+def test_settings_production_rejects_mailpit():
+    with pytest.raises((ValidationError, ValueError), match="Mailpit"):
+        Settings(
+            app_env="production",
+            _env_file=None,
+            auth_test={"enabled": False},
+            core={"debug": False, "secret_key": "prod-secret"},
+            session={"cookie_secure": True},
+            mail={"server": "mailpit", "default_sender": "noreply@example.com"},
+            entra=_valid_entra_settings(),
+        )
+
+
+def test_settings_development_enables_auth_test():
+    settings = Settings(
+        _env_file=None,
+        app_env="development",
+        auth_test={"enabled": False},
+        mail={"default_sender": "noreply@example.com"},
+    )
+    assert settings.app_env == "development"
+    assert settings.auth_test.enabled is True
+
+
+def test_settings_requires_mail_default_sender(monkeypatch):
+    monkeypatch.delenv("MAIL__DEFAULT_SENDER", raising=False)
+    with pytest.raises((ValidationError, ValueError), match="MAIL__DEFAULT_SENDER"):
+        Settings(
+            auth_test={"enabled": True, "shared_secret": "test-secret"},
+            _env_file=None,
         )
 
 
@@ -485,6 +540,7 @@ def test_settings_env_override(temp_env_file, monkeypatch):
     env_content = """
 AUTH_TEST__ENABLED=true
 AUTH_TEST__SHARED_SECRET=test-secret
+MAIL__DEFAULT_SENDER=test-sender@example.com
 PGHOST=testhost
 PGPORT=5433
 CORE__SECRET_KEY=test-secret
@@ -498,7 +554,9 @@ ENTRA__CLIENT_ID=test-client
     monkeypatch.setenv("PGPORT", "5433")
     monkeypatch.setenv("CORE__SECRET_KEY", "test-secret")
     monkeypatch.setenv("MAIL__SERVER", "test-smtp")
+    monkeypatch.setenv("MAIL__DEFAULT_SENDER", "test-sender@example.com")
     monkeypatch.setenv("ENTRA__CLIENT_ID", "test-client")
+    monkeypatch.delenv("MAIL__PORT", raising=False)
 
     # Create Settings with our temp env file
     settings = Settings(_env_file=temp_env_file)
@@ -529,7 +587,11 @@ def test_settings_with_invalid_env_values(temp_env_file, monkeypatch):
 
 def test_auth_test_requires_shared_secret():
     with pytest.raises((ValidationError, ValueError)):
-        Settings(auth_test={"enabled": True, "shared_secret": ""})
+        Settings(
+            _env_file=None,
+            app_env="production",
+            auth_test={"enabled": True, "shared_secret": ""},
+        )
 
 
 def test_attribute_access_app_config():

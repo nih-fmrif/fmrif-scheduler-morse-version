@@ -1,23 +1,25 @@
 # Testing Guide (Local + CI)
 
-Use [`testing-strategy.md`](testing-strategy.md) as the source of truth for:
-
-- suite taxonomy (`unit`, `route`, `integration`, `auth-flow`, `live-incident`)
-- where to place new tests
-- environment prerequisites for each suite
-- migration rules for moving test artifacts down the stack
-
-For local execution, run:
+Use Pixi tasks for all local test runs:
 
 ```bash
-AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=local-test-secret pixi run test-unit
-AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=local-test-secret pixi run test-routes
-AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=local-test-secret pixi run test-integration
+pixi run test-unit
+pixi run test-routes
+pixi run test-integration-ci
 ```
 
-Frontend helpers:
+## Local stack
+- Start services for tests:
+  - `bash run-compose.sh --no-app`
+  - `bash run-compose.sh --no-app --resume` (reuse existing services/data)
 
-- `pixi run install-playwright`
-- `pixi run test-integration`
-- `pixi run test-integration-headed`
-- `pixi run test-integration-ci`
+## Notes
+- `test-unit`, `test-routes`, and `test-integration*` run through `scripts/run-isolated-test-suite.sh`.
+- The wrapper applies per-suite isolation for DB/Mailpit/runtime settings.
+- Integration tasks start their own app server; no separate `pixi run serve` is required.
+
+## Suite placement
+Use [`testing-strategy.md`](testing-strategy.md) for suite boundaries and placement rules.
+
+## Agent workflow
+Agents should use [`agent-guidance-quickstart.md`](agent-guidance-quickstart.md).

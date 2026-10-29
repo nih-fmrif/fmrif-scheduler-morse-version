@@ -1,15 +1,18 @@
 # Scheduler Project Documentation
 
-This documentation provides a practical guide for setting up, developing, and testing
-the Scheduler application.
-
-## Table of Contents
-
+## Core docs
 1. [Configuration Guide](configuration-guide.md)
 2. [Testing Guide](testing-guide.md)
 3. [Testing Strategy](testing-strategy.md)
 4. [Containerized PostgreSQL Guide](containerized-postgres.md)
 5. [Security Guide](security.md)
+6. [UX Guidelines](ux-guidelines.md)
+7. [CSS Style Ownership](css-style-ownership.md)
+
+## Agent guidance
+1. [Agent Guidance: Quickstart](agent-guidance-quickstart.md)
+2. [Agent Guidance: Isolation Validation](agent-guidance-isolation-validation.md)
+3. [Agent Guidance: Playwright](agent-guidance-playwright.md)
 
 # Schema Management
 

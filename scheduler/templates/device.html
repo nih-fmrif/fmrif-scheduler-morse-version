@@ -5,36 +5,66 @@ block body %} {% if never_entries %}
 <p class="note">{{ icons.info() }} {{ never_entries }}</p>
 {% else %}
 <nav class="jump-form" aria-labelledby="jump-hdr">
-  <form>
-    <span id="jump-hdr">jump to</span>
-    <input
-      name="start"
-      aria-label="start date"
-      type="text"
-      spellcheck="false"
-      autocomplete="off"
-      pattern="[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}"
-      value="{{ start_date }}"
-      required
-    />
-    <span aria-hidden="true">and show</span>
-    <input
-      name="days"
-      aria-label="show number of days"
-      type="number"
-      value="{{ days }}"
-      step="1"
-      min="1"
-      max="31"
-      required
-    />
-    <span aria-hidden="true">days</span>
-    <button type="submit">go</button>
+  <form method="get">
+    <div class="jump-controls">
+      <span id="jump-hdr">jump to</span>
+      <input
+        name="start"
+        aria-label="start date"
+        type="text"
+        spellcheck="false"
+        autocomplete="off"
+        pattern="[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}"
+        value="{{ start_date }}"
+        required
+      />
+      <span aria-hidden="true">show</span>
+      <input
+        name="days"
+        aria-label="show number of days"
+        type="number"
+        value="{{ days }}"
+        step="1"
+        min="1"
+        max="31"
+        required
+      />
+      <span aria-hidden="true">days</span>
+      <button
+        id="jump-prev-non-empty"
+        type="button"
+        class="admin-show-more-button jump-arrow-button"
+        aria-label="jump to previous non-empty date"
+      >
+        <span aria-hidden="true">←</span> previous non-empty
+      </button>
+      <button
+        id="jump-next-non-empty"
+        type="button"
+        class="admin-show-more-button jump-arrow-button"
+        aria-label="jump to next non-empty date"
+      >
+        next non-empty <span aria-hidden="true">→</span>
+      </button>
+    </div>
+    <div id="caption" data-changed="false" data-error="false">
+      <span class="range"
+        >schedule for {{ device.label }} from {{ start_date }} to {{ end_date
+        }}</span
+      >
+      {{ macros.edit_icons("schedule") }}
+      <button
+        id="legend-open"
+        type="button"
+        class="admin-show-more-button legend-toggle"
+        aria-label="open legend"
+      >
+        {{ icons.question("legend") }}
+        <span class="legend-toggle-label">legend</span>
+      </button>
+    </div>
   </form>
 </nav>
-{% if no_entries %}
-<p class="note">{{ icons.info() }} {{ no_entries }}</p>
-{% else %}
 <script id="user-perms" type="application/json">
   {{ perms_json|tojson }}
 </script>
@@ -62,21 +92,36 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
 <datalist id="none"></datalist>
 <div class="editor-container">
   <form class="editor schedule-editor">
-    {{ form.csrf_token }} {% if off_hours|length %}
-    <button
-      id="expando"
-      type="button"
-      hidden
-      aria-expanded="false"
-      data-expands="{{ off_hours|tojson }}"
+    {{ form.csrf_token }}
+    <div
+      class="editor-inspector"
+      aria-live="polite"
+      aria-label="selected slot details"
     >
-      <span class="icons">{{ icons.add() }}{{ icons.close() }}</span>
-      {{ off_hours|length }} empty row{% if off_hours|length > 1 %}s{% endif %}
-    </button>
-    {% endif %}
-    <div id="caption" data-changed="false" data-error="false">
-      schedule for {{ device.label }} from {{ start_date }} to {{ end_date }}{{
-      macros.edit_icons("schedule") }}
+      <p class="editor-inspector-line">
+        <span class="editor-inspector-target"
+          >select a slot to inspect and edit</span
+        >
+        <span class="editor-inspector-sep" aria-hidden="true">|</span>
+        <span class="editor-inspector-summary"
+          >use arrow keys to move and press enter to edit</span
+        >
+        <span class="editor-inspector-sep" aria-hidden="true">|</span>
+        <span class="editor-inspector-mode">read only</span>
+        <span class="editor-inspector-sep" aria-hidden="true">|</span>
+        <span class="editor-inspector-pending">0 changes</span>
+        <span class="editor-inspector-sep" aria-hidden="true">|</span>
+        <span class="editor-inspector-errors">0 errors</span>
+      </p>
+      <button
+        id="inspector-open"
+        type="button"
+        class="admin-show-more-button legend-toggle"
+        aria-label="open selected slot details"
+      >
+        {{ icons.info("selected slot details") }}
+        <span class="legend-toggle-label">details</span>
+      </button>
     </div>
     <p id="editor-load-status" class="editor-load-status" aria-live="polite">
       preparing schedule editor...
@@ -117,99 +162,150 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
           </tbody>
         </table>
       </div>
-      <aside
-        class="editor-inspector"
-        aria-live="polite"
-        aria-label="selected slot details"
-      >
-        <h2>selected slot</h2>
-        <p class="editor-inspector-target">select a slot to inspect and edit</p>
-        <p class="editor-inspector-summary">
-          use arrow keys to move and press enter to edit
-        </p>
-        <dl class="editor-inspector-meta">
-          <div>
-            <dt>mode</dt>
-            <dd class="editor-inspector-mode">read only</dd>
-          </div>
-          <div>
-            <dt>pending</dt>
-            <dd class="editor-inspector-pending">0 changes</dd>
-          </div>
-          <div>
-            <dt>errors</dt>
-            <dd class="editor-inspector-errors">0</dd>
-          </div>
-        </dl>
-      </aside>
     </div>
+    {% if off_hours|length %}
+    <div class="admin-show-more-wrap editor-show-more-bottom">
+      <button
+        id="expando"
+        type="button"
+        class="admin-show-more-button"
+        hidden
+        aria-expanded="false"
+        data-more-label="show more"
+        data-less-label="show less"
+        data-expands="{{ off_hours|tojson }}"
+      >
+        <span class="icons">{{ icons.add() }}{{ icons.close() }}</span>
+        <span class="label">show more</span>
+        <span class="detail"
+          >{{ off_hours|length }} empty row{% if off_hours|length > 1 %}s{%
+          endif %}</span
+        >
+      </button>
+    </div>
+    {% endif %}
     <div id="focus-trap"></div>
     <button id="apply" type="submit" disabled>save</button>
   </form>
-  <figure class="legend">
-    <figcaption>legend</figcaption>
-    <dl>
-      <div>
-        <dt>state icons</dt>
-        <dd>
-          <dl>
-            <div>
-              <dt>{{ icons.pencil("pencil") }}</dt>
-              <dd>unsaved changes</dd>
-            </div>
-            <div>
-              <dt class="red">
-                {{ icons.exclaim_triangle("exclamation point in triangle")}}
-              </dt>
-              <dd>errors are present</dd>
-            </div>
-            <div>
-              <dt class="red">{{ icons.lock("lock") }}</dt>
-              <dd>server could not process request</dd>
-            </div>
-          </dl>
-        </dd>
+  <div
+    id="legend-dialog-container"
+    class="dialog-container"
+    aria-hidden="true"
+    aria-labelledby="legend-dialog-title"
+  >
+    <div class="dialog-overlay" data-a11y-dialog-hide></div>
+    <div class="dialog-box-container" role="document">
+      <h1 id="legend-dialog-title" class="dialog-title">schedule legend</h1>
+      <button type="button" data-a11y-dialog-hide>
+        {{ icons.close() }}
+        <sr-only>Close dialog</sr-only>
+      </button>
+      <div id="legend-dialog-content" class="dialog-content" tabindex="0">
+        <dl class="legend-content">
+          <div>
+            <dt>state icons</dt>
+            <dd>
+              <dl>
+                <div>
+                  <dt>{{ icons.pencil("pencil") }}</dt>
+                  <dd>unsaved changes</dd>
+                </div>
+                <div>
+                  <dt class="red">
+                    {{ icons.exclaim_triangle("exclamation point in triangle")}}
+                  </dt>
+                  <dd>errors are present</dd>
+                </div>
+                <div>
+                  <dt class="red">{{ icons.lock("lock") }}</dt>
+                  <dd>server could not process request</dd>
+                </div>
+              </dl>
+            </dd>
+          </div>
+          <div>
+            <dt>time recorded icons</dt>
+            <dd>
+              <dl>
+                <div>
+                  <dt>{{ icons.square_empty("square with question mark") }}</dt>
+                  <dd>time not yet recorded</dd>
+                </div>
+                <div>
+                  <dt>{{ icons.square_unused("square with x") }}</dt>
+                  <dd>time recorded as unused</dd>
+                </div>
+                <div>
+                  <dt>{{ icons.square_used("square with check") }}</dt>
+                  <dd>time recorded as used</dd>
+                </div>
+              </dl>
+            </dd>
+          </div>
+          <div>
+            <dt>buttons</dt>
+            <dd>
+              <dl>
+                <div>
+                  <dt>{{ icons.book("book") }}</dt>
+                  <dd>view activity log</dd>
+                </div>
+                <div>
+                  <dt>{{ icons.add("circled plus symbol") }}</dt>
+                  <dd>expand</dd>
+                </div>
+                <div>
+                  <dt>{{ icons.close("circled x") }}</dt>
+                  <dd>close</dd>
+                </div>
+              </dl>
+            </dd>
+          </div>
+        </dl>
       </div>
-      <div>
-        <dt>time recorded icons</dt>
-        <dd>
-          <dl>
-            <div>
-              <dt>{{ icons.square_empty("square with question mark") }}</dt>
-              <dd>time not yet recorded</dd>
-            </div>
-            <div>
-              <dt>{{ icons.square_unused("square with x") }}</dt>
-              <dd>time recorded as unused</dd>
-            </div>
-            <div>
-              <dt>{{ icons.square_used("square with check") }}</dt>
-              <dd>time recorded as used</dd>
-            </div>
-          </dl>
-        </dd>
+    </div>
+  </div>
+  <div
+    id="inspector-dialog-container"
+    class="dialog-container"
+    aria-hidden="true"
+    aria-labelledby="inspector-dialog-title"
+  >
+    <div class="dialog-overlay" data-a11y-dialog-hide></div>
+    <div class="dialog-box-container" role="document">
+      <h1 id="inspector-dialog-title" class="dialog-title">
+        selected slot details
+      </h1>
+      <button type="button" data-a11y-dialog-hide>
+        {{ icons.close() }}
+        <sr-only>Close dialog</sr-only>
+      </button>
+      <div id="inspector-dialog-content" class="dialog-content" tabindex="0">
+        <dl class="inspector-detail-content">
+          <div>
+            <dt>slot</dt>
+            <dd class="editor-inspector-detail-target">not selected</dd>
+          </div>
+          <div>
+            <dt>summary</dt>
+            <dd class="editor-inspector-detail-summary">not selected</dd>
+          </div>
+          <div>
+            <dt>mode</dt>
+            <dd class="editor-inspector-detail-mode">read only</dd>
+          </div>
+          <div>
+            <dt>pending</dt>
+            <dd class="editor-inspector-detail-pending">0 changes</dd>
+          </div>
+          <div>
+            <dt>errors</dt>
+            <dd class="editor-inspector-detail-errors">0 errors</dd>
+          </div>
+        </dl>
       </div>
-      <div>
-        <dt>buttons</dt>
-        <dd>
-          <dl>
-            <div>
-              <dt>{{ icons.book("book") }}</dt>
-              <dd>view activity log</dd>
-            </div>
-            <div>
-              <dt>{{ icons.add("circled plus symbol") }}</dt>
-              <dd>expand</dd>
-            </div>
-            <div>
-              <dt>{{ icons.close("circled x") }}</dt>
-              <dd>close</dd>
-            </div>
-          </dl>
-        </dd>
-      </div>
-    </dl>
-  </figure>
+    </div>
+  </div>
 </div>
 {{ macros.save_dialogs() }}
 <div
@@ -234,4 +330,4 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
     </div>
   </div>
 </div>
-{% endif %} {% endif %} {% endblock %}
+{% endif %} {% endblock %}

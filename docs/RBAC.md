@@ -12,7 +12,8 @@ The RBAC surface is exposed as a single page:
 - `GET /json/v1/rbac/explorer` (admins and delegated PI roles): scope/entity relationship payload
 - `POST /json/v1/rbac/mutate` (admins and delegated PI roles + CSRF): atomic batch RBAC writes
 - `GET /json/v1/rbac/audit` (admin only): RBAC audit timeline feed
-- `GET /app/issues` (admin only): Potential issues page (warnings + RBAC audit)
+- `GET /json/v1/email/audit` (admin only): email delivery + issue lifecycle feed
+- `GET /app/issues` (admin only): Potential issues page (warnings + RBAC/email audit)
 
 ## Enforcement Points
 
@@ -25,9 +26,10 @@ The RBAC surface is exposed as a single page:
 
 - `membership` view (`scheduler/model.py` -> `Membership`)
   - effective membership read path: `group`, `user`, `approved`, `pi`,
-    `group_active`, `user_active`
+    `group_active`, `user_active`, `email_status`
 - `groupmembers` table (`GroupMember`)
   - membership writes (add/pending/approved/removal)
+  - pending-request notification state (`email_status`: `none|sent|failed`)
 - `primarygroupmember` table (`PrimaryGroupMember`)
   - PI assignment
 - `devicegroup` table (`DeviceGroup`)
@@ -35,7 +37,8 @@ The RBAC surface is exposed as a single page:
 - `userdevice` table (`UserDevice`)
   - per-user device flags (`templates`, `slot`, `tech`, `medical`, `training`)
 - `technologist` table (`Technologist`)
-  - eligibility for technologist-specific permission flag
+  - request state (`applied_on`, nullable `approved_on`, `email_status`)
+  - eligibility for technologist-specific permission flag when approved
 
 ## Effective Permission Logic
 
@@ -71,6 +74,7 @@ The `/rbac` page is entity-focused and progressively loaded.
     matrix, DEV user permission matrix
     with `+ add DEV user` quick-add modal
   - User: transposed key/value settings matrix (active + read-only role flags),
+    profile email + technologist request rows (applied/approved/email state),
     group membership matrix, device-specific permission matrix
 - Batch writes are applied atomically per submit (`mode=batch`):
   - request carries changed row operations only
@@ -78,7 +82,6 @@ The `/rbac` page is entity-focused and progressively loaded.
   - if any validation fails, no DB changes are committed
 - Summary cards/links are intentionally removed/minimized so RBAC mutations stay
   in-page.
-- Legacy single-action mutate mode remains for compatibility and is marked deprecated.
 
 Delegated RBAC behavior:
 
@@ -87,20 +90,13 @@ Delegated RBAC behavior:
   DEV-user device flags.
 - Non-admin delegated users cannot create groups/devices, cannot toggle
   active/inactive entity state, and cannot access audit feeds.
+- Non-admin delegated users can create pending membership requests, but cannot
+  approve membership escalation from the RBAC matrix.
 - Server-side batch authorization enforces these constraints atomically.
 
-### Legacy UI Retirement
+### UI Consolidation
 
-Legacy delegated-management pages are retired in favor of `/rbac`:
-
-- Removed routes:
-  - `/groups/inactive`, `/groups/add`
-  - `/devices/inactive`, `/device-add`
-  - `/rbac/audit`
-- Retired management routes (GET/POST now return `404`):
-  - `/group/<id>/edit`, `/group/<id>/membership`, `/group/<id>/pi`
-  - `/device/<id>/edit`, `/device/<id>/groups`, `/device/<id>/groups/add`
-  - `/device/<id>/users`, `/device/<id>/users/<user>`
+Delegated-management flows live in `/rbac`; management paths are registered there.
 
 ## RBAC Audit Logging
 
@@ -123,6 +119,15 @@ RBAC events are also persisted in `rbac_audit_log` (created by
 
 - `GET /json/v1/rbac/audit`
 - `GET /app/issues` (global page with potential-issue warnings and full RBAC log)
+  - includes top-priority failed-notification issues for pending group and
+    technologist requests so admins can fix PI email + resend or approve directly
+
+Email events are persisted in `email_audit_log` (created by
+`sql/207-email-audit-log.sql`) and exposed via:
+
+- `GET /json/v1/email/audit`
+- `GET /app/issues` (email audit section with status/issue-state/search filters,
+  including resolved issue history lookup)
 
 Timeline filtering:
 
@@ -140,6 +145,7 @@ an empty feed instead of failing the page.
   - `GET /json/v1/rbac/explorer` (admin only)
   - `POST /json/v1/rbac/mutate` (admin only mutating + CSRF)
   - `GET /json/v1/rbac/audit` (admin only)
+  - `GET /json/v1/email/audit` (admin only)
   - `GET /app/issues` (admin only)
 - Seed writes for membership should target `groupmembers` and
   `primarygroupmember` (the `membership` view is read-only).

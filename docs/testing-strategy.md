@@ -61,48 +61,57 @@ Prerequisites:
 
 Unit tests:
 ```bash
-AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=unit-test-secret pixi run test-unit
+pixi run test-unit
 ```
 
 Route tests:
 ```bash
-AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=unit-test-secret pixi run test-routes
+pixi run test-routes
 ```
 
 Integration tests (CI mode, mock auth):
 ```bash
-AUTH_TEST__ENABLED=true AUTH_TEST__SHARED_SECRET=local-test-secret pixi run test-integration
+pixi run test-integration
 ```
+
+The `test-unit`, `test-routes`, and `test-integration*` tasks are wrapped by
+`scripts/run-isolated-test-suite.sh`, which assigns suite-scoped test DB names
+and Mailpit ports so those suites can run in parallel without sharing test mail
+or route-template DB resources.
+The wrapper auto-derives a test scope namespace and fails fast when the same
+suite starts concurrently with the same scope.
+
+For integration tasks, the wrapper also sets a suite-scoped runtime
+`PGDATABASE` and refreshes it from a suite template DB. The template is rebuilt
+from `sql/000-init.sh` only when SQL inputs change (or when forced), which
+keeps mock-auth/profile state deterministic between runs with lower startup
+overhead than reseeding every run. You can bypass the runtime reset with
+`FMRIF_INTEGRATION_DB_RESET=false` for intentional stateful debugging.
+Use `FMRIF_INTEGRATION_DB_REBUILD_TEMPLATE=true` to force template refresh or
+`FMRIF_INTEGRATION_DB_TEMPLATE_NAME` to override template naming.
 
 Auth-flow tests (credentials mode):
 ```bash
-PLAYWRIGHT_AUTH_MODE=entra \
-OAUTH_TEST_USERNAME=contact005@example.org \
-OAUTH_TEST_PASSWORD=your-password \
 pixi run test-auth-flow-credentials
 ```
+Requires `OAUTH_TEST_USERNAME` and `OAUTH_TEST_PASSWORD` in `.env`.
 
 Auth-flow tests (storage-state mode):
 ```bash
-PLAYWRIGHT_AUTH_MODE=entra \
-PLAYWRIGHT_STORAGE_STATE=./playwright-auth.json \
 pixi run test-auth-flow-storage-state
 ```
-`PLAYWRIGHT_STORAGE_STATE` is optional; Pixi defaults to `./playwright-auth.json`.
+`PLAYWRIGHT_STORAGE_STATE` is optional and defaults to `./playwright-auth.json`.
 
 Generate storage state (headed):
 ```bash
-PLAYWRIGHT_AUTH_MODE=entra \
-PLAYWRIGHT_STORAGE_STATE=./playwright-auth.json \
-OAUTH_TEST_USERNAME=contact005@example.org \
-OAUTH_TEST_PASSWORD=your-password \
 pixi run generate-auth-storage-state
 ```
-`PLAYWRIGHT_STORAGE_STATE` is optional; Pixi defaults to `./playwright-auth.json`.
+Requires `OAUTH_TEST_USERNAME` and `OAUTH_TEST_PASSWORD` in `.env`.
+`PLAYWRIGHT_STORAGE_STATE` is optional and defaults to `./playwright-auth.json`.
 
 Live-incident tests (manual/gated):
 ```bash
-PLAYWRIGHT_AUTH_MODE=entra pixi run test-live-incident
+pixi run test-live-incident
 ```
 
 Run pre-commit hooks:

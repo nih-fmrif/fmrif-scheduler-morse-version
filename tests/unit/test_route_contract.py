@@ -14,7 +14,7 @@ from route_contract import (
     RBAC_ROLES,
     ROUTE_EXPECTATIONS,
 )
-from route_seed import seeded_dev_user_id, seeded_scanner_id, seeded_sched_log_id
+from route_seed import seeded_scanner_id, seeded_sched_log_id
 
 from scheduler import model
 from scheduler.auth import views as auth_views
@@ -117,8 +117,6 @@ def _resolve_seeded_device_sample_path(sample_path: str) -> str:
     resolved = sample_path
     if "/device/TEST" in resolved:
         resolved = resolved.replace("/device/TEST", f"/device/{seeded_scanner_id()}")
-    if "/users/testuser" in resolved:
-        resolved = resolved.replace("/users/testuser", f"/users/{seeded_dev_user_id()}")
     if "/json/v1/log/1" in resolved:
         try:
             resolved = resolved.replace(
@@ -175,7 +173,7 @@ def _covers_route_markers_from_tests() -> set[tuple[str, str]]:
 
     covered: set[tuple[str, str]] = set()
     tests_root = Path(__file__).resolve().parent
-    for test_file in sorted(tests_root.glob("test_*.py")):
+    for test_file in sorted(tests_root.rglob("test_*.py")):
         tree = ast.parse(test_file.read_text(encoding="utf-8"), filename=str(test_file))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -330,9 +328,6 @@ def test_route_contract_smoke(rule: str, method: str, route_app):
 def test_rbac_get_contract(rule: str, role: str, route_app, route_app_context):
     _seed_rbac_contract_data()
     expectation = RBAC_GET_EXPECTATIONS[rule]
-    if rule == "/device/<the_device>/users/<the_user>":
-        # Ensure at least one DEV user exists for this concrete sample path.
-        _client_for_profile("dev", route_app)
     client = _client_for_profile(role, route_app)
 
     response = client.get(

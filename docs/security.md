@@ -238,6 +238,41 @@ Attack classes mitigated:
 - MIME sniffing-based execution
 - protocol downgrade after initial secure visit (HSTS)
 
+## XSS Rendering Guardrails and Anti-Regression Checks
+
+To keep template/DOM rendering safe over time, the repo now enforces
+anti-regression checks implemented by `scripts/check-no-unsafe-html-sinks.sh`,
+which runs in:
+
+- pre-commit hook `no-unsafe-html-sinks`
+- CI workflow step `Run XSS sink guardrails`
+
+The check blocks three high-risk patterns unless explicitly allowlisted:
+
+1. `|safe` in `scheduler/templates/*.html`
+2. DOM HTML sinks in frontend code (`innerHTML`, `outerHTML`,
+   `insertAdjacentHTML`, `document.write`)
+3. New `markupsafe.Markup(...)` usage in Python
+
+Why this exists:
+
+- XSS risk in this app is not limited to embedding scenarios; any page render can
+  be affected when untrusted data reaches HTML sinks.
+- These patterns are convenient and tend to reappear during normal feature work
+  unless guardrails are automated.
+
+Current approved exceptions are intentionally narrow and documented in
+`scripts/check-no-unsafe-html-sinks.sh` (for example the controlled
+`<sr-only>` nav helper and specific dialog/grid rendering paths that depend on
+escaped or trusted server markup).
+
+Expected developer workflow:
+
+- default to Jinja auto-escaping in templates (no `|safe`)
+- prefer `textContent`/`innerText` for plain text in JS
+- if HTML rendering is required, escape all untrusted values first and then
+  update the allowlist with reviewer justification
+
 ## Authentication Abuse Controls
 
 ### Auth Endpoint Rate Limiting
@@ -299,7 +334,7 @@ Attack classes mitigated:
 
 Implemented in `Settings.validate_required_settings(...)`.
 
-When `AUTH_TEST__ENABLED=false`, startup validation enforces:
+When `APP_ENV=production`, startup validation enforces:
 
 - non-placeholder Entra client ID
 - non-placeholder Entra tenant ID
@@ -308,6 +343,12 @@ When `AUTH_TEST__ENABLED=false`, startup validation enforces:
 - `CORE__DEBUG=false`
 - non-default `CORE__SECRET_KEY`
 - `SESSION__COOKIE_SECURE=true`
+
+Additional `APP_ENV=production` guardrails:
+
+- `APP_ENV` must not be `production` when `AUTH_TEST__ENABLED=true`
+- Mailpit cannot be used (`MAILPIT__*` unset and `MAIL__SERVER` not set to `mailpit` or `mailpit_app`)
+- `MAIL__DEFAULT_SENDER` is always required
 
 When `AUTH_TEST__ENABLED=true`, startup validation enforces:
 
@@ -366,6 +407,7 @@ cause request metadata trust errors (scheme/host/client attribution issues).
 At minimum, ensure:
 
 ```env
+APP_ENV=production
 AUTH_TEST__ENABLED=false
 
 CORE__DEBUG=false

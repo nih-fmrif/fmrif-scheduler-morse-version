@@ -1,0 +1,63 @@
+.device-groups-form,
+.group-membership-form > fieldset {
+  width: max-content;
+}
+
+:is(.device-groups-form, .group-membership-form > fieldset) fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  border: 0;
+}
+
+:is(.device-groups-form, .group-membership-form > fieldset)
+  fieldset:not(:last-of-type) {
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
+}
+
+:is(.device-groups-form, .group-membership-form > fieldset) fieldset legend {
+  display: contents;
+}
+
+:is(.device-groups-form, .group-membership-form > fieldset)
+  fieldset
+  :is(input, button) {
+  margin-left: auto;
+  align-self: start;
+}
+
+.group-membership-add-form,
+.device-groups-add-form,
+.template-apply {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  max-width: 40rem;
+}
+
+:is(.group-membership-add-form, .device-groups-add-form) > * {
+  flex-grow: 0;
+}
+
+:is(.group-membership-add-form, .device-groups-add-form) > input-set {
+  flex-grow: 1;
+}
+
+.edit-form,
+.join-form input-set {
+  max-width: 50rem;
+}
+
+.mailing-list-form > input-set {
+  max-width: 40rem;
+}
+
+.mailing-list-form fieldset {
+  width: max-content;
+}
+
+.list-with-description li p:first-of-type {
+  margin-top: 0;
+}

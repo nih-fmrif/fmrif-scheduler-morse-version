@@ -16,11 +16,14 @@ For local port wiring, prefer these canonical values:
 
 - `APP_PORT`: host port to reach the app
 - `PGPORT`: host port to reach Postgres
+- `MAILPIT__PORT`: host port to reach Mailpit web UI (defaults to `PGPORT + 1`)
+- `MAILPIT__SMTP_PORT`: host port to reach Mailpit SMTP (defaults to `PGPORT + 2`)
 
 To keep multiple local stacks isolated, also set:
 
 - `COMPOSE_PROJECT_NAME`: unique compose resource prefix per worktree/job.
   If omitted, `run-compose.sh` derives `<workdir>-<APP_PORT>`.
+  `setup-dotenv.sh` derives this and related values automatically.
 
 Other local URL settings should normally be unset unless intentionally overriding.
 
@@ -35,7 +38,7 @@ The bootstrap path follows a fixed three-step dataflow:
 not the same as application configuration:
 
 - **Compose interpolation env** (internal): only safe metadata keys
-  (`APP_PORT`, `PGPORT`) with escaped `$`.
+  (`APP_PORT`, `PGPORT`, `SERVER__SERVER_NAME`) with escaped `$`.
 - **Runtime app/env file** (mounted into containers): full raw `.env` with all values.
 
 This keeps `.env` easy to manage while avoiding compose interpolation surprises.
@@ -46,9 +49,12 @@ This keeps `.env` easy to manage while avoiding compose interpolation surprises.
 
 - Start with:
   - `bash run-compose.sh`
+  - `bash run-compose.sh --resume` (non-destructive resume mode)
 - Keep `.env` focused on host-facing values:
   - `PGHOST=localhost` for host tools and direct local app runs
   - `PGPORT=<published host postgres port>` (default: `5444`)
+  - `MAILPIT__PORT=<published host mailpit ui port>` (default: `PGPORT + 1`)
+  - `MAILPIT__SMTP_PORT=<published host mailpit smtp port>` (default: `PGPORT + 2`)
 
 In this mode:
 
@@ -57,8 +63,15 @@ In this mode:
 - Scheduler container DB settings are overridden by compose:
   - `PGHOST=postgres`
   - `PGPORT=5432`
+- Scheduler container mail settings are overridden by compose:
+  - `MAIL__SERVER=mailpit_app`
+  - `MAIL__PORT=1025`
+  - `MAIL__SUPPRESS_SEND=false`
+  - `MAIL__DEFAULT_SENDER=<configured sender>`
 - `sql/000-init.sh` runs inside the Postgres container and uses container-local
   connection defaults.
+- Default startup is isolated: `run-compose.sh` performs `docker compose down --volumes`
+  before `up`. Use `--resume` to preserve existing state.
 
 ### Mode B: App runs on host (containerless)
 
@@ -67,8 +80,12 @@ In this mode:
   - `PGHOST=localhost`
   - `PGPORT=<host db port>` (for example `5432` for native Postgres, `5444`
     for compose-published Postgres)
+  - `MAIL__SERVER=localhost`
+  - `MAIL__PORT=<host mailpit smtp port>` (for example `5446`)
+  - `MAIL__SUPPRESS_SEND=false`
+  - `MAIL__DEFAULT_SENDER=<configured sender>`
 - Start with local app runner, for example:
-  - `APP_PORT=5051 pixi run serve`
+  - `pixi run serve`
 
 ### Mode C: App runs in other container tooling
 
@@ -91,10 +108,13 @@ resolved through that container network:
 2. **Compose resource isolation**
    - For concurrent stacks, use a unique `COMPOSE_PROJECT_NAME` so container/volume
      names do not collide.
+   - In multi-worktree workflows, regenerate `.env` with `setup-dotenv.sh` so
+     compose project name, DB names, session cookie names, and Mailpit ports stay isolated.
 3. **`$` in values**
    - `run-compose.sh` avoids compose interpolation by using a generated env file.
-   - Running `docker compose` directly against `.env` can still emit warnings for
-     unescaped `$` values.
+   - Running `docker compose` directly is not supported for this stack: compose now requires
+     `FMRIF_COMPOSE_WRAPPER` and exits early with guidance to use `bash run-compose.sh`
+     for reliable local startup.
 4. **Container wrapper is required**
    - Keep `POSTGRES_*` out of `.env` and rely on `PG*`.
    - Use `scripts/postgres-entrypoint.sh` only for the compose path.
@@ -106,7 +126,7 @@ resolved through that container network:
      gated by compose health checks and service dependencies.
 7. **Avoid duplicate local app-port declarations**
    - Keep `APP_PORT` authoritative.
-   - `SERVER__SERVER_NAME` is derived in compose.
+   - Set `SERVER__SERVER_NAME` in `.env` (or leave blank for request-based host defaults).
    - `PLAYWRIGHT_BASE_URL` local port is auto-synced from `APP_PORT` in test config.
    - `run-compose.sh --check` warns if local overrides conflict with `APP_PORT`.
 
@@ -115,6 +135,6 @@ resolved through that container network:
 - Validate compose wiring:
   - `bash run-compose.sh --check`
 - Verify a host-mode containerless run:
-  - `PGHOST=localhost PGPORT=<host db port> PGPASSWORD=... PGUSER=... PGDATABASE=... APP_PORT=5051 pixi run serve`
+  - `pixi run serve`
 - If startup fails with missing seed or mount errors, rerun after ensuring `/app/.env`
   is mounted and contains all required `PG*`.

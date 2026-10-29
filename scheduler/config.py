@@ -34,6 +34,32 @@ env_file = find_envfile()
 logger.info(f"Loading .env from: {env_file}")
 
 PLACEHOLDER_UUID = "00000000-0000-0000-0000-000000000000"
+APP_ENV_DEFAULT = "development"
+PRODUCTION_ENVIRONMENTS = {"prod", "production", "stage", "staging"}
+DEVELOPMENT_ENVIRONMENTS = {"dev", "development", "local", "test", "testing"}
+
+
+def normalize_app_env(value: str | None) -> str:
+    normalized = (value or APP_ENV_DEFAULT).strip().lower().replace("-", "_")
+    if normalized in {"", "dev"}:
+        return "development"
+    if normalized in PRODUCTION_ENVIRONMENTS:
+        return "production"
+    if normalized in DEVELOPMENT_ENVIRONMENTS:
+        return "development"
+    return normalized
+
+
+def _is_mailpit_configured_for(env: str, mail_server: str) -> bool:
+    if env != "production":
+        return False
+    if mail_server.strip().lower() == "mailpit":
+        return True
+    mailpit_variables = ("MAILPIT__PORT", "MAILPIT__SMTP_PORT", "MAILPIT_API_BASE_URL")
+    return any(
+        var in os.environ and str(os.environ.get(var, "")).strip()
+        for var in mailpit_variables
+    )
 
 
 class EntraConfig(BaseModel):
@@ -118,7 +144,6 @@ class CoreConfig(BaseModel):
 
     debug: bool = True
     secret_key: str = "dev-key-change-in-prod"
-    site_sender: EmailStr = "noreply@example.com"
     listserv: str = "listserv@example.com"
 
 
@@ -141,6 +166,7 @@ class MailConfig(BaseModel):
     username: str = ""
     password: str = ""
     suppress_send: bool = False
+    default_sender: Optional[EmailStr] = None
     mailing_lists: Dict[str, str] = {
         "list 1": "Description of list 1",
         "list 2": "Description of list 2",
@@ -311,11 +337,14 @@ class ProxyConfig(BaseModel):
 class Settings(BaseSettings):
     """Main settings container that coordinates all configuration"""
 
+    app_env: str = Field(default=APP_ENV_DEFAULT, alias="APP_ENV")
+
     model_config = SettingsConfigDict(
         env_nested_delimiter="__",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",  # To ignore extra fields
+        populate_by_name=True,
     )
 
     # Nested configs
@@ -346,10 +375,25 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_required_settings(self) -> "Settings":
-        # SERVER_NAME can be empty (recommended for reverse proxy setups)
-        # When empty, Flask accepts requests from any host
+        app_env = normalize_app_env(self.app_env)
+        self.app_env = app_env
 
-        if not self.auth_test.enabled:
+        if app_env == "development":
+            if not self.auth_test.enabled:
+                self.auth_test.enabled = True
+            if not self.core.debug:
+                self.core.debug = True
+            if self.session.cookie_secure:
+                self.session.cookie_secure = False
+            if self.auth_test.enabled and not self.auth_test.shared_secret.strip():
+                self.auth_test.shared_secret = "dev-auth-test-secret"
+
+        if app_env == "production":
+            if self.auth_test.enabled:
+                raise ValueError(
+                    "AUTH_TEST__ENABLED must be false when APP_ENV is production"
+                )
+
             missing = []
             if (
                 not self.entra.client_id.strip()
@@ -368,30 +412,35 @@ class Settings(BaseSettings):
 
             if missing:
                 raise ValueError(
-                    "Missing required Entra settings when AUTH_TEST__ENABLED is false: "
+                    "Missing required Entra settings when APP_ENV is production: "
                     + ", ".join(missing)
                 )
             if self.core.debug:
-                raise ValueError(
-                    "CORE__DEBUG must be false when AUTH_TEST__ENABLED is false"
-                )
+                raise ValueError("CORE__DEBUG must be false when APP_ENV is production")
             if (
                 not self.core.secret_key.strip()
                 or self.core.secret_key == "dev-key-change-in-prod"
             ):
                 raise ValueError(
                     "CORE__SECRET_KEY must be set to a non-default value "
-                    "when AUTH_TEST__ENABLED is false"
+                    "when APP_ENV is production"
                 )
             if not self.session.cookie_secure:
                 raise ValueError(
-                    "SESSION__COOKIE_SECURE must be true when AUTH_TEST__ENABLED is false"
+                    "SESSION__COOKIE_SECURE must be true when APP_ENV is production"
+                )
+            if _is_mailpit_configured_for(app_env, self.mail.server):
+                raise ValueError(
+                    "Mailpit configuration is not allowed when APP_ENV is production"
                 )
 
         if self.auth_test.enabled and not self.auth_test.shared_secret.strip():
             raise ValueError(
                 "AUTH_TEST__SHARED_SECRET is required when AUTH_TEST__ENABLED is true"
             )
+
+        if self.mail.default_sender is None:
+            raise ValueError("MAIL__DEFAULT_SENDER is required")
 
         return self
 
@@ -427,7 +476,9 @@ class AppConfig(dict):
     def __init__(self, settings: Settings):
         super().__init__()
         config_dict = {
+            "APP_ENV": settings.app_env,
             "SECRET_KEY": settings.core.secret_key,
+            "DEBUG": settings.core.debug,
             "SQLALCHEMY_DATABASE_URI": settings.database_url,
             "SQLALCHEMY_TRACK_MODIFICATIONS": settings.database.track_modifications,
             "MAIL_SERVER": settings.mail.server,
@@ -437,6 +488,11 @@ class AppConfig(dict):
             "MAIL_USERNAME": settings.mail.username,
             "MAIL_PASSWORD": settings.mail.password,
             "MAIL_SUPPRESS_SEND": settings.mail.suppress_send,
+            "MAIL_DEFAULT_SENDER": (
+                str(settings.mail.default_sender)
+                if settings.mail.default_sender is not None
+                else None
+            ),
             "nih_mailing_lists": settings.mail.mailing_lists,
             "SESSION_COOKIE_NAME": settings.session.cookie_name,
             "SESSION_COOKIE_SECURE": settings.session.cookie_secure,
@@ -446,7 +502,6 @@ class AppConfig(dict):
             "SESSION_TYPE": settings.session.type,
             "SESSION_USE_SIGNER": settings.session.use_signer,
             "SESSION_SQLALCHEMY_TABLE": settings.session.sqlalchemy_table,
-            "SITE_DEFAULT_SENDER": settings.core.site_sender,
             "nih_listserv": settings.core.listserv,
             "ENTRA_CLIENT_ID": settings.entra.client_id,
             "ENTRA_TENANT_ID": settings.entra.tenant_id,

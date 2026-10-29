@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 
 from flask import abort, current_app, g, request, session
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import model
 from scheduler.config import settings
@@ -90,7 +91,7 @@ def _rotate_session_identifier() -> None:
     try:
         session.sid = generate_sid()
         session.modified = True
-    except Exception:
+    except (AttributeError, RuntimeError, TypeError):
         if current_app and current_app.logger:
             current_app.logger.exception("Failed to rotate session identifier")
 
@@ -203,7 +204,7 @@ def get_user_from_session() -> Optional[SessionUser]:
         db_user = model.User.query.get(username)
         if db_user is not None:
             active = bool(db_user.active)
-    except Exception:
+    except (SQLAlchemyError, RuntimeError):
         if current_app and current_app.logger:
             current_app.logger.exception(
                 "Failed to load active flag for session user %s", username
@@ -336,10 +337,25 @@ def _set_technologist_status(user_id: str, enabled: bool) -> None:
     record = model.Technologist.query.get(user_id)
     if enabled:
         if record is None:
-            model.db.session.add(model.Technologist(user=user_id))
+            model.db.session.add(
+                model.Technologist(
+                    user=user_id,
+                    applied_on=func.now(),
+                    approved_on=func.now(),
+                    email_status="none",
+                )
+            )
+        else:
+            if record.applied_on is None:
+                record.applied_on = func.now()
+            if record.approved_on is None:
+                record.approved_on = func.now()
+            if (record.email_status or "").strip() == "":
+                record.email_status = "none"
+            model.db.session.add(record)
         return
-    if record is not None:
-        model.db.session.delete(record)
+    # Do not delete existing records when a profile is not technologist.
+    # This keeps test-session profile switching from erasing legitimate approvals.
 
 
 def _ensure_auth_test_device(device_id: str) -> None:
@@ -394,21 +410,7 @@ def _ensure_joinable_seed_group_for_user(
     for group_id in seed_groups:
         _ensure_auth_test_group(group_id)
 
-    profile_group_ids = {group.strip().upper() for group in profile_groups if group}
-    joinable_seed = next(
-        (group_id for group_id in seed_groups if group_id not in profile_group_ids),
-        None,
-    )
-    if joinable_seed is None:
-        return
-
-    membership = model.GroupMember.query.get((joinable_seed, user_id))
-    if membership is not None:
-        model.db.session.delete(membership)
-
-    primary = model.PrimaryGroupMember.query.get((joinable_seed, user_id))
-    if primary is not None:
-        model.db.session.delete(primary)
+    # Keep existing membership rows intact across profile switches.
 
 
 def login_test_user(profile_name: str) -> Optional[SessionUser]:

@@ -1,0 +1,271 @@
+* {
+  box-sizing: border-box;
+}
+
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Roboto,
+    Lato, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+}
+
+body.body-scroll-locked {
+  overflow: hidden;
+}
+
+/* normalizations adapted from
+ - https://github.com/csstools/normalize.css
+ - https://github.com/csstools/sanitize.css
+*/
+:where(b, strong) {
+  font-weight: bolder;
+}
+
+:where(button, input, select, textarea) {
+  margin: 0;
+  font: inherit;
+  max-width: 100%;
+}
+
+:where(textarea) {
+  resize: vertical;
+}
+
+:where(button, select) {
+  text-transform: none;
+}
+
+:where(button, input:is([type="button"i], [type="reset"i], [type="submit"i])) {
+  -webkit-appearance: button;
+}
+
+:where(:root) {
+  cursor: default;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  tab-size: 4;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+:where(iframe, img, input, video, select, textarea) {
+  height: auto;
+  max-width: 100%;
+}
+
+:where(fieldset) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* end normalizations */
+
+:root {
+  --layout-max-width: 72rem;
+  --layout-form-max-width: 56rem;
+  --fg: #111;
+  --bg: #fefefe;
+  --link: #0470bb;
+  --link-active: #c50000;
+  --link-visited: #800080;
+  --ok: #0d7100;
+  --warn: goldenrod;
+  --err: var(--link-active);
+  --focus: var(--link);
+  --btn: var(--fg);
+  --btn-bg: #f0faff;
+  --btn-hover: #909090;
+  --input: var(--fg);
+  --input-bg: #fcfcfc;
+  --border: #818181;
+  --dialog-overlay: rgb(0 0 0 / 0.5);
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --fg: #afaeae;
+    --bg: #1c1c25;
+    --link: #30a3e8;
+    --link-active: #f2564f;
+    --link-visited: #e0a6eb;
+    --ok: #85c252;
+    --warn: #cc0;
+    --err: var(--link-active);
+    --focus: var(--warn);
+    --btn: var(--input);
+    --btn-bg: #333;
+    --btn-hover: #7c7c7c;
+    --input: #eee;
+    --input-bg: #222;
+    --border: #dad0b3;
+    --dialog-overlay: rgb(0 0 0 / 0.7);
+  }
+}
+
+@media screen and (forced-colors: active) {
+  :root {
+    /* these will be redundant in most cases but specifying everything fully
+		   so that nonstandard uses compute properly */
+    --fg: CanvasText;
+    --bg: Canvas;
+    --link: LinkText;
+    /* active and visited always use LinkText in HCM so follow the same practice here */
+    --link-active: LinkText;
+    --link-visited: LinkText;
+    --dialog-overlay: Canvas;
+    --ok: Highlight;
+    --warn: Highlight;
+    --err: Highlight;
+    --input: FieldText;
+    --input-bg: Field;
+    --btn: ButtonText;
+    --btn-bg: ButtonFace;
+    --btn-hover: ButtonFace;
+    --border: CanvasText;
+    accent-color: revert;
+  }
+}
+
+html,
+body {
+  color: var(--fg);
+  background-color: var(--bg);
+}
+
+@media screen {
+  html,
+  body {
+    color-scheme: light dark;
+    accent-color: var(--link);
+  }
+}
+
+a[aria-current] {
+  font-weight: bold;
+  text-decoration-thickness: 1px;
+}
+
+a {
+  color: var(--link);
+}
+
+a:active {
+  color: var(--link-active);
+}
+
+a:visited {
+  color: var(--link-visited);
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: 0;
+}
+
+:focus-visible,
+.editor :focus {
+  outline: 0.2rem solid var(--focus);
+}
+
+a:focus-visible {
+  outline-offset: 1px;
+}
+
+input:not([type="submit"], [type="button"], [type="color"]) {
+  color: var(--input);
+  background-color: var(--input-bg);
+  border: 1px solid var(--input);
+  border-radius: 2px;
+}
+
+button,
+input:where([type="submit"], [type="button"]) {
+  color: var(--btn);
+  background-color: var(--btn-bg);
+  border: 1px solid var(--btn);
+  border-radius: 4px;
+}
+
+:is(button, input:where([type="submit"], [type="button"])):hover {
+  background-color: var(--btn-hover);
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.validation-icons > :first-child,
+.edit-icons svg:not(:nth-child(2)),
+input-error svg,
+.legend .red {
+  color: var(--err);
+}
+
+.validation-icons > :last-child {
+  color: var(--ok);
+}
+
+sr-only {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+input-errors,
+input-description {
+  display: block;
+}
+
+input-error {
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+}
+
+input-set:not([hidden]) {
+  display: grid;
+}
+
+input-set {
+  margin: 0.5rem 0.25rem;
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  grid-template:
+    "label input"
+    ". description"
+    ". errors"
+    / auto 1fr;
+}
+
+input-set[is-option] {
+  grid-template:
+    "input label"
+    ". description"
+    ". errors"
+    / max-content 1fr;
+}
+
+input-set[label-above] {
+  grid-template:
+    "label"
+    "input"
+    "description"
+    "errors";
+}

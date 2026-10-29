@@ -49,4 +49,5 @@ bootstrap_if_missing
 # Run database migrations
 alembic upgrade head
 # Start the application
+export FLASK_APP="${FLASK_APP:-scheduler.app:create_app}"
 flask run --host 0.0.0.0 --port "$container_port"

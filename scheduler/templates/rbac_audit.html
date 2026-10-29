@@ -1,13 +1,14 @@
-{% extends "page.html" %} {% block title %}Potential issues{% endblock %} {%
-block body %}
-<article class="rbac-audit-page">
+{% extends "page.html" %} {% block title %}Admin Panel{% endblock %} {% block
+body %}
+<article
+  class="rbac-audit-page"
+  data-audit-max-limit="{{ audit_max_limit }}"
+  data-audit-show-more-increment="{{ audit_show_more_increment }}"
+  data-rbac-audit-default-limit="{{ limit }}"
+  data-email-audit-default-limit="{{ email_limit }}"
+>
   <header class="rbac-audit-page-header">
-    <h1>Potential issues</h1>
-    <p>
-      Operational warnings are listed first, followed by the full RBAC audit
-      history.
-    </p>
-    <p><a href="{{ url_for('rbac') }}">back to RBAC explorer</a></p>
+    <h1>Admin Panel</h1>
   </header>
 
   <section
@@ -16,31 +17,304 @@ block body %}
   >
     <h2 id="potential-issues-title">Potential issues</h2>
     <p>
-      These checks identify configuration and workflow gaps that can block
-      approvals, notifications, or audit visibility.
+      Detector-managed issue lifecycle. Run a scan to refresh current issue
+      state, including automatic resolution when issues are no longer detected.
     </p>
-    {% if potential_issues|length == 0 %}
-    <p class="none">No potential issues detected.</p>
-    {% else %}
-    <ul class="potential-issues-list">
-      {% for issue in potential_issues %}
-      <li
-        class="potential-issue potential-issue-{{ issue.severity }}"
-        data-category="{{ issue.category }}"
+
+    <form
+      class="notification-scan-form"
+      action="{{ url_for('app_issues_scan') }}"
+      method="post"
+    >
+      {{ notification_scan_form.csrf_token }}
+      <input
+        type="hidden"
+        name="return_query"
+        value="{{ notification_return_query }}"
+      />
+      <button type="submit">run detection scan</button>
+      <span class="notification-scan-updated">
+        (Last updated {% if notification_scan_last_updated %}{{
+        notification_scan_last_updated }}{% else %}-{% endif %})
+      </span>
+    </form>
+
+    <form
+      class="notification-issues-filters"
+      action="{{ url_for('app_issues') }}"
+      method="get"
+      id="notification-issues-filters"
+    >
+      <input type="hidden" name="scope" value="{{ scope }}" />
+      <input type="hidden" name="entity" value="{{ entity }}" />
+      <input type="hidden" name="search" value="{{ search }}" />
+      <input type="hidden" name="search_field" value="{{ search_field }}" />
+      <input type="hidden" name="limit" value="{{ limit }}" />
+      <input type="hidden" name="email_scope" value="{{ email_scope }}" />
+      <input type="hidden" name="email_entity" value="{{ email_entity }}" />
+      <input type="hidden" name="email_limit" value="{{ email_limit }}" />
+      <input type="hidden" name="email_status" value="{{ email_status }}" />
+      <input
+        type="hidden"
+        name="email_issue_state"
+        value="{{ email_issue_state }}"
+      />
+      <input type="hidden" name="email_search" value="{{ email_search }}" />
+      <input
+        type="hidden"
+        name="email_search_field"
+        value="{{ email_search_field }}"
+      />
+      <input type="hidden" name="notification_state_filter" value="1" />
+
+      <div class="admin-filter-field">
+        <label for="notification-category">category</label>
+        <select id="notification-category" name="notification_category">
+          {% for option in notification_category_options %}
+          <option
+            value="{{ option.id }}"
+            {%
+            if
+            option.selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ option.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <fieldset class="notification-toggle-group">
+        <legend>status</legend>
+        <div class="notification-toggle-field">
+          <label for="notification-include-resolved">
+            <input
+              id="notification-include-resolved"
+              type="checkbox"
+              name="notification_include_resolved"
+              value="1"
+              {%
+              if
+              notification_include_resolved
+              %}checked{%
+              endif
+              %}
+            />
+            resolved
+          </label>
+        </div>
+
+        <div class="notification-toggle-field">
+          <label for="notification-include-ignored">
+            <input
+              id="notification-include-ignored"
+              type="checkbox"
+              name="notification_include_ignored"
+              value="1"
+              {%
+              if
+              notification_include_ignored
+              %}checked{%
+              endif
+              %}
+            />
+            ignored
+          </label>
+        </div>
+
+        <div class="notification-toggle-field">
+          <label for="notification-include-open">
+            <input
+              id="notification-include-open"
+              type="checkbox"
+              name="notification_include_open"
+              value="1"
+              {%
+              if
+              notification_include_open
+              %}checked{%
+              endif
+              %}
+            />
+            open
+          </label>
+        </div>
+      </fieldset>
+
+      <div
+        class="admin-filter-field-pair admin-filter-last-row admin-filter-field-pair-narrow"
       >
-        <p class="potential-issue-title">
-          <strong>{{ issue.title }}</strong>
-          <span class="potential-issue-category">{{ issue.category }}</span>
-        </p>
-        <p class="potential-issue-detail">{{ issue.detail }}</p>
-        {% if issue.href %}
-        <p class="potential-issue-link">
-          <a href="{{ issue.href }}">{{ issue.link_label }}</a>
-        </p>
-        {% endif %}
-      </li>
+        <div class="admin-filter-field">
+          <label for="notification-search">search</label>
+          <input
+            id="notification-search"
+            type="text"
+            name="notification_search"
+            value="{{ notification_search }}"
+            placeholder="title, detail, issue key, category"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="admin-filter-field admin-filter-field-compact">
+          <label for="notification-search-field">in</label>
+          <select
+            id="notification-search-field"
+            name="notification_search_field"
+          >
+            {% for option in notification_search_field_options %}
+            <option
+              value="{{ option.id }}"
+              {%
+              if
+              option.selected
+              %}selected{%
+              endif
+              %}
+            >
+              {{ option.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </form>
+
+    {% if not notification_incidents_available %}
+    <p class="none">
+      Notification incident table is unavailable. Detector lifecycle controls
+      are disabled.
+    </p>
+    {% elif potential_issue_sections|length == 0 %}
+    <p class="none">
+      No potential issues match the current filters. Run detection scan to
+      refresh issue state.
+    </p>
+    {% else %}
+    <div class="potential-issues-cards">
+      {% for section in potential_issue_sections %}
+      <details
+        class="potential-issue-card{% if section.urgent %} urgent{% endif %}"
+        {%
+        if
+        section.urgent
+        %}open{%
+        endif
+        %}
+      >
+        <summary class="potential-issue-card-summary">
+          <span class="potential-issue-card-category"
+            >{{ section.category }}</span
+          >
+          <span class="potential-issue-card-count"
+            >{{ section.issue_count }} issue{% if section.issue_count != 1 %}s{%
+            endif %}</span
+          >
+        </summary>
+        <ul class="potential-issues-list">
+          {% for issue in section.issues %}
+          <li
+            class="potential-issue potential-issue-{{ issue.severity }} potential-issue-state-{{ issue.state or 'open' }}"
+          >
+            <p class="potential-issue-title">
+              <strong>{{ issue.title }}</strong>
+              <span class="potential-issue-state-badge"
+                >{{ issue.state or "open" }}</span
+              >
+            </p>
+            <p class="potential-issue-detail">{{ issue.detail }}</p>
+            {% if issue.href %}
+            <p class="potential-issue-link">
+              <a href="{{ issue.href }}">{{ issue.link_label }}</a>
+            </p>
+            {% endif %}
+            <p class="potential-issue-meta">
+              issue key: {{ issue.issue_key }} | occurrences: {{
+              issue.occurrence_count or 1 }}
+            </p>
+            {% if issue.state_note %}
+            <p class="potential-issue-meta">
+              note: {{ issue.state_note }}{% if issue.state_changed_by %} (by {{
+              issue.state_changed_by }}){% endif %}
+            </p>
+            {% endif %} {% if issue.state == "ignored" and issue.ignored_until
+            %}
+            <p class="potential-issue-meta">
+              ignored until: {{ issue.ignored_until }}
+            </p>
+            {% endif %} {% if issue.active and issue.state != "ignored" %}
+            <form
+              class="notification-state-form"
+              action="{{ url_for('app_issues_notification_state') }}"
+              method="post"
+            >
+              {{ notification_state_form.csrf_token }}
+              <input
+                type="hidden"
+                name="return_query"
+                value="{{ notification_return_query }}"
+              />
+              <input
+                type="hidden"
+                name="issue_key"
+                value="{{ issue.issue_key }}"
+              />
+              <input type="hidden" name="target_state" value="ignored" />
+              <label>
+                ignore note (required)
+                <input
+                  type="text"
+                  name="note"
+                  required
+                  maxlength="500"
+                  placeholder="why this issue is ignored"
+                />
+              </label>
+              <label>
+                ignore until (optional)
+                <input type="date" name="ignored_until" />
+              </label>
+              <button type="submit">ignore issue</button>
+            </form>
+            {% elif issue.active and issue.state == "ignored" %}
+            <form
+              class="notification-state-form"
+              action="{{ url_for('app_issues_notification_state') }}"
+              method="post"
+            >
+              {{ notification_state_form.csrf_token }}
+              <input
+                type="hidden"
+                name="return_query"
+                value="{{ notification_return_query }}"
+              />
+              <input
+                type="hidden"
+                name="issue_key"
+                value="{{ issue.issue_key }}"
+              />
+              <input type="hidden" name="target_state" value="open" />
+              <label>
+                reopen note (required)
+                <input
+                  type="text"
+                  name="note"
+                  required
+                  maxlength="500"
+                  placeholder="why this issue is being reopened"
+                />
+              </label>
+              <button type="submit">reopen issue</button>
+            </form>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
       {% endfor %}
-    </ul>
+    </div>
     {% endif %}
   </section>
 
@@ -51,52 +325,146 @@ block body %}
       class="rbac-audit-filters"
       action="{{ url_for('app_issues') }}"
       method="get"
+      id="rbac-audit-filters"
+      data-audit-kind="rbac"
+      data-audit-endpoint="{{ url_for('rbac_explorer_audit') }}"
     >
-      <label for="rbac-audit-scope">scope</label>
-      <select id="rbac-audit-scope" name="scope">
-        {% for option in audit_scopes %}
-        <option
-          value="{{ option.id }}"
-          {%
-          if
-          option.selected
-          %}selected{%
-          endif
-          %}
-        >
-          {{ option.label }}
-        </option>
-        {% endfor %}
-      </select>
+      <div class="admin-filter-field">
+        <label for="rbac-audit-scope">scope</label>
+        <select id="rbac-audit-scope" name="scope">
+          {% for option in audit_scopes %}
+          <option
+            value="{{ option.id }}"
+            {%
+            if
+            option.selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ option.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
 
-      <label for="rbac-audit-entity">entity</label>
-      <input
-        id="rbac-audit-entity"
-        type="text"
-        name="entity"
-        value="{{ entity }}"
-        placeholder="optional id"
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <input type="hidden" name="entity" value="{{ entity }}" />
 
-      <label for="rbac-audit-limit">limit</label>
+      <div
+        class="admin-filter-field-pair admin-filter-last-row admin-filter-field-pair-narrow"
+      >
+        <div class="admin-filter-field">
+          <label for="rbac-audit-search">search</label>
+          <input
+            id="rbac-audit-search"
+            type="text"
+            name="search"
+            value="{{ search }}"
+            placeholder="action, actor, details, where, how, ip, entity ids"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+
+        <div class="admin-filter-field admin-filter-field-compact">
+          <label for="rbac-audit-search-field">in</label>
+          <select id="rbac-audit-search-field" name="search_field">
+            {% for option in audit_search_field_options %}
+            <option
+              value="{{ option.id }}"
+              {%
+              if
+              option.selected
+              %}selected{%
+              endif
+              %}
+            >
+              {{ option.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
       <input
         id="rbac-audit-limit"
-        type="number"
-        min="1"
-        max="500"
+        type="hidden"
         name="limit"
         value="{{ limit }}"
       />
 
-      <button type="submit">apply</button>
+      <input type="hidden" name="email_scope" value="{{ email_scope }}" />
+      <input type="hidden" name="email_entity" value="{{ email_entity }}" />
+      <input type="hidden" name="email_limit" value="{{ email_limit }}" />
+      <input type="hidden" name="email_status" value="{{ email_status }}" />
+      <input
+        type="hidden"
+        name="email_issue_state"
+        value="{{ email_issue_state }}"
+      />
+      <input type="hidden" name="email_search" value="{{ email_search }}" />
+      <input
+        type="hidden"
+        name="email_search_field"
+        value="{{ email_search_field }}"
+      />
+      <input type="hidden" name="notification_state_filter" value="1" />
+      <input
+        type="hidden"
+        name="notification_include_open"
+        value="{% if notification_include_open %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_include_resolved"
+        value="{% if notification_include_resolved %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_include_ignored"
+        value="{% if notification_include_ignored %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_category"
+        value="{{ notification_category }}"
+      />
+      <input
+        type="hidden"
+        name="notification_search"
+        value="{{ notification_search }}"
+      />
+      <input
+        type="hidden"
+        name="notification_search_field"
+        value="{{ notification_search_field }}"
+      />
     </form>
 
-    {% if events|length == 0 %}
-    <p class="none">No RBAC audit events found.</p>
-    {% else %}
-    <div class="rbac-audit-table-wrap">
+    {% set has_rbac_events = events|length != 0 %}
+    <p
+      class="none"
+      id="rbac-audit-empty"
+      {%
+      if
+      has_rbac_events
+      %}hidden{%
+      endif
+      %}
+    >
+      No RBAC audit events found.
+    </p>
+    <div
+      class="rbac-audit-table-wrap"
+      id="rbac-audit-table-wrap"
+      {%
+      if
+      not
+      has_rbac_events
+      %}hidden{%
+      endif
+      %}
+    >
       <table class="rbac-audit-table">
         <thead>
           <tr>
@@ -109,7 +477,7 @@ block body %}
             <th>what</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="rbac-audit-body">
           {% for event in events %}
           <tr>
             <td>{{ event.when or "-" }}</td>
@@ -124,7 +492,269 @@ block body %}
         </tbody>
       </table>
     </div>
-    {% endif %}
+    {% set rbac_show_more_hidden = not (events|length == limit and limit <
+    audit_max_limit) %}
+    <div
+      class="admin-show-more-wrap"
+      id="rbac-audit-show-more-wrap"
+      {%
+      if
+      rbac_show_more_hidden
+      %}hidden{%
+      endif
+      %}
+    >
+      <button
+        type="button"
+        class="admin-show-more-button"
+        data-form="rbac-audit-filters"
+        data-limit-input="rbac-audit-limit"
+        data-limit-step="{{ audit_show_more_increment }}"
+        data-limit-max="{{ audit_max_limit }}"
+      >
+        show more
+      </button>
+    </div>
+  </section>
+
+  <section
+    class="email-audit-log-panel"
+    aria-labelledby="email-audit-log-title"
+  >
+    <h2 id="email-audit-log-title">Email audit log</h2>
+    <p>
+      Delivery attempts for all email workflows. Use issue state + search to
+      find resolved notification incidents.
+    </p>
+    <form
+      class="rbac-audit-filters"
+      action="{{ url_for('app_issues') }}"
+      method="get"
+      id="email-audit-filters"
+      data-audit-kind="email"
+      data-audit-endpoint="{{ url_for('email_audit_feed') }}"
+    >
+      <input type="hidden" name="scope" value="{{ scope }}" />
+      <input type="hidden" name="entity" value="{{ entity }}" />
+      <input type="hidden" name="search" value="{{ search }}" />
+      <input type="hidden" name="search_field" value="{{ search_field }}" />
+      <input
+        type="hidden"
+        name="notification_category"
+        value="{{ notification_category }}"
+      />
+      <input type="hidden" name="notification_state_filter" value="1" />
+      <input
+        type="hidden"
+        name="notification_include_open"
+        value="{% if notification_include_open %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_include_resolved"
+        value="{% if notification_include_resolved %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_include_ignored"
+        value="{% if notification_include_ignored %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_search"
+        value="{{ notification_search }}"
+      />
+      <input
+        type="hidden"
+        name="notification_search_field"
+        value="{{ notification_search_field }}"
+      />
+      <input
+        id="email-audit-limit"
+        type="hidden"
+        name="email_limit"
+        value="{{ email_limit }}"
+      />
+
+      <div class="admin-filter-field">
+        <label for="email-audit-scope">scope</label>
+        <select id="email-audit-scope" name="email_scope">
+          {% for option in email_audit_scopes %}
+          <option
+            value="{{ option.id }}"
+            {%
+            if
+            option.selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ option.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <input type="hidden" name="email_entity" value="{{ email_entity }}" />
+
+      <div class="admin-filter-field">
+        <label for="email-audit-status">status</label>
+        <select id="email-audit-status" name="email_status">
+          {% for option in email_status_options %}
+          <option
+            value="{{ option.id }}"
+            {%
+            if
+            option.selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ option.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="admin-filter-field">
+        <label for="email-audit-issue-state">issue state</label>
+        <select id="email-audit-issue-state" name="email_issue_state">
+          {% for option in email_issue_state_options %}
+          <option
+            value="{{ option.id }}"
+            {%
+            if
+            option.selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ option.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div
+        class="admin-filter-field-pair admin-filter-last-row admin-filter-field-pair-narrow"
+      >
+        <div class="admin-filter-field">
+          <label for="email-audit-search">search</label>
+          <input
+            id="email-audit-search"
+            type="text"
+            name="email_search"
+            value="{{ email_search }}"
+            placeholder="action, actor, recipient, subject, details, issue key"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+
+        <div class="admin-filter-field admin-filter-field-compact">
+          <label for="email-audit-search-field">in</label>
+          <select id="email-audit-search-field" name="email_search_field">
+            {% for option in email_search_field_options %}
+            <option
+              value="{{ option.id }}"
+              {%
+              if
+              option.selected
+              %}selected{%
+              endif
+              %}
+            >
+              {{ option.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </form>
+
+    {% set has_email_events = email_events|length != 0 %}
+    <p
+      class="none"
+      id="email-audit-empty"
+      {%
+      if
+      has_email_events
+      %}hidden{%
+      endif
+      %}
+    >
+      No email audit events found.
+    </p>
+    <div
+      class="rbac-audit-table-wrap"
+      id="email-audit-table-wrap"
+      {%
+      if
+      not
+      has_email_events
+      %}hidden{%
+      endif
+      %}
+    >
+      <table class="rbac-audit-table">
+        <thead>
+          <tr>
+            <th>when</th>
+            <th>status</th>
+            <th>issue state</th>
+            <th>issue key</th>
+            <th>action</th>
+            <th>actor</th>
+            <th>recipient</th>
+            <th>subject</th>
+            <th>where</th>
+            <th>how</th>
+            <th>details</th>
+          </tr>
+        </thead>
+        <tbody id="email-audit-body">
+          {% for event in email_events %}
+          <tr>
+            <td>{{ event.when or "-" }}</td>
+            <td>{{ event.status or "-" }}</td>
+            <td>{{ event.issue_state or "-" }}</td>
+            <td>{{ event.issue_key or "-" }}</td>
+            <td>{{ event.action }}</td>
+            <td>{{ event.actor }}</td>
+            <td>{{ event.recipient }}</td>
+            <td>{{ event.subject }}</td>
+            <td>{{ event.where }}</td>
+            <td>{{ event.how }}</td>
+            <td>{{ event.details }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% set email_show_more_hidden = not (email_events|length == email_limit and
+    email_limit < audit_max_limit) %}
+    <div
+      class="admin-show-more-wrap"
+      id="email-audit-show-more-wrap"
+      {%
+      if
+      email_show_more_hidden
+      %}hidden{%
+      endif
+      %}
+    >
+      <button
+        type="button"
+        class="admin-show-more-button"
+        data-form="email-audit-filters"
+        data-limit-input="email-audit-limit"
+        data-limit-step="{{ audit_show_more_increment }}"
+        data-limit-max="{{ audit_max_limit }}"
+      >
+        show more
+      </button>
+    </div>
   </section>
 </article>
+<script src="{{ url_for('static', filename='js/admin-audit.js') }}"></script>
 {% endblock %}

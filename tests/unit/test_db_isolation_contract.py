@@ -108,8 +108,8 @@ def test_db_access_tests_require_isolation_entrypoints():
                 isolation_violations.append(f"{path.name}::{node.name}")
 
     assert not global_app_imports, (
-        "Route tests must use fixture-backed app access instead of "
-        "`from scheduler.app import app`: " + ", ".join(sorted(global_app_imports))
+        "Route tests must use fixture-backed app access instead of importing a "
+        "module-level app singleton: " + ", ".join(sorted(global_app_imports))
     )
     assert not isolation_violations, (
         "Tests touching DB state must be route-marked or request an isolation "

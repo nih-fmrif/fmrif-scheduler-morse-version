@@ -19,19 +19,36 @@ Bootstrap dataflow uses three stable stages:
 - Snapshot data import (client-provided dump via `SQL_SEED_DUMP_FILE`)
 - Relationship hydration import (CSV mappings into auth/relationship tables)
 
-Running `setup-dotenv.sh` will create an .env file (from .env.sample.local) in the root of the project
-with the default values. This file can be modified to set the desired values for
-the environment.
-The script also replaces the auth-test shared-secret placeholder with a random per-worktree value.
+Running `setup-dotenv.sh` will create an `.env` file (from `.env.sample.local`)
+in the root of the project with generated, worktree-specific defaults. It
+auto-derives a unique worktree scope from the absolute path, and optionally
+accepts `APP_PORT`/`PGPORT`, to derive:
+- `COMPOSE_PROJECT_NAME`
+- `PGDATABASE` / `SCHEDULER_TEST_DB_NAME`
+- `MAILPIT__PORT` (defaults to `PGPORT + 1`, with collision fallback)
+- `MAILPIT__SMTP_PORT` (defaults to `PGPORT + 2`, with collision fallback)
+- `SESSION__COOKIE_NAME` (and `SESSION__COOKIE_SECURE` is profile-driven by `APP_ENV`)
+- `AUTH_TEST__SHARED_SECRET` (randomized token)
+
+This is the preferred local strategy for avoiding port/DB/cookie collisions in concurrent
+worktrees; update values in `.env` manually after generation if you need custom overrides.
 
 Run `./run-compose.sh --check` to validate env and compose inputs before starting containers.
 For network/port semantics when the app runs inside or outside containers, see
 [`containerized-postgres.md`](containerized-postgres.md).
 
+For host-mode development, use `./run-compose.sh --no-app` (postgres + Mailpit).
+Playwright integration tasks start their own app server per run, while manual
+interactive app work can still use `pixi run serve`. `./run-compose.sh --no-app` performs an
+isolated restart (`docker compose down --volumes` then `up`) so local stacks do
+not reuse stale state. Use `./run-compose.sh --no-app --resume` for
+non-destructive reuse.
+
 `run-compose.sh` also neutralizes Docker Compose `$`-interpolation edge cases by generating a
-minimal temp env file for compose metadata (`APP_PORT`, `PGPORT`) while passing the
-full raw `.env` only as application config. If you run `docker compose` directly,
-values in `.env` containing `$` may still trigger interpolation warnings.
+minimal temp env file for compose metadata (`APP_PORT`, `PGPORT`, `SERVER__SERVER_NAME`)
+while passing the full raw `.env` only as application config. If you run `docker compose` directly,
+the compose file now fails fast with a required wrapper marker. Use `./run-compose.sh` for
+local stacks so compose metadata is generated safely and `$`-bearing values are escaped.
 
 CI and local development use the root `.env` file created from `.env.sample.local`.
 `.env.docker` is no longer required for this workflow.
@@ -44,16 +61,21 @@ Some useful variables that one might consider setting are listed below.
 
 #### Flask Settings
 ```env
-FLASK_APP=scheduler.app
-FLASK_ENV=development
+FLASK_APP=scheduler.app:create_app
+APP_ENV=development
 ```
+
+Profile behavior:
+- `APP_ENV=development` enables `AUTH_TEST__ENABLED=true`, `CORE__DEBUG=true`,
+  `SESSION__COOKIE_SECURE=false`, and `FLASK_RUN_RELOAD=1`.
+- `APP_ENV=production` enforces strict startup checks for auth credentials and
+  cookie security before app startup.
 
 #### Server Settings
 ```env
 APP_PORT=5051
-# Optional: usually leave unset in local workflows.
-# In compose mode, SERVER__SERVER_NAME is derived from APP_PORT.
-# SERVER__SERVER_NAME=localhost:5051
+# Optional: usually leave unset in local workflows to use request-based hosts.
+# Set this when you need a fixed server name.
 # Optional: isolate docker-compose resources across worktrees.
 # COMPOSE_PROJECT_NAME=scheduler-worktree-name
 SERVER__APPLICATION_ROOT=
@@ -99,10 +121,29 @@ Use a unique value per worktree or CI job when running suites in parallel.
 #### Mail Settings
 ```env
 MAIL__SERVER=localhost
-MAIL__PORT=25
+MAIL__PORT=5446
+MAIL__DEFAULT_SENDER=scheduler-local@localhost.localdomain
 MAIL__USERNAME=test
 MAIL__PASSWORD=test
+MAILPIT__PORT=5445
+MAILPIT__SMTP_PORT=5446
 ```
+
+`MAIL__DEFAULT_SENDER` is required. Startup fails fast when it is missing or invalid.
+
+In compose mode (`run-compose.sh`), scheduler is auto-configured to use Mailpit
+without extra developer setup:
+- `MAIL__SERVER=mailpit_app`
+- `MAIL__PORT=1025`
+- `MAIL__SUPPRESS_SEND=false`
+- `MAIL__DEFAULT_SENDER=<configured sender>`
+
+For host-mode app runs (`run-compose.sh --no-app` + `pixi run serve`), generated
+`.env` defaults route app SMTP to host Mailpit:
+- `MAIL__SERVER=localhost`
+- `MAIL__PORT=$MAILPIT__SMTP_PORT`
+- `MAIL__SUPPRESS_SEND=false`
+- `MAIL__DEFAULT_SENDER=<configured sender>`
 
 ### Deployment Specific Configuration
 

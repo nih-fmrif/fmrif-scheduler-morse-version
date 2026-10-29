@@ -1,7 +1,11 @@
+import re
 import uuid
 
 import pytest
+from flask import g
 from route_seed import (
+    create_device,
+    create_group,
     ensure_active_user,
     ensure_admin_user,
     ensure_group,
@@ -9,9 +13,25 @@ from route_seed import (
     set_session_user,
 )
 
-from scheduler import model
+from scheduler import logic, model
 
 pytestmark = pytest.mark.route
+
+
+def _find_device_card(device_id: str, body: str) -> re.Match[str] | None:
+    return re.search(
+        rf'<a[^>]*href="/device/{re.escape(device_id)}"[^>]*>.*?</a>',
+        body,
+        flags=re.S,
+    )
+
+
+def _find_device_list_item(device_id: str, body: str) -> re.Match[str] | None:
+    return re.search(
+        rf'<li[^>]*>\s*<a[^>]*href="/device/{re.escape(device_id)}"[^>]*>.*?</a>\s*</li>',
+        body,
+        flags=re.S,
+    )
 
 
 def test_home_shows_technologist_join_form_link_for_eligible_dev_member(route_client):
@@ -94,6 +114,29 @@ def test_home_hides_groups_link_for_inactive_user(route_client, route_app_contex
     assert 'href="/mailing-lists"' in body
 
 
+def test_header_shows_global_home_button(route_client):
+    user_id = f"home-global-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Home Global User")
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Global User",
+    )
+
+    response = route_client.get("/mailing-lists")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'class="menu-action home-link"' in body
+    assert "FMRIF scheduler" in body
+    assert body.index('class="menu-action home-link"') < body.index(
+        '<section class="login-info"'
+    )
+
+
 def test_home_shows_rbac_link_for_admin(route_client):
     ensure_admin_user()
     user_id = "test-admin"
@@ -108,7 +151,30 @@ def test_home_shows_rbac_link_for_admin(route_client):
 
     response = route_client.get("/")
     body = response.get_data(as_text=True)
+    assert 'nav class="admin-links"' in body
+    assert 'nav class="breadcrumb"' not in body
+    assert body.index('href="/rbac"') < body.index('<details class="user-menu">')
     assert 'href="/rbac"' in body
+
+
+def test_home_shows_admin_panel_link_for_admin(route_client):
+    ensure_admin_user()
+    user_id = "test-admin"
+    email = f"{user_id}@example.com"
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="RBAC Admin User",
+    )
+
+    response = route_client.get("/")
+    body = response.get_data(as_text=True)
+    assert 'nav class="admin-links"' in body
+    assert 'nav class="breadcrumb"' not in body
+    assert body.index('href="/app/issues"') < body.index('<details class="user-menu">')
+    assert 'href="/app/issues"' in body
 
 
 def test_home_hides_rbac_link_for_non_admin(route_client, route_app_context):
@@ -126,3 +192,262 @@ def test_home_hides_rbac_link_for_non_admin(route_client, route_app_context):
     response = route_client.get("/")
     body = response.get_data(as_text=True)
     assert 'href="/rbac"' not in body
+
+
+def test_device_subpage_nav_escapes_device_label_html(route_client):
+    ensure_admin_user()
+    user_id = "test-admin"
+    email = f"{user_id}@example.com"
+    device_id, _ = create_device()
+    evil_label = "<svg/onload=1>"
+    device = model.Device.query.get(device_id)
+    assert device is not None
+    device.label = evil_label
+    model.db.session.add(device)
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="RBAC Admin User",
+    )
+
+    response = route_client.get(f"/device/{device_id}")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "<svg/onload=1>" not in body
+    assert "&lt;svg/onload=1&gt;" in body
+    assert "<sr-only> &lt;svg/onload=1&gt;</sr-only>" in body
+
+
+def test_show_tech_join_form_probe_is_request_cached(monkeypatch, route_app_context):
+    import scheduler.app as scheduler_app_module
+
+    user_id = f"hct-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    user = model.User(id=user_id, label="Home Cache Tech User", addr=email, active=True)
+    model.db.session.add(user)
+    model.db.session.flush()
+
+    call_count = 0
+
+    def fake_show_tech_join_form(candidate):
+        nonlocal call_count
+        call_count += 1
+        return candidate.id == user_id
+
+    monkeypatch.setattr(logic, "show_tech_join_form", fake_show_tech_join_form)
+
+    with route_app_context.test_request_context("/join"):
+        assert scheduler_app_module._cached_show_tech_join_form(user) is True
+        assert scheduler_app_module._cached_show_tech_join_form(user) is True
+
+    assert call_count == 1
+
+
+def test_home_shows_read_only_indicator_for_devices_for_active_non_privileged_user(
+    route_client,
+):
+    user_id = f"home-readonly-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Home Read-only User")
+    device_id, _ = create_device()
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Read-only User",
+    )
+
+    response = route_client.get("/")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    device_card = _find_device_card(device_id, body)
+    assert device_card is not None
+    card_html = device_card.group(0)
+    assert 'data-device-permission="read-only"' in card_html
+    assert "home-device-readonly" in card_html
+    assert "home-device-perms" in card_html
+
+
+def test_home_marks_device_with_group_edit_access_not_read_only(route_client):
+    user_id = f"home-edit-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    group_id = create_group()
+    ensure_active_user(user_id, email, "Home Edit User")
+    set_group_membership(group_id, user_id, approved=True, pi=False)
+
+    device_id, _ = create_device()
+    model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Edit User",
+    )
+
+    response = route_client.get("/")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+
+    device_card = _find_device_card(device_id, body)
+    assert device_card is not None
+    card_html = device_card.group(0)
+    assert 'data-device-permission="editable"' in card_html
+    assert "home-device-readonly" not in card_html
+
+
+def test_home_shows_device_specific_privileges_for_read_only_user_devices(route_client):
+    user_id = f"home-privs-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Home Priv Device")
+    device_id, _ = create_device()
+    model.db.session.add(
+        model.UserDevice(
+            user=user_id,
+            device=device_id,
+            templates=False,
+            slot=False,
+            tech=True,
+            medical=False,
+            training=False,
+        )
+    )
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Priv Device",
+    )
+
+    response = route_client.get("/")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    device_card = _find_device_card(device_id, body)
+    assert device_card is not None
+    card_html = device_card.group(0)
+    assert 'data-device-permission="read-only"' in card_html
+    assert "home-device-readonly" in card_html
+    assert "home-device-perms" in card_html
+    assert "read-only" in card_html
+    assert "technologist" in card_html
+
+
+def test_home_shows_device_specific_privileges_for_editable_user_devices(route_client):
+    user_id = f"home-edp-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    group_id = create_group()
+    ensure_active_user(user_id, email, "Home Edit Priv Device")
+    set_group_membership(group_id, user_id, approved=True, pi=False)
+
+    device_id, _ = create_device()
+    model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
+    model.db.session.add(
+        model.UserDevice(
+            user=user_id,
+            device=device_id,
+            templates=True,
+            slot=True,
+            tech=False,
+            medical=True,
+            training=False,
+        )
+    )
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Edit Priv Device",
+    )
+
+    response = route_client.get("/")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    device_card = _find_device_card(device_id, body)
+    assert device_card is not None
+    card_html = device_card.group(0)
+    assert 'data-device-permission="editable"' in card_html
+    assert "home-device-readonly" not in card_html
+    assert "home-device-perms" in card_html
+    assert "read-only" not in card_html
+    assert "templates" in card_html
+    assert "slot" in card_html
+    assert "medical" in card_html
+
+
+def test_home_hides_read_only_devices_by_default(route_client):
+    user_id = f"hometog-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    group_id = create_group()
+    ensure_active_user(user_id, email, "Home Toggle User")
+    set_group_membership(group_id, user_id, approved=True, pi=False)
+
+    editable_device_id, _ = create_device()
+    readonly_device_id, _ = create_device()
+    model.db.session.add(model.DeviceGroup(device=editable_device_id, group=group_id))
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Toggle User",
+    )
+
+    response = route_client.get("/")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+
+    toggle = re.search(r'<input[^>]*id="home-show-readonly"[^>]*>', body)
+    assert toggle is not None
+    assert "checked" not in toggle.group(0)
+
+    readonly_item = _find_device_list_item(readonly_device_id, body)
+    assert readonly_item is not None
+    readonly_html = readonly_item.group(0)
+    assert 'data-home-readonly-device="true"' in readonly_html
+    assert "hidden" in readonly_html
+
+    editable_item = _find_device_list_item(editable_device_id, body)
+    assert editable_item is not None
+    editable_html = editable_item.group(0)
+    assert 'data-home-readonly-device="true"' not in editable_html
+
+
+def test_group_pi_probe_is_request_cached(monkeypatch, route_app_context):
+    import scheduler.app as scheduler_app_module
+
+    class DummyQuery:
+        def __init__(self):
+            self.first_calls = 0
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            self.first_calls += 1
+            return object()
+
+    class DummyUser:
+        def __init__(self, user_id: str):
+            self.id = user_id
+            self.active = True
+
+    dummy_query = DummyQuery()
+    monkeypatch.setattr(model.Membership, "query", dummy_query, raising=False)
+
+    with route_app_context.test_request_context("/"):
+        g.user = DummyUser("group-pi-cache")
+        assert scheduler_app_module._rbac_user_is_group_pi(g.user) is True
+        assert scheduler_app_module._rbac_user_is_group_pi(g.user) is True
+
+    assert dummy_query.first_calls == 1

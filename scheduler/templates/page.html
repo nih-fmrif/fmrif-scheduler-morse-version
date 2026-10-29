@@ -14,36 +14,48 @@ basehead %} {% block head %}
 </nav>
 <div class="top">
   <div class="top-inner">
-    <nav class="breadcrumb" aria-label="breadcrumb">
-      <ul>
-        {% for (name, url) in breadcrumb %} {% set is_current = request.path is
-        equalto(url) %} {% set is_section = name in ["devices", "groups"] %}
-        <li>
-          {% if loop.first %}
-          <a href="{{ url }}" {% if is_current %}aria-current="page" {% endif %}
-            >{{name}}</a
-          >
-          {% elif is_section %}
-          <span
-            class="breadcrumb-label"
-            {%
-            if
-            is_current
-            %}aria-current="page"
-            {%
-            endif
-            %}
-            >{{ name }}</span
-          >
-          {% else %}
-          <a href="{{ url }}" {% if is_current %}aria-current="page" {% endif %}
-            >{{name}}</a
-          >
-          {% endif %}
-        </li>
+    {% set home_href = url_for('home') %}
+    <div class="header-left">
+      <a
+        class="menu-action home-link"
+        href="{{ home_href }}"
+        {%
+        if
+        request.path
+        is
+        equalto(home_href)
+        %}aria-current="page"
+        {%
+        endif
+        %}
+      >
+        <span>FMRIF scheduler</span>
+      </a>
+      {% if user %} {% if admin_menu_links %}
+      <nav class="admin-links" aria-label="admin pages">
+        {% for label, href, icon in admin_menu_links %}
+        <a
+          class="menu-action"
+          href="{{ href }}"
+          {%
+          if
+          request.path
+          is
+          equalto(href)
+          %}aria-current="page"
+          {%
+          endif
+          %}
+        >
+          {% if icon == "lock" %} {{ icons.lock() }} {% elif icon == "warning"
+          %} {{ icons.exclaim_triangle() }} {% else %} {{ icons.gear() }} {%
+          endif %}
+          <span>{{ label }}</span>
+        </a>
         {% endfor %}
-      </ul>
-    </nav>
+      </nav>
+      {% endif %} {% endif %}
+    </div>
     <section class="login-info" aria-label="login info">
       {% if user %}
       <details class="user-menu">
@@ -100,7 +112,9 @@ basehead %} {% block head %}
   {% if subpage_nav %}
   <nav class="subpage-nav" aria-labelledby="subpage-nav-title">
     <div class="subpage-nav-inner">
-      <span id="subpage-nav-title">{{ subpage_nav.title | safe }}</span>
+      <span id="subpage-nav-title" class="subpage-nav-title"
+        >{{ subpage_nav.title }}</span
+      >
       <ul>
         {% for link, href in subpage_nav.links %}
         <li>
@@ -115,7 +129,7 @@ basehead %} {% block head %}
             {%
             endif
             %}
-            >{{ link | safe}}</a
+            >{{ link }}</a
           >
         </li>
         {% endfor %}

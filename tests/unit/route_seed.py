@@ -16,7 +16,16 @@ from typing import Sequence
 from flask import has_app_context
 
 from scheduler import logic, model
-from scheduler.app import app
+from scheduler.app import create_app
+
+_ROUTE_SEED_APP = None
+
+
+def _seed_app():
+    global _ROUTE_SEED_APP
+    if _ROUTE_SEED_APP is None:
+        _ROUTE_SEED_APP = create_app()
+    return _ROUTE_SEED_APP
 
 
 def extract_csrf_token(html: str) -> str:
@@ -55,7 +64,7 @@ def _route_app_context():
         yield False
         return
 
-    with app.app_context():
+    with _seed_app().app_context():
         yield True
 
 
@@ -225,9 +234,12 @@ def set_group_membership(
                 group=group_id,
                 user=user_id,
                 approved=approved_at,
+                email_status=logic.EMAIL_STATUS_NONE,
             )
         else:
             membership.approved = approved_at
+            if approved:
+                membership.email_status = logic.EMAIL_STATUS_NONE
         model.db.session.add(membership)
 
         pi_entry = model.PrimaryGroupMember.query.get((group_id, user_id))

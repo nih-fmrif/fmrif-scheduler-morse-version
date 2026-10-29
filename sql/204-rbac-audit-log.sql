@@ -6,10 +6,10 @@ create table rbac_audit_log (
 	where_path text not null,
 	how varchar(32) not null,
 	what text not null,
-	deptcode varchar(10) null,
-	scannercode varchar(5) null,
-	researchercode varchar(20) null,
-	requestercode varchar(20) null
+	deptcode text null,
+	scannercode text null,
+	researchercode text null,
+	requestercode text null
 );
 
 create index rbac_audit_log_occurred_at_idx

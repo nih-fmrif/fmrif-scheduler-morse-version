@@ -1,4 +1,5 @@
 // Server-side OAuth 2.0 / Entra authentication flow tests
+import * as fs from 'node:fs';
 import { test, expect, request } from '@playwright/test';
 import { waitForAppShell } from '../utils/test-helpers';
 import { signInWithCredentials } from '../utils/entra-login';
@@ -7,6 +8,27 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'htt
 const storageStatePath = process.env.PLAYWRIGHT_STORAGE_STATE;
 const hasCreds = Boolean(process.env.OAUTH_TEST_USERNAME && process.env.OAUTH_TEST_PASSWORD);
 const isRealAuthMode = (process.env.PLAYWRIGHT_AUTH_MODE ?? 'mock').toLowerCase() === 'entra';
+
+function hasUsableStorageState(path?: string): boolean {
+  if (!path || !fs.existsSync(path)) {
+    return false;
+  }
+
+  try {
+    const data = JSON.parse(fs.readFileSync(path, 'utf8')) as {
+      cookies?: unknown[];
+      origins?: Array<{ localStorage?: unknown[] }>;
+    };
+    const hasCookies = Array.isArray(data.cookies) && data.cookies.length > 0;
+    const hasOriginStorage = Array.isArray(data.origins) && data.origins.some((origin) => {
+      const localStorage = origin?.localStorage;
+      return Array.isArray(localStorage) && localStorage.length > 0;
+    });
+    return hasCookies || hasOriginStorage;
+  } catch {
+    return false;
+  }
+}
 
 function shouldIgnoreHTTPSErrorsByDefault(urlString: string): boolean {
   try {
@@ -131,12 +153,20 @@ test.describe('Real Entra sign-in (storage state)', () => {
       testInfo.skip('PLAYWRIGHT_STORAGE_STATE not set');
       return;
     }
+    if (!hasUsableStorageState(storageStatePath)) {
+      testInfo.skip('PLAYWRIGHT_STORAGE_STATE missing/empty; run pixi run generate-auth-storage-state');
+      return;
+    }
     if (!baseUrlReachable) {
       testInfo.skip(`BASE_URL not reachable: ${baseUrlError || BASE_URL}`);
       return;
     }
 
     await page.goto('/');
+    if (page.url().includes('/auth/login')) {
+      testInfo.skip('PLAYWRIGHT_STORAGE_STATE appears expired; regenerate auth storage state');
+      return;
+    }
     await waitForAppShell(page);
     await expect(page.locator('#user-menu-toggle')).toBeVisible();
   });

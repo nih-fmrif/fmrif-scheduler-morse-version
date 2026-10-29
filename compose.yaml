@@ -24,6 +24,30 @@ services:
       - ${SCHEDULER_RUNTIME_ENV_FILE:-./.env}:/app/.env:ro
       - scheduler_pgdata:/var/lib/postgresql/data
 
+  mailpit_app:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT__PORT:-5445}:8025"
+      - "${MAILPIT__SMTP_PORT:-5446}:1025"
+
+  mailpit_unit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_UNIT__PORT:-5465}:8025"
+      - "${MAILPIT_UNIT__SMTP_PORT:-5466}:1025"
+
+  mailpit_routes:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_ROUTES__PORT:-5485}:8025"
+      - "${MAILPIT_ROUTES__SMTP_PORT:-5486}:1025"
+
+  mailpit_integration:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_INTEGRATION__PORT:-5505}:8025"
+      - "${MAILPIT_INTEGRATION__SMTP_PORT:-5506}:1025"
+
   scheduler:
     build:
       context: .
@@ -33,7 +57,12 @@ services:
     environment:
       PGHOST: postgres
       PGPORT: 5432
-      SERVER__SERVER_NAME: "localhost:${APP_PORT:-5051}"
+      SERVER__SERVER_NAME: ${SERVER__SERVER_NAME:-}
+      MAIL__SERVER: mailpit_app
+      MAIL__PORT: 1025
+      MAIL__SUPPRESS_SEND: false
+    labels:
+      - "com.fmrif.compose_wrapper=${FMRIF_COMPOSE_WRAPPER:?Set FMRIF_COMPOSE_WRAPPER=run-compose.sh and launch with ./run-compose.sh}"
     ports:
       - "${APP_PORT:-5051}:5051"
 
@@ -44,6 +73,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit_app:
+        condition: service_started
 
 volumes:
   scheduler_pgdata:

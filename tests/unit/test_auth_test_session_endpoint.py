@@ -1,4 +1,5 @@
 import pytest
+from route_seed import set_group_membership
 
 from scheduler import logic, model
 from scheduler.auth.views import auth
@@ -128,3 +129,42 @@ def test_test_session_tech_profile_has_seeded_tech_access(app_context, monkeypat
     tech_user = model.User.query.get("test-tech")
     assert tech_user is not None
     assert logic.show_tech_join_form(tech_user) is False
+
+
+def test_test_session_member_profile_keeps_existing_approved_dev_membership(
+    app_context, monkeypatch
+):
+    _register_auth_blueprint(app_context)
+    monkeypatch.setattr(settings.auth_test, "enabled", True)
+    monkeypatch.setattr(settings.auth_test, "shared_secret", "unit-secret")
+
+    client = app_context.test_client()
+    first_login = client.post(
+        "/auth/test/session",
+        json={"profile": "member"},
+        headers={"X-Test-Auth-Secret": "unit-secret"},
+    )
+    assert first_login.status_code == 200
+
+    set_group_membership("DEV", "test-member", approved=True, pi=False)
+    row = model.GroupMember.query.get(("DEV", "test-member"))
+    assert row is not None
+    assert row.approved is not None
+
+    admin_switch = client.post(
+        "/auth/test/session",
+        json={"profile": "admin"},
+        headers={"X-Test-Auth-Secret": "unit-secret"},
+    )
+    assert admin_switch.status_code == 200
+
+    second_login = client.post(
+        "/auth/test/session",
+        json={"profile": "member"},
+        headers={"X-Test-Auth-Secret": "unit-secret"},
+    )
+    assert second_login.status_code == 200
+
+    persisted = model.GroupMember.query.get(("DEV", "test-member"))
+    assert persisted is not None
+    assert persisted.approved is not None

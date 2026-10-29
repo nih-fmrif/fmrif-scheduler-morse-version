@@ -296,6 +296,8 @@ fi
 # Store target database name
 TARGET_DB="${PGDATABASE:-fmrif_scheduler}"
 echo "Target database will be: $TARGET_DB"
+TARGET_DB_LITERAL=$(printf "'%s'" "$(printf "%s" "$TARGET_DB" | sed "s/'/''/g")")
+TARGET_DB_IDENTIFIER=$(printf '"%s"' "$(printf "%s" "$TARGET_DB" | sed 's/"/""/g')")
 
 # First connect to postgres database for admin operations
 # This is required as we cannot drop/create the database while connected to it
@@ -309,21 +311,21 @@ if [ "${DROP_DB:-false}" = "true" ]; then
     execute_psql "postgres" "
         SELECT pg_terminate_backend(pid)
         FROM pg_stat_activity
-        WHERE datname = '$TARGET_DB'
+        WHERE datname = $TARGET_DB_LITERAL
         AND pid <> pg_backend_pid();" || true
 
     # Then drop the database
-    execute_psql "postgres" "DROP DATABASE IF EXISTS $TARGET_DB;"
+    execute_psql "postgres" "DROP DATABASE IF EXISTS $TARGET_DB_IDENTIFIER;"
 fi
 
 # Check if database exists
 log "Checking if database $TARGET_DB exists..."
-DB_EXISTS=$(execute_psql "postgres" "SELECT 1 FROM pg_database WHERE datname = '$TARGET_DB'" | grep -c "1" || true)
+DB_EXISTS=$(execute_psql "postgres" "SELECT 1 FROM pg_database WHERE datname = $TARGET_DB_LITERAL" | grep -c "1" || true)
 
 # Create database if it doesn't exist
 if [ "$DB_EXISTS" = "0" ]; then
     log "Creating database $TARGET_DB..."
-    execute_psql "postgres" "CREATE DATABASE $TARGET_DB
+    execute_psql "postgres" "CREATE DATABASE $TARGET_DB_IDENTIFIER
         WITH ENCODING='UTF8'
         LC_COLLATE='C.UTF-8'
         LC_CTYPE='C.UTF-8'

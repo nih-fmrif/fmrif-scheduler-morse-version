@@ -38,7 +38,7 @@ function loadEnvFile(filePath: string): void {
 loadEnvFile(path.resolve(__dirname, '.env'));
 
 const configuredBaseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
-const flaskApp = process.env.FLASK_APP || 'scheduler.app';
+const flaskApp = process.env.FLASK_APP || 'scheduler.app:create_app';
 
 function parseBooleanEnv(name: string, fallback: boolean = false): boolean {
   const value = process.env[name];
@@ -143,7 +143,8 @@ function buildWebServerConfig() {
       command: `FLASK_APP=${flaskApp} flask run --host ${host} --port ${port}`,
       // "/" requires auth in this app; use a public route for server readiness.
       url: readinessUrl,
-      reuseExistingServer: !process.env.CI,
+      // Always start an isolated app server per run to avoid cross-run coupling.
+      reuseExistingServer: false,
       timeout: 120000,
     };
   } catch {

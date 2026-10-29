@@ -44,7 +44,7 @@ async function delay(ms: number) {
 }
 
 function looksLikeAppPage(body: string): boolean {
-  const hasAppShell = body.includes('nav class="breadcrumb"') && body.includes('login-info');
+  const hasAppShell = body.includes('login-info');
   const hasLoginPage = body.includes('FMRIF Scheduler') && body.includes('login-btn');
   return hasAppShell || hasLoginPage;
 }

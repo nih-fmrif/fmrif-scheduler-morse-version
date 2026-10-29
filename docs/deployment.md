@@ -179,7 +179,7 @@ These are standard OIDC scopes for user identity plus refresh capability. NIH te
 **File:** `/home/leejo/fmrif-scheduler-morse-version/.env`
 
 ```
-FLASK_APP=scheduler.app
+FLASK_APP=scheduler.app:create_app
 PGHOST=localhost
 PGPORT=5432
 PGUSER=postgres
