@@ -16,11 +16,9 @@ body %}
 
   <div id="login-content">
     <p>Sign in with your NIH credentials</p>
-    <form method="get" action="{{ start_login_url }}">
-      <button id="login-btn" class="btn btn-primary" type="submit">
-        Login with NIH Credentials
-      </button>
-    </form>
+    <a id="login-btn" class="login-link" href="{{ start_login_url }}">
+      Login with NIH Credentials
+    </a>
   </div>
 </div>
 {% endblock %}

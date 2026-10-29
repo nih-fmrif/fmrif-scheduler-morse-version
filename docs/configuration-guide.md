@@ -11,9 +11,15 @@ variables so the app, SQL bootstrap path, and repo tooling share one contract.
 
    ```bash
    bash setup-dotenv.sh
+   bash setup-dotenv.sh --profile compose
    ```
 
-2. Start local infrastructure:
+   Use plain `bash setup-dotenv.sh` for the default host-local PostgreSQL
+   contract (`PGHOST=127.0.0.1`, `PGPORT=5432`). Use
+   `bash setup-dotenv.sh --profile compose` before any `run-compose.sh`
+   workflow so `.env` targets the compose-published ports instead.
+
+2. Start local infrastructure when using the compose profile:
 
    ```bash
    bash run-compose.sh --no-app
@@ -37,9 +43,10 @@ documented in [agent-guidance-quickstart.md](agent-guidance-quickstart.md).
 
 Supported `setup-dotenv.sh` profiles:
 
-- `default`: compose-oriented local defaults
 - `host-local-postgres`: local host PostgreSQL defaults (`PGHOST=127.0.0.1`,
-  `PGPORT=5432`)
+  `PGPORT=5432`); this is the default profile
+- `compose`: compose-oriented local defaults for `run-compose.sh`
+- `default`: backward-compatible alias for the `compose` profile
 
 Use `bash run-compose.sh --check` when you want a quick validation pass over
 the current `.env` and compose inputs.
@@ -90,8 +97,8 @@ APP_PORT=5051
 ### Database
 
 ```env
-PGHOST=localhost
-PGPORT=5444
+PGHOST=127.0.0.1
+PGPORT=5432
 PGUSER=postgres
 PGPASSWORD=password
 PGDATABASE=fmrif_scheduler
@@ -101,6 +108,10 @@ SCHEDULER_TEST_DB_NAME=fmrif_scheduler_test
 The runtime also exposes explicit database tuning and timeout settings through
 `DATABASE__*`, including connection pool sizes, connect timeouts, statement
 timeouts, lock timeouts, and slow-query thresholds.
+
+`bash setup-dotenv.sh --profile compose` instead seeds compose-facing host
+values such as `PGHOST=localhost` and a compose-published `PGPORT` (typically
+`5444` before scope offsets).
 
 Bootstrap dataflow remains:
 

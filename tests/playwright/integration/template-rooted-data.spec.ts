@@ -225,7 +225,7 @@ test('rooted invalid cell selection updates the shared inspector card and detail
   await expect(detailsDialog).toBeVisible();
 });
 
-test('template review pending shows pending changes but blocks publish while rooted errors remain unresolved', async ({
+test('template review pending submits clean selected changes and reopens rooted issues for repair', async ({
   page,
 }) => {
   await gotoTemplateEdit(page);
@@ -249,7 +249,71 @@ test('template review pending shows pending changes but blocks publish while roo
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Active issues');
   await expect(dialog).toContainText('Pending changes');
-  await expect(dialog.getByRole('button', { name: 'Publish changes' })).toHaveCount(0);
+  await expect(dialog.locator('.review-item-checkbox')).toHaveCount(1);
+  await expect(dialog.getByRole('button', { name: 'Publish changes' })).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Publish changes' }).click();
+
+  const resultDialog = page.getByRole('dialog', { name: 'results' });
+  await expect(resultDialog).toContainText(/1 entry updated/i);
+  await expect(resultDialog).toContainText(/stale member/i);
+  await page.getByRole('button', { name: 'Close dialog' }).click();
+
+  await expect(page.locator('#review-pending')).toContainText('Review pending');
+  await expect(page.locator('#review-pending')).toHaveAttribute('data-invalid-count', /[1-9]/);
+
+  await openReviewPending(page);
+  const reviewDialog = page.getByRole('dialog', { name: 'review issues' });
+  await expect(reviewDialog).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Refresh review' })
+  ).toBeVisible();
+  await page.locator('#save-dialog-container .review-item-issue .review-item-action').first().click();
+  const reopenedDetailsDialog = page.getByRole('dialog', { name: 'Selection Details' });
+  await expect(reopenedDetailsDialog).toBeVisible();
+  await expect(reviewDialog).toBeVisible();
+
+  const layering = await page.evaluate(() => {
+    const inspectorContainer = document.getElementById('inspector-dialog-container');
+    const reviewContainer = document.getElementById('save-dialog-container');
+    const inspectorDialog = inspectorContainer?.querySelector('.dialog-box-container');
+    if (
+      !(inspectorContainer instanceof HTMLElement) ||
+      !(reviewContainer instanceof HTMLElement) ||
+      !(inspectorDialog instanceof HTMLElement)
+    ) {
+      throw new Error('Expected review and inspector dialog containers.');
+    }
+
+    const rect = inspectorDialog.getBoundingClientRect();
+    const topElement = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2
+    );
+
+    return {
+      inspectorZIndex: Number.parseInt(getComputedStyle(inspectorContainer).zIndex || '0', 10),
+      reviewZIndex: Number.parseInt(getComputedStyle(reviewContainer).zIndex || '0', 10),
+      inspectorOnTop: Boolean(topElement?.closest('#inspector-dialog-container')),
+    };
+  });
+
+  expect(layering.inspectorZIndex).toBeGreaterThan(layering.reviewZIndex);
+  expect(layering.inspectorOnTop).toBe(true);
+
+  await repairActiveCellToNmrf(page);
+  await page.getByRole('button', { name: 'Exit' }).click();
+  await expect(reopenedDetailsDialog).not.toBeVisible();
+
+  const refreshedReviewDialog = page.getByRole('dialog', {
+    name: 'review pending changes',
+  });
+  await expect(refreshedReviewDialog).toBeVisible();
+  await expect(refreshedReviewDialog).toContainText('Active issues');
+  await expect(refreshedReviewDialog).toContainText('Pending changes');
+  await expect(refreshedReviewDialog.locator('.review-item-checkbox')).toHaveCount(1);
+  await expect(
+    refreshedReviewDialog.getByRole('button', { name: 'Publish changes' })
+  ).toBeEnabled();
 });
 
 test('template apply helper stacks helper copy and controls without overlap', async ({ page }) => {

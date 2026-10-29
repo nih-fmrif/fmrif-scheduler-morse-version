@@ -21,6 +21,7 @@ pixi run test-load-moderate-notify
 ```
 
 ## Local stack
+- If `.env` is missing or needs compose-facing ports: `bash setup-dotenv.sh --profile compose`
 - Start services for tests:
   - `bash run-compose.sh --no-app`
   - `bash run-compose.sh --no-app --resume` (reuse existing services/data)

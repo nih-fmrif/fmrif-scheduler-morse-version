@@ -49,9 +49,7 @@ base.describe('Public CSP Page Smokes', () => {
 
     expectBaselineCsp(response);
     await expect(page).toHaveURL(/\/auth\/login(?:\?|$)/);
-    await expect(
-      page.getByRole('button', { name: /login with nih credentials/i })
-    ).toBeVisible();
+    await expect(page.getByRole('link', { name: /login with nih credentials/i })).toBeVisible();
     expect(runtimeErrors.consoleErrors).toEqual([]);
     expect(runtimeErrors.pageErrors).toEqual([]);
   });

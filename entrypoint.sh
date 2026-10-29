@@ -82,7 +82,7 @@ bootstrap_if_missing() {
 >&2 echo "Postgres is up - starting application"
 bootstrap_if_missing
 # Run database migrations
-"$python_bin" -m alembic upgrade head
+"$python_bin" -m scheduler.alembic_runner upgrade head
 # Start the application
 case "$app_server" in
   flask)

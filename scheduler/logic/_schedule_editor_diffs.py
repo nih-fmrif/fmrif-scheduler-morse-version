@@ -100,7 +100,8 @@ def verify_and_prep_template_diffs(
         check(entry_id, diff, "institute", entry.inst, inst)
         group, ok = check(entry_id, diff, "group", entry.group, available_groups)
         if ok:
-            check(entry_id, diff, "member", entry.user, members[group])
+            normalized_group = "" if group in (None, "", "(none)") else group
+            check(entry_id, diff, "member", entry.user, members[normalized_group])
 
         if entry_id not in errors:
             if "institute" in diff:

@@ -105,6 +105,18 @@ forward_signal() {
   fi
 }
 
+persist_scope_metadata_if_present() {
+  if [ -z "${RUNTIME_SCOPE_FILE:-}" ] || [ ! -f "$RUNTIME_SCOPE_FILE" ]; then
+    return 0
+  fi
+  runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
+}
+
+cleanup_scope_metadata() {
+  unset RUNTIME_SCOPE_HOST_APP_PID
+  persist_scope_metadata_if_present || true
+}
+
 run_edge_header_gate() {
   local script_path="${SCRIPT_DIR}/check-edge-security-headers.py"
 
@@ -276,6 +288,7 @@ export RUNTIME_SCOPE_COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-${runtime_sco
 export RUNTIME_SCOPE_PGDATABASE="$PGDATABASE"
 export RUNTIME_SCOPE_SCHEDULER_TEST_DB_NAME="${SCHEDULER_TEST_DB_NAME:-fmrif_scheduler_test}"
 export RUNTIME_SCOPE_SESSION__COOKIE_NAME="$SESSION__COOKIE_NAME"
+unset RUNTIME_SCOPE_HOST_APP_PID
 export RUNTIME_SCOPE_AUTH_TEST__SHARED_SECRET="${AUTH_TEST__SHARED_SECRET:-}"
 runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
 
@@ -298,9 +311,12 @@ esac
 SERVER_PID=""
 trap 'forward_signal TERM' TERM
 trap 'forward_signal INT' INT
+trap 'cleanup_scope_metadata' EXIT
 
 "${server_command[@]}" &
 SERVER_PID=$!
+export RUNTIME_SCOPE_HOST_APP_PID="$SERVER_PID"
+runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
 
 readiness_url="http://127.0.0.1:${APP_PORT}/robots.txt"
 if ! wait_for_local_http_ready "$readiness_url"; then

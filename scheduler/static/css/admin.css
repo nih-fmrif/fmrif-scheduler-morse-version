@@ -1019,10 +1019,29 @@ p.template-log {
   text-align: center;
 }
 
-.login-container button[type="submit"] {
+.login-container #login-btn {
+  display: block;
   width: 100%;
   margin-top: 1rem;
   padding: 0.5rem;
+  text-align: center;
+  text-decoration: none;
+  color: var(--btn);
+  background-color: var(--btn-bg);
+  border: 1px solid var(--btn-bg);
+  border-radius: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.login-container #login-btn:visited {
+  color: var(--btn);
+}
+
+.login-container #login-btn:hover {
+  background-color: var(--btn-hover);
+  border-color: var(--btn-hover);
+  text-decoration: none;
 }
 
 .form-group {

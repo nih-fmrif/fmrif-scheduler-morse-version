@@ -90,11 +90,11 @@
 {% macro support_status_token(typ="item", hidden=true) %}
 	<span
 		class="status-token status-token-support"
-		title="Support is requested here and you can respond to it"
+		title="Support is requested here and still needs a handler"
 		{% if hidden %}hidden{% endif %}
 		data-support-cue="slot"
 	>
-		{{ icons.hand_index_thumb("actionable support in " ~ typ) }}
+		{{ icons.hand_index_thumb("unassigned support in " ~ typ) }}
 	</span>
 {% endmacro %}
 
@@ -200,7 +200,7 @@
 			<ul class="legend-list">
 				<li class="legend-item">
 					<span class="legend-item-icon">{{ support_status_token(hidden=false) }}</span>
-					<span class="legend-item-copy">Support has been requested here, and you can respond to it.</span>
+					<span class="legend-item-copy">Support has been requested here and still needs someone assigned.</span>
 				</li>
 				<li class="legend-item">
 					<span class="legend-item-icon">{{ readonly_status_token(hidden=false) }}</span>
@@ -489,10 +489,13 @@
 	<div class=dialog-overlay data-a11y-dialog-hide></div>
 	<div class=dialog-box-container role=document>
 		<h1 id="save-dialog-title" class=dialog-title></h1>
-		<button type=button data-a11y-dialog-hide>
-			{{ icons.close() }}
-			<sr-only>Close dialog</sr-only>
-		</button>
+		<div class="dialog-header-side">
+			<div class="dialog-header-actions"></div>
+			<button type=button data-a11y-dialog-hide>
+				{{ icons.close() }}
+				<sr-only>Close dialog</sr-only>
+			</button>
+		</div>
 		<div id="save-dialog-content" class=dialog-content tabindex=0><div class=dialog-content-inner></div></div>
 		<div class=dialog-form>
 			<input-set is-option hidden>

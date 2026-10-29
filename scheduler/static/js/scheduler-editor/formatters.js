@@ -228,10 +228,9 @@ function humanize_date_if_needed(date) {
   return date;
 }
 
-function fmt_editor_diffs(human_hours, templateEditor, diffs) {
-  const out = document.createElement("dl");
+function append_editor_diff_details(out, diff) {
   let notifications = 0;
-  const add = (diff, k) => {
+  const add = (k) => {
     const rec = diff[k];
     if (!rec) {
       return 0;
@@ -241,45 +240,59 @@ function fmt_editor_diffs(human_hours, templateEditor, diffs) {
     const field = String(k);
     const oldValue = String(a ?? "");
     const newValue = String(b ?? "");
-    // return if this is notification worthy
     if (a == "") {
       const value = document.createElement("b");
       value.textContent = newValue;
       dd.append(`set ${field} to `, value);
       out.append(dd);
       return 1;
-    } else if (b == "") {
+    }
+    if (b == "") {
       const value = document.createElement("b");
       value.textContent = oldValue;
       dd.append(`cleared ${field} (was `, value, ")");
       out.append(dd);
       return 0;
-    } else {
-      const newElm = document.createElement("b");
-      const oldElm = document.createElement("b");
-      newElm.textContent = newValue;
-      oldElm.textContent = oldValue;
-      dd.append(`set ${field} to `, newElm, " (was ", oldElm, ")");
-      out.append(dd);
-      return 1;
     }
+    const newElm = document.createElement("b");
+    const oldElm = document.createElement("b");
+    newElm.textContent = newValue;
+    oldElm.textContent = oldValue;
+    dd.append(`set ${field} to `, newElm, " (was ", oldElm, ")");
+    out.append(dd);
+    return 1;
   };
+
+  notifications += add("institute");
+  notifications += add("group");
+  notifications += add("member");
+  for (const k of ["tech", "train", "med"]) {
+    const sr = diff[k];
+    if (!sr) {
+      continue;
+    }
+    notifications += 1;
+    fmt_sr_diff(out, k, sr);
+  }
+  return notifications;
+}
+
+function fmt_editor_diff_details(diff) {
+  const out = document.createElement("dl");
+  append_editor_diff_details(out, diff);
+  return out;
+}
+
+function fmt_editor_diffs(human_hours, templateEditor, diffs) {
+  const out = document.createElement("dl");
+  let notifications = 0;
   for (const diff of diffs) {
     const dt = document.createElement("dt");
     dt.textContent = `${humanize_date_if_needed(diff.date)}: ${
       human_hours[diff.hour]
     }`;
     out.append(dt);
-    notifications += add(diff, "institute");
-    notifications += add(diff, "group");
-    notifications += add(diff, "member");
-    for (const k of ["tech", "train", "med"]) {
-      const sr = diff[k];
-      if (sr) {
-        notifications += 1;
-        fmt_sr_diff(out, k, sr);
-      }
-    }
+    notifications += append_editor_diff_details(out, diff);
   }
   return [!templateEditor && notifications > 0, out];
 }
@@ -512,6 +525,7 @@ function parse_schedule_cell_markup(markup) {
 }
 
 export {
+  fmt_editor_diff_details,
   fmt_editor_diffs,
   fmt_log,
   fmt_save_results,

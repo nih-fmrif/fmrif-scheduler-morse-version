@@ -8,16 +8,18 @@ secret_placeholder="__GENERATE_AUTH_TEST_SECRET__"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/scripts/runtime-scope.sh"
 
-profile="${SETUP_DOTENV_PROFILE:-default}"
+profile="${SETUP_DOTENV_PROFILE:-host-local-postgres}"
 
 usage() {
   cat <<'EOF'
-Usage: bash setup-dotenv.sh [--profile default|host-local-postgres]
+Usage: bash setup-dotenv.sh [--profile default|host-local-postgres|compose]
 
 Profiles:
-  default              Local compose-oriented defaults (for example PGPORT=5444).
   host-local-postgres  Native host defaults for a local PostgreSQL service
-                       (for example PGHOST=127.0.0.1, PGPORT=5432).
+                       (for example PGHOST=127.0.0.1, PGPORT=5432). This is
+                       the default profile.
+  compose              Local compose-oriented defaults (for example PGPORT=5444).
+  default              Backward-compatible alias for the compose profile.
 EOF
 }
 
@@ -44,7 +46,13 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$profile" in
-  default|host-local-postgres)
+  default)
+    profile="compose"
+    ;;
+esac
+
+case "$profile" in
+  compose|host-local-postgres)
     ;;
   *)
     echo "ERROR: unsupported setup-dotenv profile: $profile" >&2

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 import importlib.util
 import json
 from pathlib import Path
@@ -51,10 +52,7 @@ def test_check_db_health_accepts_legacy_database_only_flag(monkeypatch, capsys):
 
 
 def test_rehearsal_database_name_defaults_to_dedicated_scratch_database():
-    module = _load_script_module(
-        "rehearse-initial-deployment.py",
-        "rehearse_initial_deployment_script",
-    )
+    module = importlib.import_module("scheduler.deployment_rehearsal")
 
     assert (
         module.derive_rehearsal_database_name("fmrif_scheduler")
@@ -64,6 +62,19 @@ def test_rehearsal_database_name_defaults_to_dedicated_scratch_database():
         module.derive_rehearsal_database_name("Mixed-Case Demo DB")
         == "mixed_case_demo_db_deployment_rehearsal"
     )
+
+
+
+def test_docker_rehearsal_excludes_docs_submodule_git_metadata():
+    dockerignore = (REPO_ROOT / ".dockerignore").read_text().splitlines()
+
+    assert "fmrif-scheduler-docs/.git" in dockerignore
+
+
+def test_debian_runtime_wrapper_scaffolds_compose_profile_when_env_missing():
+    wrapper = (REPO_ROOT / "scripts" / "with-debian-runtime-stack.sh").read_text()
+
+    assert "bash setup-dotenv.sh --profile compose" in wrapper
 
 
 def test_run_db_backup_script_passes_backup_format_override(monkeypatch, capsys):

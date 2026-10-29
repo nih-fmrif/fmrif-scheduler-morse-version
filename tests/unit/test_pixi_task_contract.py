@@ -82,7 +82,7 @@ def test_fast_pytest_tasks_use_target_aware_wrapper():
     assert tasks["check-db-posture"] == "python3 scripts/check-db-posture.py"
     assert (
         tasks["rehearse-initial-deployment"]
-        == "python3 scripts/rehearse-initial-deployment.py"
+        == "python3 -m scheduler.deployment_rehearsal"
     )
     assert (
         tasks["test-unit"]
@@ -154,3 +154,9 @@ def test_dockerfile_uses_pixi_managed_environment_without_ad_hoc_pip_installs():
     assert "COPY pixi.lock ." not in dockerfile
     assert "pip install" not in dockerfile
     assert "uv sync" not in dockerfile
+
+
+def test_entrypoint_uses_pyproject_backed_alembic_runner():
+    entrypoint = (REPO_ROOT / "entrypoint.sh").read_text(encoding="utf-8")
+
+    assert '"$python_bin" -m scheduler.alembic_runner upgrade head' in entrypoint

@@ -4,7 +4,7 @@ Use the Playwright path that matches the job. In this repo the main failure mode
 
 ## Prerequisites
 - `export FMRIF_RUNTIME_SCOPE=<unique-scope>`
-- `bash setup-dotenv.sh`
+- `bash setup-dotenv.sh --profile compose`
 - `bash run-compose.sh --no-app` for the first setup in a new scope
 - `bash run-compose.sh --no-app --resume` only when you are reusing the same healthy scope and actually need a compose refresh
 

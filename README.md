@@ -11,7 +11,8 @@
 `pixi >= 0.66.0` is required for this workspace.
 
 1. Generate local `.env`:
-   `bash setup-dotenv.sh`
+   - native host PostgreSQL defaults: `bash setup-dotenv.sh`
+   - compose-backed local services: `bash setup-dotenv.sh --profile compose`
 2. Start local services:
    - light dev stack (postgres + Mailpit): `bash run-compose.sh --no-app`
    - light dev stack reuse: `bash run-compose.sh --no-app --resume`
@@ -41,6 +42,7 @@
 
 ## Notes
 - Use `run-compose.sh` for containerized startup; direct `docker compose` is not supported in this workflow.
+- `setup-dotenv.sh` now defaults to host-local PostgreSQL settings; use `--profile compose` before any `run-compose.sh` workflow.
 - The supported deployment target is Debian 13 with system-installed services. Operator runbooks, host verification, and sensitive deployment detail live in `fmrif-scheduler-docs/`.
 - The supported production posture is hybrid with one hard boundary: a one-time initial deployment may bootstrap from a `003`-contract dump, but every live app-relevant schema change after that point must go through Alembic.
 - In the full compose stack, `APP_PORT` is served by nginx and proxied to the internal Gunicorn app container.

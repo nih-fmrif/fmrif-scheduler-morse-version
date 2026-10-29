@@ -790,6 +790,70 @@ def test_seeded_template_edit_post_blocks_save_until_legacy_member_is_resolved(
 
 
 @pytest.mark.covers_route("/device/<the_device>/templates/edit/<the_template>", "POST")
+def test_seeded_template_edit_post_saves_clean_selected_entry_while_other_rooted_errors_remain(
+    route_client, route_app_context
+):
+    ensure_admin_user()
+    set_admin_session(route_client)
+    device_id, template_id, report = seeded_template_compatibility(
+        archived=False,
+        require_blocking=True,
+        issue_code="legacy-member",
+    )
+    blocked_entry_ids = {int(entry_id) for entry_id in report["entry_errors"].keys()}
+    clean_entry = model.db.session.scalars(
+        select(model.TemplateEntry)
+        .where(model.TemplateEntry.device == device_id)
+        .where(model.TemplateEntry.template == template_id)
+        .where(~model.TemplateEntry.id.in_(blocked_entry_ids))
+        .order_by(model.TemplateEntry.dow, model.TemplateEntry.hour)
+    ).first()
+    assert clean_entry is not None
+    replacement_inst = _active_inst(exclude_id=(clean_entry.inst or ""))
+    if replacement_inst is None:
+        replacement_inst = _active_inst()
+    assert replacement_inst is not None
+
+    get_response = route_client.get(f"/device/{device_id}/templates/edit/{template_id}")
+    csrf_token = extract_csrf_token(get_response.get_data(as_text=True))
+
+    post_response = route_client.post(
+        f"/device/{device_id}/templates/edit/{template_id}",
+        json={
+            "csrf_token": csrf_token,
+            "payload": {
+                "diffs": [
+                    {
+                        "id": clean_entry.id,
+                        "institute": [clean_entry.inst or "", replacement_inst.id],
+                    }
+                ]
+            },
+        },
+        follow_redirects=False,
+    )
+
+    assert post_response.status_code == 200
+    payload = post_response.get_json()
+    assert payload is not None
+    assert payload["saved"] == 1
+    assert any(
+        "stale member" in summary.lower()
+        for summary in payload.get("template_errors", [])
+    )
+
+    refreshed_entry = model.db.session.get(model.TemplateEntry, clean_entry.id)
+    assert refreshed_entry is not None
+    assert refreshed_entry.inst == replacement_inst.id
+    refreshed_device = model.db.session.get(model.Device, refreshed_entry.device)
+    assert refreshed_device is not None
+    refreshed_report = template_logic.inspect_template_compatibility(
+        refreshed_device, [refreshed_entry.template]
+    )[refreshed_entry.template]
+    assert refreshed_report["blocking"] is True
+
+
+@pytest.mark.covers_route("/device/<the_device>/templates/edit/<the_template>", "POST")
 def test_device_templates_edit_post_accepts_empty_diff_payload(
     route_client, route_app_context
 ):

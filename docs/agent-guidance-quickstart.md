@@ -11,12 +11,16 @@ Keep that scope stable for the full thread (including post-compaction continuati
 
 ## Canonical flow
 ```bash
-bash setup-dotenv.sh
+bash setup-dotenv.sh --profile compose
 bash run-compose.sh --no-app
 pixi run test-unit
 pixi run test-routes
 pixi run test-integration-ci
 ```
+
+That canonical agent flow is compose-backed on purpose. Plain
+`bash setup-dotenv.sh` now defaults to host-local PostgreSQL and is only the
+right choice when you are intentionally avoiding `run-compose.sh`.
 
 Targeted pytest runs still go through Pixi tasks:
 

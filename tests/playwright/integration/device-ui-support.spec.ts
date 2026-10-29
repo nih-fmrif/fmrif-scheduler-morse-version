@@ -87,6 +87,47 @@ test.describe('Schedule UI interactions', () => {
     );
   });
 
+  test('should hide support cues once a medical handler is assigned', async ({ page }) => {
+    await grantDeviceSupportPermission(page, 'd', 'medical');
+    await openFutureDeviceGrid(page, 'd', '2035-03-21');
+
+    const initialEditor = await openSlotInspectorEditor(page, 8, 0, {
+      group: 'BEI',
+      member: 'user0048',
+    });
+    const requested = initialEditor.slotEditor.locator('input[id^="med-requested-"]').first();
+    const handler = initialEditor.slotEditor.locator('input[id^="med-handler-"]').first();
+
+    await requested.check();
+    await expect(initialEditor.cell.locator('[data-support-cue="slot"]')).toBeVisible();
+    await expect(page.locator('#inspector-open [data-support-cue="selection"]')).toBeVisible();
+
+    await handler.fill('user0049');
+    await expect(initialEditor.cell.locator('[data-support-cue="slot"]')).toHaveAttribute('hidden', '');
+    await expect(page.locator('#inspector-open [data-support-cue="selection"]')).toHaveAttribute('hidden', '');
+
+    await page.locator('#inspector-save').click();
+
+    const resultDialog = page.locator('#result-dialog-container .dialog-box-container');
+    await expect(resultDialog).toBeVisible();
+    await expect(resultDialog).toContainText(/1 entry updated/i);
+    await page.locator('#result-dialog-container button[data-a11y-dialog-hide]').click();
+    await expect(resultDialog).not.toBeVisible();
+
+    await page.reload();
+
+    const reopenedEditor = await openSlotInspectorEditor(page, 8, 0, {
+      group: 'BEI',
+      member: 'user0048',
+    });
+    await expect(reopenedEditor.slotEditor.locator('input[id^="med-requested-"]').first()).toBeChecked();
+    await expect(reopenedEditor.slotEditor.locator('input[id^="med-handler-"]').first()).toHaveValue(
+      'user0049'
+    );
+    await expect(reopenedEditor.cell.locator('[data-support-cue="slot"]')).toHaveAttribute('hidden', '');
+    await expect(page.locator('#inspector-open [data-support-cue="selection"]')).toHaveAttribute('hidden', '');
+  });
+
   test('should allow retrying medical handler conflicts from the same draft', async ({ page }) => {
     await grantDeviceSupportPermission(page, 'd', 'medical');
     await openFutureDeviceGrid(page, 'd', '2035-03-19');

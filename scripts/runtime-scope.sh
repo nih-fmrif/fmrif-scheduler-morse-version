@@ -218,6 +218,7 @@ runtime_scope_clear_metadata_vars() {
     RUNTIME_SCOPE_PGDATABASE \
     RUNTIME_SCOPE_SCHEDULER_TEST_DB_NAME \
     RUNTIME_SCOPE_SESSION__COOKIE_NAME \
+    RUNTIME_SCOPE_HOST_APP_PID \
     RUNTIME_SCOPE_AUTH_TEST__SHARED_SECRET \
     RUNTIME_SCOPE_MAIL__DEFAULT_SENDER; do
     unset "$var" 2>/dev/null || true
@@ -249,6 +250,7 @@ runtime_scope_write_metadata() {
   local scope_pg_database="${RUNTIME_SCOPE_PGDATABASE:-${PGDATABASE:-}}"
   local scope_scheduler_test_db="${RUNTIME_SCOPE_SCHEDULER_TEST_DB_NAME:-${SCHEDULER_TEST_DB_NAME:-}}"
   local scope_session_cookie="${RUNTIME_SCOPE_SESSION__COOKIE_NAME:-${SESSION__COOKIE_NAME:-}}"
+  local scope_host_app_pid="${RUNTIME_SCOPE_HOST_APP_PID:-}"
   local scope_auth_secret="${RUNTIME_SCOPE_AUTH_TEST__SHARED_SECRET:-${AUTH_TEST__SHARED_SECRET:-}}"
   local scope_worktree_root="${RUNTIME_SCOPE_WORKTREE_ROOT:-$(runtime_scope_current_worktree)}"
 
@@ -271,6 +273,7 @@ MAILPIT_INTEGRATION_SMTP_PORT=${scope_mailpit_integration_smtp_port}
 PGDATABASE=${scope_pg_database}
 SCHEDULER_TEST_DB_NAME=${scope_scheduler_test_db}
 SESSION__COOKIE_NAME=${scope_session_cookie}
+HOST_APP_PID=${scope_host_app_pid}
 AUTH_TEST__SHARED_SECRET=${scope_auth_secret}
 WORKTREE_ROOT=${scope_worktree_root}
 EOF

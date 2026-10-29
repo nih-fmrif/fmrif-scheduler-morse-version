@@ -449,6 +449,89 @@ test.describe('Schedule UI interactions', () => {
       .toContain('Review pending');
   });
 
+  test('should confirm selected clean review changes and reopen issue rows for repair', async ({
+    page,
+  }) => {
+    await openFutureBlankDeviceGrid(page, '2035-02-14');
+    const assignment = await pickSchedulableAssignment(page);
+    test.skip(!assignment, 'No schedulable group/member assignment is available in this fixture.');
+
+    const postPayloads: Array<{ diffs: unknown[]; notify: boolean }> = [];
+    await page.route('**/device/**', async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      const raw = request.postData() ?? '{}';
+      const parsed = JSON.parse(raw);
+      const payload = parsed?.payload ?? {};
+      const diffs = Array.isArray(payload.diffs)
+        ? (payload.diffs as Array<{ id?: string }>)
+        : [];
+      postPayloads.push({ diffs, notify: Boolean(payload.notify) });
+      const idMap = Object.fromEntries(
+        diffs
+          .filter((diff) => typeof diff.id === 'string' && diff.id.startsWith('new-'))
+          .map((diff, index) => [diff.id, 9450 + index])
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          saved: diffs.length,
+          notifications: [],
+          id_map: idMap,
+        }),
+      });
+    });
+
+    await editSlotThroughInspector(page, 8, 0, assignment);
+    const invalidEditor = await openSlotInspectorEditor(page, 10, 0, {
+      group: 'NOTREAL',
+      member: 'ghost',
+    });
+    await expect(invalidEditor.dialog).toContainText(/error/i);
+    await page.locator('#inspector-exit').click();
+    await expect(invalidEditor.dialog).not.toBeVisible();
+
+    await page.locator('#review-pending').click();
+    const saveDialog = page.locator('#save-dialog-container .dialog-box-container');
+    await expect(saveDialog).toBeVisible();
+
+    const confirmButton = page.locator('#save-dialog-container button[name="confirm"]');
+    const reviewToggle = saveDialog.locator('.review-item-checkbox').first();
+    await expect(reviewToggle).toBeChecked();
+    await expect(confirmButton).toBeEnabled();
+    await reviewToggle.uncheck();
+    await expect(confirmButton).toBeDisabled();
+    await reviewToggle.check();
+    await expect(confirmButton).toBeEnabled();
+
+    await saveDialog.locator('.review-item-issue .review-item-action').first().click();
+    const detailsDialog = page.locator('#inspector-dialog-container .dialog-box-container');
+    await expect(detailsDialog).toBeVisible();
+    await expect(saveDialog).toBeVisible();
+    await expect(
+      detailsDialog.locator('.editor-inspector-detail-errors')
+    ).not.toHaveText('0 errors');
+    await page.locator('#inspector-exit').click();
+    await expect(detailsDialog).not.toBeVisible();
+    await expect(saveDialog).toBeVisible();
+    await page.locator('#save-dialog-container button[name="confirm"]').click();
+
+    const resultDialog = page.locator('#result-dialog-container .dialog-box-container');
+    await expect(resultDialog).toBeVisible();
+    await expect(resultDialog).toContainText(/1 entry updated/i);
+    expect(postPayloads).toHaveLength(1);
+    expect(postPayloads[0]?.diffs).toHaveLength(1);
+
+    await page.locator('#result-dialog-container button[data-a11y-dialog-hide]').click();
+    await expect(resultDialog).not.toBeVisible();
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
+    await expect(page.locator('#review-pending')).not.toBeDisabled();
+  });
+
   test('should keep failed slots pending during partial multi-slot saves', async ({ page }) => {
     const { assignment } = await openFutureBlankSchedulableDeviceGrid(page, '2035-02-17');
     const postPayloads: Array<{ diffs: Array<{ id?: string }>; notify: boolean }> = [];

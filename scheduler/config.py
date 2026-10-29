@@ -595,10 +595,6 @@ class SessionConfig:
 class SecurityConfig:
     """Baseline HTTP response header settings."""
 
-    enable_hsts: bool = True
-    hsts_max_age: int = 63072000
-    hsts_include_subdomains: bool = True
-    hsts_preload: bool = False
     frame_options: str = "DENY"
     content_type_options: str = "nosniff"
     referrer_policy: str = "strict-origin-when-cross-origin"
@@ -623,10 +619,6 @@ class SecurityConfig:
     auth_rate_limit_max_requests: int = 30
 
     def __post_init__(self) -> None:
-        self.enable_hsts = _coerce_bool(self.enable_hsts)
-        self.hsts_max_age = _coerce_int(self.hsts_max_age, "SECURITY__HSTS_MAX_AGE")
-        self.hsts_include_subdomains = _coerce_bool(self.hsts_include_subdomains)
-        self.hsts_preload = _coerce_bool(self.hsts_preload)
         self.frame_options = _coerce_str(self.frame_options)
         self.content_type_options = _coerce_str(self.content_type_options)
         self.referrer_policy = _coerce_str(self.referrer_policy)
@@ -1002,10 +994,6 @@ class AppConfig(dict):
             "ENTRA_JWKS_CACHE_TTL": settings.entra.jwks_cache_ttl,
             "AUTH_TEST_ENABLED": settings.auth_test.enabled,
             "AUTH_TEST_SHARED_SECRET": settings.auth_test.shared_secret,
-            "SECURITY_ENABLE_HSTS": settings.security.enable_hsts,
-            "SECURITY_HSTS_MAX_AGE": settings.security.hsts_max_age,
-            "SECURITY_HSTS_INCLUDE_SUBDOMAINS": settings.security.hsts_include_subdomains,
-            "SECURITY_HSTS_PRELOAD": settings.security.hsts_preload,
             "SECURITY_FRAME_OPTIONS": settings.security.frame_options,
             "SECURITY_CONTENT_TYPE_OPTIONS": settings.security.content_type_options,
             "SECURITY_REFERRER_POLICY": settings.security.referrer_policy,

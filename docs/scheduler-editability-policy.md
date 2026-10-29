@@ -230,8 +230,3 @@ that support kind on that device in the current view.
 This is an implementation detail, not a separate policy capability. In practice,
 if a request is actionable in the UI, the UI must have at least one valid
 assignable option for that support kind.
-
-## Open Questions
-
-- Should the grid show one combined support-action cue or multiple per-kind
-  cues when more than one support request is fulfillable?

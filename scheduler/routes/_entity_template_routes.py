@@ -274,18 +274,28 @@ def device_tmpl_schedule_edit(the_device, the_template):
             device, [tmpl.id], entries=entries
         )[tmpl.id]
         if compatibility["blocking"]:
-            model.db.session.rollback()
-            return jsonify(
-                {
-                    "errors": compatibility["entry_errors"],
-                    "template_errors": compatibility["summary"],
-                }
-            )
+            staged_ids = {staged_entry.id for staged_entry in staged}
+            selected_errors = {
+                entry_id: issues
+                for entry_id, issues in compatibility["entry_errors"].items()
+                if entry_id in staged_ids
+            }
+            if selected_errors:
+                model.db.session.rollback()
+                return jsonify(
+                    {
+                        "errors": selected_errors,
+                        "template_errors": compatibility["summary"],
+                    }
+                )
 
         for staged_entry in staged:
             model.db.session.add(staged_entry)
         model.db.session.commit()
-        return jsonify({"saved": len(staged)})
+        payload = {"saved": len(staged)}
+        if compatibility["blocking"]:
+            payload["template_errors"] = compatibility["summary"]
+        return jsonify(payload)
 
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",

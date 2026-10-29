@@ -271,6 +271,23 @@ input[list]::-webkit-list-button {
   margin: 0;
 }
 
+.dialog-header-side {
+  grid-area: close;
+  display: flex;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.dialog-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.dialog-header-actions:empty {
+  display: none;
+}
+
 .dialog-title + button {
   grid-area: close;
   font-size: 2rem;
@@ -279,6 +296,17 @@ input[list]::-webkit-list-button {
   appearance: none;
   border: 0;
   background-color: transparent;
+  color: inherit;
+}
+
+.dialog-header-side > button[data-a11y-dialog-hide] {
+  font-size: 2rem;
+  align-self: start;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  background-color: transparent;
+  color: inherit;
 }
 
 .dialog-content {

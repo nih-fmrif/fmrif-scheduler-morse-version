@@ -87,7 +87,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [ ! -f .env ]; then
-    bash setup-dotenv.sh
+    bash setup-dotenv.sh --profile compose
 fi
 
 runtime_env_dir="$(mktemp -d "${TMPDIR:-/tmp}/scheduler-debian-runtime-env.XXXXXX")"

@@ -81,7 +81,7 @@
 
 Prerequisites:
 - `pixi` installed
-- `.env` created (`bash setup-dotenv.sh`)
+- `.env` created (`bash setup-dotenv.sh --profile compose` before `run-compose.sh`; plain `bash setup-dotenv.sh` is for host-local PostgreSQL)
 
 Unit tests:
 ```bash

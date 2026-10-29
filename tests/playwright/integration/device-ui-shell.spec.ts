@@ -154,6 +154,47 @@ test.describe('Schedule UI interactions', () => {
       await expect(cell.locator('[data-readonly-cue="slot"]')).toBeVisible();
       await expect(page.locator('#inspector-open [data-readonly-cue="selection"]')).toBeVisible();
     });
+
+    test('keeps lock cues visible after shifting the read-only day window', async ({ page }) => {
+      const { path } = await openSeededDeviceGrid(page);
+      expect(path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
+
+      const firstHeader = page.locator('.editor #scroll-container thead th').nth(1);
+      const initialHeader = (await firstHeader.textContent())?.trim() ?? '';
+      await expect(initialHeader).not.toBe('');
+
+      await page.locator('#scroll-next-day').click();
+      await expect
+        .poll(async () => ((await firstHeader.textContent()) ?? '').trim(), { timeout: 15000 })
+        .not.toBe(initialHeader);
+
+      await expect
+        .poll(
+          async () =>
+            await page.evaluate(() => {
+              const row = document.querySelector('#row-8');
+              if (!row) {
+                return -1;
+              }
+              const entries = [...row.querySelectorAll('entry-cell')];
+              if (entries.length === 0) {
+                return -1;
+              }
+              return entries.filter((entry) => {
+                if (entry.getAttribute('data-booking-editable') === 'true') {
+                  return false;
+                }
+                return (
+                  entry
+                    .querySelector('[data-readonly-cue="slot"]')
+                    ?.hasAttribute('hidden') ?? true
+                );
+              }).length;
+            }),
+          { timeout: 15000 }
+        )
+        .toBe(0);
+    });
   });
 
   test('should not expand inline cell details on selection', async ({ page }) => {

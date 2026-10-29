@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
+import sys
 import textwrap
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -158,12 +161,52 @@ def _write_fake_docker(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _write_scope_file(
-    runtime_dir: Path, scope_name: str, project_name: str | None
+    runtime_dir: Path,
+    scope_name: str,
+    project_name: str | None,
+    extra_lines: dict[str, str | int] | None = None,
 ) -> None:
     lines = [f"RUNTIME_SCOPE={scope_name}", f"WORKTREE_ROOT={REPO_ROOT}"]
     if project_name is not None:
         lines.append(f"COMPOSE_PROJECT_NAME={project_name}")
+    if extra_lines:
+        for key, value in extra_lines.items():
+            lines.append(f"{key}={value}")
     (runtime_dir / scope_name).write_text("\n".join(lines) + "\n")
+
+
+def _reserve_free_tcp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _wait_for_tcp_listener(port: int, timeout_seconds: float = 5.0) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.2)
+            if sock.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        time.sleep(0.05)
+    raise AssertionError(f"Timed out waiting for listener on port {port}")
+
+
+def _start_http_listener(port: int) -> subprocess.Popen[str]:
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "http.server", str(port)],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    try:
+        _wait_for_tcp_listener(port)
+    except Exception:
+        proc.terminate()
+        proc.wait(timeout=5)
+        raise
+    return proc
 
 
 def _run_compose(
@@ -188,7 +231,8 @@ def test_help_describes_cleanup_modes() -> None:
     result = _run_compose("--help")
 
     assert result.returncode == 0
-    assert "--wipe" in result.stdout
+    assert "--clear" in result.stdout
+    assert "--wipe" not in result.stdout
     assert "--clear-stale" in result.stdout
     assert "--clear-all" in result.stdout
 
@@ -371,3 +415,113 @@ def test_clear_all_removes_running_scopes_and_metadata(tmp_path: Path) -> None:
         in result.stdout
     )
     assert "Clearing scope 'metadata-only' metadata only" in result.stdout
+
+
+def test_clear_replaces_wipe_for_active_scope_cleanup(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime-scopes"
+    runtime_dir.mkdir()
+    docker_dir, log_file = _write_fake_docker(tmp_path)
+    env_file = tmp_path / "test.env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "PGHOST=localhost",
+                "PGPORT=35444",
+                "APP_PORT=35051",
+                "PGUSER=postgres",
+                "PGPASSWORD=password",
+                "PGDATABASE=fmrif_scheduler_icons",
+                "MAIL__DEFAULT_SENDER=test@example.com",
+                "COMPOSE_PROJECT_NAME=scheduler",
+            ]
+        )
+        + "\n"
+    )
+
+    result = _run_compose(
+        "--clear",
+        env={
+            "ENVFILE": str(env_file),
+            "RUNTIME_SCOPE_DIR": str(runtime_dir),
+            "FMRIF_RUNTIME_SCOPE": "icons",
+            "FAKE_DOCKER_LOG": str(log_file),
+            "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Clear mode: removing scope 'icons' stack and metadata." in result.stdout
+    assert "Cleared runtime scope 'icons'." in result.stdout
+    assert not (runtime_dir / "icons").exists()
+    assert log_file.read_text().splitlines() == ["compose-down:scheduler-icons"]
+
+
+def test_clear_all_stops_tracked_host_app_process(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime-scopes"
+    runtime_dir.mkdir()
+    docker_dir, log_file = _write_fake_docker(tmp_path)
+    app_port = _reserve_free_tcp_port()
+    listener = _start_http_listener(app_port)
+    try:
+        _write_scope_file(
+            runtime_dir,
+            "default",
+            "proj-default",
+            extra_lines={
+                "FMRIF_RUNTIME_SCOPE_OFFSET": 0,
+                "APP_PORT": app_port,
+                "HOST_APP_PID": listener.pid,
+            },
+        )
+
+        result = _run_compose(
+            "--clear-all",
+            env={
+                "RUNTIME_SCOPE_DIR": str(runtime_dir),
+                "FAKE_DOCKER_LOG": str(log_file),
+                "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}",
+            },
+        )
+
+        assert result.returncode == 0
+        assert "Stopping tracked host app for scope 'default'" in result.stdout
+        listener.wait(timeout=5)
+        assert not (runtime_dir / "default").exists()
+    finally:
+        if listener.poll() is None:
+            listener.terminate()
+            listener.wait(timeout=5)
+
+
+def test_clear_all_warns_when_listener_remains_after_cleanup(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime-scopes"
+    runtime_dir.mkdir()
+    docker_dir, log_file = _write_fake_docker(tmp_path)
+    app_port = _reserve_free_tcp_port()
+    listener = _start_http_listener(app_port)
+    try:
+        _write_scope_file(
+            runtime_dir,
+            "default",
+            "proj-default",
+            extra_lines={
+                "FMRIF_RUNTIME_SCOPE_OFFSET": 0,
+                "APP_PORT": app_port,
+            },
+        )
+
+        result = _run_compose(
+            "--clear-all",
+            env={
+                "RUNTIME_SCOPE_DIR": str(runtime_dir),
+                "FAKE_DOCKER_LOG": str(log_file),
+                "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}",
+            },
+        )
+
+        assert result.returncode == 0
+        assert "still has listeners bound after cleanup" in result.stderr
+        assert f"APP_PORT={app_port}" in result.stderr
+    finally:
+        listener.terminate()
+        listener.wait(timeout=5)

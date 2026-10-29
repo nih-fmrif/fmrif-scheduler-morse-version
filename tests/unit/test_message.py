@@ -1,6 +1,7 @@
 import socket
 import uuid
 
+import flask_mail
 import pytest
 from flask import Flask
 from mailpit_api import (
@@ -80,6 +81,28 @@ def test_send_marks_suppressed_delivery_as_skipped(monkeypatch):
     assert captured["status"] == "skipped"
     assert captured["recipient"] == "to@example.com"
     assert captured["subject"] == "subject"
+
+
+def test_send_with_mail_suppressed_does_not_open_smtp_connection(monkeypatch):
+    app = _mail_app(
+        MAIL_SUPPRESS_SEND=True,
+        MAIL_SERVER="127.0.0.1",
+        MAIL_PORT=_unused_local_port(),
+        MAIL_USE_TLS=False,
+        MAIL_USE_SSL=False,
+    )
+    configure_calls: list[object] = []
+
+    def fake_configure_host(self):
+        configure_calls.append(self)
+        raise AssertionError("SMTP should not be configured when mail is suppressed")
+
+    monkeypatch.setattr(flask_mail.Connection, "configure_host", fake_configure_host)
+
+    with app.app_context():
+        assert message.send("to@example.com", "subject", "body") is True
+
+    assert configure_calls == []
 
 
 def test_send_uses_mail_default_sender_and_splits_recipients():

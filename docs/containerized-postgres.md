@@ -27,6 +27,10 @@ To keep multiple local stacks isolated, also set:
 
 Other local URL settings should normally be unset unless intentionally overriding.
 
+Before any `run-compose.sh` workflow, scaffold `.env` with
+`bash setup-dotenv.sh --profile compose`. Plain `bash setup-dotenv.sh` now
+defaults to host-local PostgreSQL settings for non-compose runs.
+
 ## Why this is split
 
 The bootstrap path follows a fixed three-step dataflow:
@@ -45,9 +49,10 @@ This keeps `.env` easy to manage while avoiding compose interpolation surprises.
 
 ## Host vs Container Modes
 
-### Mode A: App and DB both run in compose (default)
+### Mode A: App and DB both run in compose
 
 - Start with:
+  - `bash setup-dotenv.sh --profile compose`
   - `bash run-compose.sh`
   - `bash run-compose.sh --resume` (non-destructive resume mode)
 - Keep `.env` focused on host-facing values:
@@ -85,7 +90,7 @@ In this mode:
 - Default startup is isolated: `run-compose.sh` performs `docker compose down --volumes`
   before `up`. Use `--resume` to preserve existing state.
 
-### Mode B: App runs on host (containerless)
+### Mode B: App runs on host (containerless / default `setup-dotenv.sh` profile)
 
 - Point the app at whichever Postgres endpoint the host can reach.
 - Typical local values:
@@ -122,7 +127,7 @@ resolved through that container network:
 2. **Compose resource isolation**
    - For concurrent stacks, use a unique `COMPOSE_PROJECT_NAME` so container/volume
      names do not collide.
-- In multi-scope runs, use consistent `FMRIF_RUNTIME_SCOPE` values and regenerate `.env` with `setup-dotenv.sh` so
+- In multi-scope runs, use consistent `FMRIF_RUNTIME_SCOPE` values and regenerate `.env` with `setup-dotenv.sh --profile compose` so
  compose project name, DB names, session cookie names, and Mailpit ports stay isolated.
 3. **`$` in values**
    - `run-compose.sh` avoids compose interpolation by using a generated env file.

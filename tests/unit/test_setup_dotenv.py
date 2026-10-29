@@ -76,6 +76,77 @@ def test_setup_dotenv_host_local_postgres_profile_uses_native_db_defaults(
     )
 
 
+def test_setup_dotenv_defaults_to_host_local_postgres_profile(tmp_path: Path) -> None:
+    workspace = _prepare_setup_dotenv_workspace(tmp_path)
+    runtime_dir = tmp_path / "runtime"
+    env = _build_setup_dotenv_env(runtime_dir)
+
+    result = subprocess.run(
+        ["bash", "setup-dotenv.sh"],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    env_text = (workspace / ".env").read_text(encoding="utf-8")
+    assert "PGHOST=127.0.0.1" in env_text
+    assert "PGPORT=5432" in env_text
+    assert (
+        "Generated .env from .env.sample.local for scope=default profile=host-local-postgres"
+        in result.stdout
+    )
+
+
+def test_setup_dotenv_compose_profile_uses_compose_defaults(tmp_path: Path) -> None:
+    workspace = _prepare_setup_dotenv_workspace(tmp_path)
+    runtime_dir = tmp_path / "runtime"
+    env = _build_setup_dotenv_env(runtime_dir)
+
+    result = subprocess.run(
+        ["bash", "setup-dotenv.sh", "--profile", "compose"],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    env_text = (workspace / ".env").read_text(encoding="utf-8")
+    assert "PGHOST=localhost" in env_text
+    assert "PGHOST=127.0.0.1" not in env_text
+    assert (
+        "Generated .env from .env.sample.local for scope=default profile=compose"
+        in result.stdout
+    )
+
+
+def test_setup_dotenv_default_profile_alias_maps_to_compose(tmp_path: Path) -> None:
+    workspace = _prepare_setup_dotenv_workspace(tmp_path)
+    runtime_dir = tmp_path / "runtime"
+    env = _build_setup_dotenv_env(runtime_dir)
+
+    result = subprocess.run(
+        ["bash", "setup-dotenv.sh", "--profile", "default"],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    env_text = (workspace / ".env").read_text(encoding="utf-8")
+    assert "PGHOST=localhost" in env_text
+    assert (
+        "Generated .env from .env.sample.local for scope=default profile=compose"
+        in result.stdout
+    )
+
+
 def test_setup_dotenv_host_local_postgres_profile_preserves_explicit_pgport(
     tmp_path: Path,
 ) -> None:

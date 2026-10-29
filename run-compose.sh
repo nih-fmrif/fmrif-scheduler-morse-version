@@ -259,10 +259,12 @@ clear_stale_scopes() {
 
     inspect_scope_file "$scope_file" || true
     if [ "$SCOPE_INSPECT_STACK_STATE" = "running" ]; then
-      echo "Skipping running scope '${scope_name}' (project=${SCOPE_INSPECT_PROJECT_NAME}). Use --wipe for the active scope or --clear-all for every scope."
+      echo "Skipping running scope '${scope_name}' (project=${SCOPE_INSPECT_PROJECT_NAME}). Use --clear for the active scope or --clear-all for every scope."
       skipped_running_count=$((skipped_running_count + 1))
       continue
     fi
+
+    stop_tracked_host_app_for_scope "$scope_name"
 
     if [ -n "$SCOPE_INSPECT_WORKTREE" ]; then
       current_worktree="$(runtime_scope_current_worktree_root)"
@@ -277,6 +279,7 @@ clear_stale_scopes() {
       echo "Removing stale metadata for scope '${scope_name}' (metadata_status=${SCOPE_INSPECT_METADATA_STATUS})."
     fi
 
+    warn_scope_ports_still_in_use_from_metadata "$scope_name"
     rm -f "$scope_file"
     cleared_count=$((cleared_count + 1))
   done
@@ -324,17 +327,257 @@ clear_all_scopes() {
       fi
     fi
 
+    stop_tracked_host_app_for_scope "$scope_name"
+
     if [ -n "$SCOPE_INSPECT_PROJECT_NAME" ]; then
       teardown_scope_project "$scope_name" "$SCOPE_INSPECT_PROJECT_NAME" "$SCOPE_INSPECT_STACK_STATE" "Clearing"
     else
       echo "Clearing scope '${scope_name}' metadata only (metadata_status=${SCOPE_INSPECT_METADATA_STATUS})."
     fi
 
+    warn_scope_ports_still_in_use_from_metadata "$scope_name"
     rm -f "$scope_file"
     cleared_count=$((cleared_count + 1))
   done
 
   echo "Cleared ${cleared_count} scope(s) and removed their metadata files."
+}
+
+first_listening_pid_for_port() {
+  local port=$1
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1
+    return 0
+  fi
+  return 1
+}
+
+process_command_for_pid() {
+  local pid=$1
+  if command -v ps >/dev/null 2>&1; then
+    ps -o command= -p "$pid" 2>/dev/null | head -n 1
+    return 0
+  fi
+  return 1
+}
+
+trim_command_excerpt() {
+  local raw=$1
+  local cleaned
+  cleaned="$(printf '%s' "$raw" | tr '\n' ' ')"
+  cleaned="$(trim "$cleaned")"
+  if [ ${#cleaned} -gt 160 ]; then
+    cleaned="${cleaned:0:157}..."
+  fi
+  printf '%s' "$cleaned"
+}
+
+format_port_pairs() {
+  local pair key port
+  local formatted=()
+  for pair in "$@"; do
+    key="${pair%%:*}"
+    port="${pair#*:}"
+    formatted+=("${key}=${port}")
+  done
+  printf '%s' "${formatted[*]}"
+}
+
+collect_scoped_port_conflicts() {
+  local pair key port pid command_excerpt
+  local found=1
+
+  for pair in "$@"; do
+    key="${pair%%:*}"
+    port="${pair#*:}"
+    if ! port_is_in_use "$port"; then
+      continue
+    fi
+
+    found=0
+    pid="$(first_listening_pid_for_port "$port")"
+    if [ -n "$pid" ]; then
+      command_excerpt="$(trim_command_excerpt "$(process_command_for_pid "$pid")")"
+      if [ -n "$command_excerpt" ]; then
+        printf '  - %s=%s (pid=%s, command=%s)\n' "$key" "$port" "$pid" "$command_excerpt"
+      else
+        printf '  - %s=%s (pid=%s)\n' "$key" "$port" "$pid"
+      fi
+    else
+      printf '  - %s=%s\n' "$key" "$port"
+    fi
+  done
+
+  return "$found"
+}
+
+pid_listens_on_port() {
+  local pid=$1
+  local port=$2
+
+  if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | grep -Fxq "$pid"
+    return
+  fi
+
+  return 1
+}
+
+wait_for_pid_exit() {
+  local pid=$1
+  local attempts=${2:-20}
+
+  while (( attempts > 0 )); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    attempts=$((attempts - 1))
+    sleep 0.25
+  done
+
+  return 1
+}
+
+scope_metadata_port_pairs() {
+  local offset="${RUNTIME_SCOPE_FMRIF_RUNTIME_SCOPE_OFFSET:-0}"
+  local entry label meta_var base scoped
+
+  if ! [[ "$offset" =~ ^[0-9]+$ ]]; then
+    offset=0
+  fi
+
+  for entry in \
+    "PGPORT:RUNTIME_SCOPE_PGPORT" \
+    "APP_PORT:RUNTIME_SCOPE_APP_PORT" \
+    "INTEGRATION_APP_PORT:RUNTIME_SCOPE_INTEGRATION_APP_PORT" \
+    "MAILPIT__PORT:RUNTIME_SCOPE_MAILPIT_APP_PORT" \
+    "MAILPIT__SMTP_PORT:RUNTIME_SCOPE_MAILPIT_APP_SMTP_PORT" \
+    "MAILPIT_UNIT__PORT:RUNTIME_SCOPE_MAILPIT_UNIT_PORT" \
+    "MAILPIT_UNIT__SMTP_PORT:RUNTIME_SCOPE_MAILPIT_UNIT_SMTP_PORT" \
+    "MAILPIT_ROUTES__PORT:RUNTIME_SCOPE_MAILPIT_ROUTES_PORT" \
+    "MAILPIT_ROUTES__SMTP_PORT:RUNTIME_SCOPE_MAILPIT_ROUTES_SMTP_PORT" \
+    "MAILPIT_INTEGRATION__PORT:RUNTIME_SCOPE_MAILPIT_INTEGRATION_PORT" \
+    "MAILPIT_INTEGRATION__SMTP_PORT:RUNTIME_SCOPE_MAILPIT_INTEGRATION_SMTP_PORT"
+  do
+    label="${entry%%:*}"
+    meta_var="${entry#*:}"
+    base="${!meta_var:-}"
+    if ! [[ "$base" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+    scoped=$((base + offset))
+    printf '%s:%s\n' "$label" "$scoped"
+  done
+}
+
+current_scope_port_pairs() {
+  local entry label port
+
+  for entry in \
+    "PGPORT:${PGPORT:-}" \
+    "APP_PORT:${APP_PORT:-}" \
+    "INTEGRATION_APP_PORT:${INTEGRATION_APP_PORT:-}" \
+    "MAILPIT__PORT:${MAILPIT__PORT:-}" \
+    "MAILPIT__SMTP_PORT:${MAILPIT__SMTP_PORT:-}" \
+    "MAILPIT_UNIT__PORT:${MAILPIT_UNIT__PORT:-}" \
+    "MAILPIT_UNIT__SMTP_PORT:${MAILPIT_UNIT__SMTP_PORT:-}" \
+    "MAILPIT_ROUTES__PORT:${MAILPIT_ROUTES__PORT:-}" \
+    "MAILPIT_ROUTES__SMTP_PORT:${MAILPIT_ROUTES__SMTP_PORT:-}" \
+    "MAILPIT_INTEGRATION__PORT:${MAILPIT_INTEGRATION__PORT:-}" \
+    "MAILPIT_INTEGRATION__SMTP_PORT:${MAILPIT_INTEGRATION__SMTP_PORT:-}"
+  do
+    label="${entry%%:*}"
+    port="${entry#*:}"
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+    printf '%s:%s\n' "$label" "$port"
+  done
+}
+
+stop_tracked_host_app_for_scope() {
+  local scope_name=$1
+  local host_app_pid="${RUNTIME_SCOPE_HOST_APP_PID:-}"
+  local pair
+  local app_port=""
+
+  if ! [[ "$host_app_pid" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+
+  while IFS= read -r pair; do
+    if [ "${pair%%:*}" = "APP_PORT" ]; then
+      app_port="${pair#*:}"
+      break
+    fi
+  done < <(scope_metadata_port_pairs)
+
+  if [ -z "$app_port" ]; then
+    return 0
+  fi
+
+  if ! kill -0 "$host_app_pid" 2>/dev/null; then
+    return 0
+  fi
+
+  if ! pid_listens_on_port "$host_app_pid" "$app_port"; then
+    return 0
+  fi
+
+  echo "Stopping tracked host app for scope '${scope_name}' (pid=${host_app_pid}, APP_PORT=${app_port})."
+  kill "$host_app_pid" 2>/dev/null || true
+
+  if ! wait_for_pid_exit "$host_app_pid" 20 && pid_listens_on_port "$host_app_pid" "$app_port"; then
+    echo "WARN: tracked host app for scope '${scope_name}' is still listening on APP_PORT=${app_port} after TERM." >&2
+  fi
+}
+
+warn_scope_ports_still_in_use_from_metadata() {
+  local scope_name=$1
+  local detail_output=""
+  local pairs=()
+  local pair
+
+  while IFS= read -r pair; do
+    if [ -n "$pair" ]; then
+      pairs+=("$pair")
+    fi
+  done < <(scope_metadata_port_pairs)
+
+  if [ ${#pairs[@]} -eq 0 ]; then
+    return 0
+  fi
+
+  if detail_output="$(collect_scoped_port_conflicts "${pairs[@]}")"; then
+    echo "WARN: scope '${scope_name}' still has listeners bound after cleanup:" >&2
+    printf '%s\n' "$detail_output" >&2
+  fi
+}
+
+warn_scope_ports_still_in_use_current_scope() {
+  local scope_name=$1
+  local detail_output=""
+  local pairs=()
+  local pair
+
+  while IFS= read -r pair; do
+    if [ -n "$pair" ]; then
+      pairs+=("$pair")
+    fi
+  done < <(current_scope_port_pairs)
+
+  if [ ${#pairs[@]} -eq 0 ]; then
+    return 0
+  fi
+
+  if detail_output="$(collect_scoped_port_conflicts "${pairs[@]}")"; then
+    echo "WARN: scope '${scope_name}' still has listeners bound after cleanup:" >&2
+    printf '%s\n' "$detail_output" >&2
+  fi
 }
 
 show_scope_running_guidance() {
@@ -354,7 +597,7 @@ START_NO_APP=0
 RESUME_STACK=0
 CHECK_ONLY=0
 RESET_STACK=0
-WIPE_SCOPE=0
+CLEAR_SCOPE=0
 LIST_ALL_SCOPES=0
 CLEAR_STALE_SCOPES=0
 CLEAR_ALL_SCOPES=0
@@ -362,13 +605,14 @@ CLEAR_ALL_SCOPES=0
 show_help() {
   cat <<'EOF'
 Usage:
+  ./setup-dotenv.sh --profile compose   # generate compose-oriented local defaults
   ./run-compose.sh --no-app            # recommended local dev: postgres + mailpit services only
   ./run-compose.sh --no-app --resume   # reuse existing postgres/mailpit data
   ./run-compose.sh --no-app --reset    # replace stack and wipe volumes
-  ./run-compose.sh --wipe              # wipe active scope stack and metadata
+  ./run-compose.sh --clear             # clear the active scope stack and metadata
   ./run-compose.sh --list-all          # list all scopes with metadata status and running/stopped stack state
-  ./run-compose.sh --clear-stale       # remove stopped scopes and stale metadata; keep running stacks
-  ./run-compose.sh --clear-all         # remove all known scope stacks and metadata, including running ones
+  ./run-compose.sh --clear-stale       # fully remove stopped scopes and stale metadata; keep running stacks
+  ./run-compose.sh --clear-all         # fully remove all known scope stacks and metadata, including running ones
   ./run-compose.sh                     # full compose stack (includes app container)
   ./run-compose.sh --resume            # resume existing full stack without destructive reset
   ./run-compose.sh --reset             # replace full stack and wipe volumes
@@ -482,16 +726,20 @@ PY
 
 ensure_scoped_ports_free() {
   local conflicts=()
-  local pair key port
+  local pair key port detail_output=""
   for pair in "$@"; do
     key="${pair%%:*}"
     port="${pair#*:}"
     if port_is_in_use "$port"; then
-      conflicts+=("${key}=${port}")
+      conflicts+=("${key}:${port}")
     fi
   done
   if [ "${#conflicts[@]}" -gt 0 ]; then
-    echo "ERROR: scoped runtime ports already in use: ${conflicts[*]}" >&2
+    echo "ERROR: scoped runtime ports already in use: $(format_port_pairs "${conflicts[@]}")" >&2
+    if detail_output="$(collect_scoped_port_conflicts "${conflicts[@]}")"; then
+      echo "ERROR: conflicting listeners:" >&2
+      printf '%s\n' "$detail_output" >&2
+    fi
     echo "ERROR: choose a different FMRIF_RUNTIME_SCOPE." >&2
     return 1
   fi
@@ -659,7 +907,7 @@ prepare_compose_config() {
 
 validate_runtime_env() {
   if [ ! -f "$ENVFILE" ]; then
-    echo "ERROR: $ENVFILE was not found. Run ./setup-dotenv.sh first." >&2
+    echo "ERROR: $ENVFILE was not found. Run ./setup-dotenv.sh --profile compose first." >&2
     return 1
   fi
 
@@ -977,8 +1225,8 @@ for arg in "$@"; do
     --reset)
       RESET_STACK=1
       ;;
-    --wipe)
-      WIPE_SCOPE=1
+    --clear|--wipe)
+      CLEAR_SCOPE=1
       ;;
     --list-all)
       LIST_ALL_SCOPES=1
@@ -1003,8 +1251,8 @@ for arg in "$@"; do
 done
 
 if (( CHECK_ONLY )); then
-  if (( START_NO_APP )) || (( RESUME_STACK )) || (( RESET_STACK )) || (( WIPE_SCOPE )) || (( LIST_ALL_SCOPES )) || (( CLEAR_STALE_SCOPES )) || (( CLEAR_ALL_SCOPES )); then
-    echo "ERROR: --check cannot be combined with --no-app, --resume, --reset, --wipe, --list-all, --clear-stale, or --clear-all." >&2
+  if (( START_NO_APP )) || (( RESUME_STACK )) || (( RESET_STACK )) || (( CLEAR_SCOPE )) || (( LIST_ALL_SCOPES )) || (( CLEAR_STALE_SCOPES )) || (( CLEAR_ALL_SCOPES )); then
+    echo "ERROR: --check cannot be combined with --no-app, --resume, --reset, --clear, --list-all, --clear-stale, or --clear-all." >&2
     show_help
     exit 1
   fi
@@ -1024,7 +1272,7 @@ if (( RESET_STACK )) && (( CHECK_ONLY )); then
   exit 1
 fi
 
-if (( LIST_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CLEAR_STALE_SCOPES || CLEAR_ALL_SCOPES || CHECK_ONLY )); then
+if (( LIST_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CLEAR_SCOPE || CLEAR_STALE_SCOPES || CLEAR_ALL_SCOPES || CHECK_ONLY )); then
   echo "ERROR: --list-all cannot be combined with other workflow flags." >&2
   show_help
   exit 1
@@ -1035,7 +1283,7 @@ if (( LIST_ALL_SCOPES )); then
   exit 0
 fi
 
-if (( CLEAR_STALE_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_ALL_SCOPES )); then
+if (( CLEAR_STALE_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CLEAR_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_ALL_SCOPES )); then
   echo "ERROR: --clear-stale cannot be combined with other workflow flags." >&2
   show_help
   exit 1
@@ -1046,7 +1294,7 @@ if (( CLEAR_STALE_SCOPES )); then
   exit $?
 fi
 
-if (( CLEAR_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_STALE_SCOPES )); then
+if (( CLEAR_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CLEAR_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_STALE_SCOPES )); then
   echo "ERROR: --clear-all cannot be combined with other workflow flags." >&2
   show_help
   exit 1
@@ -1057,8 +1305,8 @@ if (( CLEAR_ALL_SCOPES )); then
   exit $?
 fi
 
-if (( WIPE_SCOPE )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_STALE_SCOPES || CLEAR_ALL_SCOPES )); then
-  echo "ERROR: --wipe cannot be combined with --no-app, --resume, --reset, --check, --list-all, --clear-stale, or --clear-all." >&2
+if (( CLEAR_SCOPE )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_STALE_SCOPES || CLEAR_ALL_SCOPES )); then
+  echo "ERROR: --clear cannot be combined with --no-app, --resume, --reset, --check, --list-all, --clear-stale, or --clear-all." >&2
   show_help
   exit 1
 fi
@@ -1103,14 +1351,16 @@ if compose_project_has_running_services; then
   stack_running=true
 fi
 
-if (( WIPE_SCOPE )); then
-  echo "Wipe mode: removing scope '${RUNTIME_SCOPE}' stack and metadata."
+if (( CLEAR_SCOPE )); then
+  echo "Clear mode: removing scope '${RUNTIME_SCOPE}' stack and metadata."
+  stop_tracked_host_app_for_scope "$RUNTIME_SCOPE"
   docker compose \
     --project-name "$COMPOSE_PROJECT_NAME" \
     --env-file "$COMPOSE_ENV_FILE" \
     down --volumes --remove-orphans || true
+  warn_scope_ports_still_in_use_current_scope "$RUNTIME_SCOPE"
   rm -f "$RUNTIME_SCOPE_FILE"
-  echo "Wiped runtime scope '${RUNTIME_SCOPE}'."
+  echo "Cleared runtime scope '${RUNTIME_SCOPE}'."
   exit 0
 fi
 

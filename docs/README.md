@@ -5,7 +5,6 @@
 2. [Testing Guide](testing-guide.md)
 3. [Alembic Management Model](alembic-management-model.md)
 4. [Deployment Boundary](deployment-considerations.md)
-5. [TODO](../TODO.md)
 
 ## Development Reference
 1. [Testing Strategy](testing-strategy.md)

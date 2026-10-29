@@ -10,8 +10,19 @@ import {
   humanize_date_if_needed,
   parse_schedule_cell_markup,
 } from "./formatters.js";
+import { createReviewDialog } from "./review.js";
 
 const serverErrorState = new Map();
+const dialogBaseZIndex = 5000;
+let dialogStackCounter = 0;
+
+function raiseDialog(container) {
+  if (!(container instanceof HTMLElement)) {
+    return;
+  }
+  dialogStackCounter += 1;
+  container.style.zIndex = String(dialogBaseZIndex + dialogStackCounter);
+}
 
 function announce(txt) {
   document.querySelector("#announce").innerText = txt;
@@ -315,6 +326,7 @@ async function confirmDialog(titleText, message, opts = {}) {
     const dialog = new A11yDialog(con);
     dialog.on("show", () => {
       // scroll lock and focus cancel button
+      raiseDialog(con);
       disableBodyScroll(modal);
       cancel.focus();
     });
@@ -634,6 +646,7 @@ function logDialog(titleText, id, template) {
   const dialog = new A11yDialog(con);
   const abort = new AbortController();
   dialog.on("show", async () => {
+    raiseDialog(con);
     disableBodyScroll(modal);
 
     const [data, err] = await loadLog(id, template, abort.signal);
@@ -692,6 +705,9 @@ function wire_legend_modal() {
     return;
   }
   const dialog = new A11yDialog(container);
+  dialog.on("show", () => {
+    raiseDialog(container);
+  });
   trigger.addEventListener("click", (evt) => {
     evt.preventDefault();
     dialog.show();
@@ -706,6 +722,9 @@ function wire_inspector_modal() {
   }
   const dialog = new A11yDialog(container);
   container.__schedulerInspectorDialog = dialog;
+  dialog.on("show", () => {
+    raiseDialog(container);
+  });
   trigger.addEventListener("click", (evt) => {
     evt.preventDefault();
     dialog.show();
@@ -1955,6 +1974,7 @@ function editor_dialog(
   const body = con.querySelector(".dialog-content-inner");
   const cancel = con.querySelector("button[name=cancel]");
   const confirm = con.querySelector("button[name=confirm]");
+  const headerActions = con.querySelector(".dialog-header-actions");
   const notificationsCon = con.querySelector(".dialog-form input-set");
   const notifications = notificationsCon.querySelector("#send-notifications");
   const defaultConfirmText =
@@ -1966,6 +1986,7 @@ function editor_dialog(
   let confirmed = false;
   title.innerText = titleText;
   replaceNodeContent(body, content);
+  headerActions?.replaceChildren();
   confirm.innerText = options.confirmText ?? defaultConfirmText;
   cancel.innerText = options.cancelText ?? defaultCancelText;
   confirm.disabled = options.confirmDisabled === true;
@@ -1977,10 +1998,24 @@ function editor_dialog(
     notifications.checked = true;
   }
   const dialog = new A11yDialog(con);
+  const dialogContext = {
+    dialog,
+    container: con,
+    modal,
+    title,
+    body,
+    cancel,
+    confirm,
+    headerActions,
+    notificationsCon,
+    notifications,
+  };
   dialog.on("show", () => {
     // scroll lock and focus cancel button
+    raiseDialog(con);
     disableBodyScroll(modal);
     confirmed = false;
+    options.onShow?.(dialogContext);
     const focusTarget =
       !cancel.hidden && !cancel.disabled
         ? cancel
@@ -2001,12 +2036,14 @@ function editor_dialog(
   cancel.onclick = clearConfirmed;
   dialog.on("hide", () => {
     enableBodyScroll(modal);
+    options.onHide?.(dialogContext);
     if (confirmed && then) {
       then(notifications.checked);
     }
     // reset template
     title.innerText = "";
     body.replaceChildren();
+    headerActions?.replaceChildren();
     cancel.hidden = true;
     notificationsCon.hidden = true;
     notifications.checked = true;
@@ -2027,9 +2064,11 @@ function result_dialog(proc, options = {}) {
   let payload = null;
   let payloadMeta = {};
   const shouldReload = options.reload !== false;
+  const onSettled = options.onSettled ?? null;
   const onResolved = options.onResolved ?? null;
   const onSuccess = options.onSuccess ?? null;
   dialog.on("show", async () => {
+    raiseDialog(con);
     disableBodyScroll(modal);
 
     const [data, err, meta] = await proc(abort.signal);
@@ -2046,6 +2085,9 @@ function result_dialog(proc, options = {}) {
       changesSaved = Boolean(meta.saved);
     } else {
       changesSaved = true;
+    }
+    if (typeof onSettled === "function") {
+      onSettled(payload, payloadMeta);
     }
     if (changesSaved && typeof onResolved === "function") {
       onResolved(payload, payloadMeta);
@@ -2184,6 +2226,9 @@ class SupportRequestSubForm {
       canFulfill &&
       this.members.size > 0
     );
+  }
+  get support_cue_visible() {
+    return this.support_actionable && this.effective_handler.trim() == "";
   }
   get editable() {
     return this.request_editable || this.support_actionable;
@@ -2442,6 +2487,9 @@ class Cell {
   get supportActionable() {
     return Object.values(this.sr).some((sr) => sr.support_actionable);
   }
+  get supportCueVisible() {
+    return Object.values(this.sr).some((sr) => sr.support_cue_visible);
+  }
   get canInteract() {
     return this.editable || this.supportActionable;
   }
@@ -2626,13 +2674,14 @@ class Cell {
     this.elm.dataset.bookingEditable = from_bool(this.bookingEditable);
     this.elm.dataset.canInteract = from_bool(this.canInteract);
     this.elm.dataset.supportActionable = from_bool(this.supportActionable);
+    this.elm.dataset.supportCueVisible = from_bool(this.supportCueVisible);
     this.elm.dataset.changed = from_bool(this.changed);
     this.elm.dataset.error = from_bool(this.invalid);
     if (this.readonlyCue) {
       this.readonlyCue.hidden = this.bookingEditable;
     }
     if (this.supportCue) {
-      this.supportCue.hidden = !this.supportActionable;
+      this.supportCue.hidden = !this.supportCueVisible;
     }
   }
   update() {
@@ -2827,6 +2876,7 @@ function wire_cell_editors() {
   const invalid = new Set();
   const any_invalid = () => Boolean(invalid.size);
   const changedInvalid = new Set();
+  let activeReviewDialog = null;
   serverErrorState.clear();
 
   // keep caption in sync with cell updates
@@ -2874,7 +2924,7 @@ function wire_cell_editors() {
   const inspectorContainer = document.querySelector(
     "#inspector-dialog-container",
   );
-  const inspectorDialog =
+  const getInspectorDialog = () =>
     document.querySelector("#inspector-dialog-container")
       ?.__schedulerInspectorDialog ?? null;
   const inspectorDialogOpen = () =>
@@ -2887,6 +2937,7 @@ function wire_cell_editors() {
   const set_inspector_action_label = (
     bookingEditable,
     supportActionable,
+    supportCueVisible = supportActionable,
     selected = false,
   ) => {
     if (!inspector.open) {
@@ -2898,7 +2949,7 @@ function wire_cell_editors() {
     }
     label.innerText = "Details";
     if (inspector.openSupportCue) {
-      inspector.openSupportCue.hidden = !selected || !supportActionable;
+      inspector.openSupportCue.hidden = !selected || !supportCueVisible;
     }
     if (inspector.openReadonlyCue) {
       inspector.openReadonlyCue.hidden = !selected || bookingEditable;
@@ -2909,8 +2960,8 @@ function wire_cell_editors() {
         : "readonly"
       : "none";
     const buttonTitle =
-      selected && !bookingEditable && supportActionable
-        ? "Open selection details for a read-only slot with actionable support"
+      selected && !bookingEditable && supportCueVisible
+        ? "Open selection details for a read-only slot with unresolved support"
         : selected && !bookingEditable
         ? "Open selection details for a read-only slot"
         : "Open selection details";
@@ -3831,6 +3882,12 @@ function wire_cell_editors() {
     );
   const is_entry_support_actionable = (entry) =>
     Boolean(entry && entry.dataset.supportActionable == "true");
+  const is_entry_support_cue_visible = (entry) =>
+    Boolean(
+      entry &&
+        (entry.dataset.supportCueVisible ?? entry.dataset.supportActionable) ==
+          "true",
+    );
   let activeEntry = null;
   let selectionVersion = 0;
   let modalDurationSlots = 1;
@@ -3904,59 +3961,25 @@ function wire_cell_editors() {
         };
       })
       .filter(Boolean);
-  const build_review_content = (issues, diffs, { blocking = false } = {}) => {
-    const out = document.createDocumentFragment();
-    const addSection = (titleText) => {
-      const section = document.createElement("section");
-      section.className = "review-section";
-      const heading = document.createElement("h2");
-      heading.textContent = titleText;
-      section.append(heading);
-      out.append(section);
-      return section;
-    };
-
-    if (issues.length > 0) {
-      const issueSection = addSection(
-        issues.length == 1 ? "Active issue" : "Active issues",
-      );
-      const intro = document.createElement("p");
-      intro.textContent = blocking
-        ? "Resolve these issues before submitting the pending changes."
-        : "Use this list to match the active error markers in the schedule.";
-      issueSection.append(intro);
-      const list = document.createElement("dl");
-      list.className = "review-issue-list";
-      for (const issue of issues) {
-        const slotRow = document.createElement("dt");
-        slotRow.textContent = issue.label;
-        list.append(slotRow);
-        const summaryRow = document.createElement("dd");
-        summaryRow.className = "review-issue-summary";
-        summaryRow.textContent = issue.summary;
-        list.append(summaryRow);
-        for (const row of issue.errors) {
-          const detailRow = document.createElement("dd");
-          detailRow.textContent = format_inspector_error_message(row);
-          list.append(detailRow);
+  const collect_review_changes = () =>
+    sorted_changed_cells()
+      .map((cell) => {
+        const diff = cell.diff();
+        if (!diff) {
+          return null;
         }
-      }
-      issueSection.append(list);
-    }
-
-    if (diffs.length > 0) {
-      const changeSection = addSection("Pending changes");
-      const [, summary] = fmt_editor_diffs(human_hours, templateEditor, diffs);
-      changeSection.append(summary);
-    }
-
-    if (issues.length == 0 && diffs.length == 0) {
-      const empty = document.createElement("p");
-      empty.textContent = "There are no pending changes or active issues.";
-      out.append(empty);
-    }
-    return out;
-  };
+        const errors = readSelectedErrors(cell.elm);
+        return {
+          id: cell.id,
+          cell,
+          diff,
+          label: slot_label(cell.elm),
+          summary: slot_summary(cell.elm),
+          errors: errors.map((row) => format_inspector_error_message(row)),
+          blocking: errors.length > 0,
+        };
+      })
+      .filter(Boolean);
   const update_pending_review_control = () => {
     if (!inspector.review) {
       return;
@@ -4328,6 +4351,7 @@ function wire_cell_editors() {
     const bookingEditable = is_entry_booking_editable(entry);
     const interactive = is_entry_interactive(entry);
     const supportActionable = is_entry_support_actionable(entry);
+    const supportCueVisible = is_entry_support_cue_visible(entry);
     const cell = ensure_cell(entry);
     const date = humanize_date_if_needed(entry.dataset.date ?? "");
     const hour = human_hours?.[entry.dataset.hour] ?? entry.dataset.hour ?? "";
@@ -4345,7 +4369,12 @@ function wire_cell_editors() {
       inspectorState.mode = "Read-only booking";
     }
     if (inspector.open) {
-      set_inspector_action_label(bookingEditable, supportActionable, true);
+      set_inspector_action_label(
+        bookingEditable,
+        supportActionable,
+        supportCueVisible,
+        true,
+      );
     }
     if (inspector.save) {
       inspector.save.hidden = !interactive;
@@ -4356,6 +4385,28 @@ function wire_cell_editors() {
     sync_duration_controls(entry, bookingEditable);
     update_inspector_counts(entry, cell);
     sync_inspector_modal();
+  };
+  const showInspectorForEntry = (entry) => {
+    if (!entry) {
+      return;
+    }
+    if (activeEntry && activeEntry !== entry) {
+      activeEntry.dataset.active = "false";
+    }
+    entry.dataset.active = "true";
+    ensure_cell(entry);
+    activeEntry = entry;
+    update_inspector_selection(entry);
+    const editable = is_entry_editable(entry);
+    sync_duration_controls(entry, editable);
+    entry.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const inspectorDialog = getInspectorDialog();
+    if (inspectorDialog) {
+      inspectorDialog.show();
+    }
+    if (inspector.save) {
+      inspector.save.hidden = !editable;
+    }
   };
 
   const update_inspector_empty = (row, col) => {
@@ -5531,6 +5582,75 @@ function wire_cell_editors() {
     }
     const preexisting = cells.get(id);
     if (preexisting) {
+      if (preexisting.elm !== entry) {
+        const values = {
+          institute: preexisting.institute?.value ?? "",
+          group:
+            preexisting.autofilled_group && !preexisting.member_changed
+              ? ""
+              : preexisting.group?.value ?? "",
+          member: preexisting.member?.value ?? "",
+          sr: {},
+        };
+        for (const [kind, sr] of Object.entries(preexisting.sr)) {
+          const requested = Boolean(sr.requested?.checked);
+          values.sr[kind] = {
+            requested,
+            handler: requested ? sr.handler?.value ?? "" : "",
+            subkind: sr.subkind ? sr.subkind.value : "",
+          };
+        }
+
+        const wasLocked = preexisting.locked;
+        const wasActive =
+          activeEntry?.dataset.id == id ||
+          preexisting.elm?.dataset.active == "true";
+        invalid.delete(preexisting);
+        changed.delete(preexisting);
+        changedInvalid.delete(preexisting);
+
+        const rebound = new Cell(entry, cfg);
+        cells.set(id, rebound);
+        if (wasActive) {
+          entry.dataset.active = "true";
+          activeEntry = entry;
+        }
+        if (wasLocked) {
+          rebound.resetAndLock();
+        } else {
+          rebound.autofilled_group = false;
+          if (rebound.institute) {
+            rebound.institute.value = values.institute;
+            resetList(rebound.institute);
+          }
+          rebound.group.value = values.group;
+          rebound.update_group_list();
+          resetList(rebound.group);
+          rebound.member.value = values.member;
+          rebound.update_list();
+          resetList(rebound.member);
+          for (const [kind, sr] of Object.entries(rebound.sr)) {
+            const incoming = values.sr?.[kind];
+            if (!incoming) {
+              continue;
+            }
+            if (sr.requested) {
+              sr.requested.checked = Boolean(incoming.requested);
+            }
+            if (sr.handler) {
+              sr.handler.value = incoming.requested
+                ? incoming.handler ?? ""
+                : "";
+              resetList(sr.handler);
+            }
+            if (sr.subkind) {
+              sr.subkind.value = incoming.subkind ?? sr.subkind.value;
+            }
+          }
+          rebound.update();
+        }
+        return rebound;
+      }
       return preexisting;
     }
 
@@ -6062,6 +6182,7 @@ function wire_cell_editors() {
       changedInvalid.delete(cell);
     }
     update_pending_review_control();
+    activeReviewDialog?.refresh();
 
     // add the beforeunload handler if there are changes
     // and remove it if not
@@ -6196,14 +6317,6 @@ function wire_cell_editors() {
       diff[kind] = srDiff;
     }
     return Object.keys(diff).length > 3 ? diff : null;
-  };
-  const buildDiffBatchFromCells = (targetCells) => {
-    const targetList = Array.isArray(targetCells)
-      ? targetCells.filter(Boolean)
-      : [];
-    const diffs = targetList.map((cell) => cell.diff()).filter(Boolean);
-    diffs.sort(compareCellsChronologically);
-    return { targetCells: targetList, diffs };
   };
   const setCellSaveErrors = (cell, slotErrors = []) => {
     if (!cell) {
@@ -6353,7 +6466,7 @@ function wire_cell_editors() {
       },
       {
         reload: false,
-        onResolved: (_payload, meta = {}) => {
+        onSettled: (_payload, meta = {}) => {
           const failedIds = new Set(meta.failedIds ?? []);
           const errorMap = meta.errorMap ?? {};
           const idMap = meta.idMap ?? {};
@@ -6407,6 +6520,9 @@ function wire_cell_editors() {
           ) {
             update_inspector_selection(activeEntry);
           }
+          if (closeInspectorOnSuccess && failedIds.size > 0 && activeEntry) {
+            showInspectorForEntry(activeEntry);
+          }
           if (
             closeInspectorOnSuccess &&
             successfulCells.length === targetCells.length
@@ -6453,6 +6569,7 @@ function wire_cell_editors() {
 
   const closeInspector = () => {
     syncDurationDraftTargets({ finalize: true });
+    const inspectorDialog = getInspectorDialog();
     if (inspectorDialog && typeof inspectorDialog.hide == "function") {
       inspectorDialog.hide();
     }
@@ -6495,22 +6612,18 @@ function wire_cell_editors() {
     if (templateEditor) {
       await hydrate_rows(rows, { countForLock: false });
     }
-    const issues = collect_review_issues();
-    const diffs = [];
-    let targetCells = [];
-    if (templateEditor) {
-      for (const cell of sorted_changed_cells()) {
-        const diff = cell.diff();
-        if (diff) {
-          diffs.push(diff);
-        }
-      }
-    } else {
-      const batch = buildDiffBatchFromCells(sorted_changed_cells());
-      targetCells = batch.targetCells;
-      diffs.push(...batch.diffs);
-    }
-    if (diffs.length == 0 && issues.length == 0) {
+    const getIssues = () =>
+      collect_review_issues().map((issue) => ({
+        id: issue.cell.id,
+        cell: issue.cell,
+        label: issue.label,
+        summary: issue.summary,
+        errors: issue.errors.map((row) => format_inspector_error_message(row)),
+      }));
+    const getChanges = () => collect_review_changes();
+    const issues = getIssues();
+    const changes = getChanges();
+    if (changes.length == 0 && issues.length == 0) {
       editor_dialog(
         false,
         false,
@@ -6521,27 +6634,30 @@ function wire_cell_editors() {
       );
       return;
     }
-    const blocking = templateEditor ? any_invalid() : changedInvalid.size > 0;
-    const titleText =
-      diffs.length > 0 ? "review pending changes" : "review issues";
-    const content = build_review_content(issues, diffs, { blocking });
-    if (diffs.length == 0 || blocking) {
-      editor_dialog(false, false, titleText, content, null, {
-        confirmText: "Close",
-      });
-      return;
-    }
-    const [showNotifications] = fmt_editor_diffs(
-      human_hours,
-      templateEditor,
-      diffs,
-    );
+    const reviewDialog = createReviewDialog({
+      getIssues,
+      getChanges,
+      onResolve: (item) => {
+        showInspectorForEntry(item.cell.elm);
+      },
+      submitText: templateEditor ? "Publish changes" : "Confirm",
+      closeText: "Close",
+      cancelText: "Keep editing",
+      shouldShowNotifications: (diffs) =>
+        fmt_editor_diffs(human_hours, templateEditor, diffs)[0],
+    });
     editor_dialog(
       true,
-      showNotifications,
-      titleText,
-      content,
+      false,
+      reviewDialog.getState().titleText,
+      reviewDialog.content,
       (notify) => {
+        const selected = reviewDialog.getSelectedChanges();
+        const diffs = selected.map((change) => change.diff);
+        const targetCells = selected.map((change) => change.cell);
+        if (diffs.length == 0) {
+          return;
+        }
         if (templateEditor) {
           submitTemplateDiffs(diffs, notify);
           return;
@@ -6551,8 +6667,17 @@ function wire_cell_editors() {
         });
       },
       {
-        confirmText: templateEditor ? "Publish changes" : "Confirm",
-        cancelText: "Keep editing",
+        onShow: (dialogContext) => {
+          activeReviewDialog = reviewDialog;
+          reviewDialog.bindDialog(dialogContext);
+          reviewDialog.refresh();
+        },
+        onHide: () => {
+          if (activeReviewDialog == reviewDialog) {
+            activeReviewDialog = null;
+          }
+          reviewDialog.unbindDialog();
+        },
       },
     );
   };
@@ -6712,23 +6837,7 @@ function wire_cell_editors() {
           update_inspector_selection(null);
         }
       } else {
-        if (activeEntry && activeEntry !== selectedEntry) {
-          activeEntry.dataset.active = "false";
-        }
-        selectedEntry.dataset.active = "true";
-        ensure_cell(selectedEntry);
-        activeEntry = selectedEntry;
-        update_inspector_selection(selectedEntry);
-      }
-      const editable = is_entry_editable(selectedEntry);
-      sync_duration_controls(selectedEntry, editable);
-      if (inspectorDialog) {
-        inspectorDialog.show();
-      }
-      if (inspector.save && editable) {
-        inspector.save.hidden = false;
-      } else if (inspector.save) {
-        inspector.save.hidden = true;
+        showInspectorForEntry(selectedEntry);
       }
     });
   }

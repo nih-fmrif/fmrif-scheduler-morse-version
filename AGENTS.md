@@ -13,12 +13,12 @@ Guidance for coding agents working in this repository.
    - Treat this as sticky for the full thread (including post-compaction continuation).
    - Do not change scope mid-thread unless explicitly starting a separate isolated run, and state why.
 2. Use repo wrappers/tasks (do not bypass them):
-   - `bash setup-dotenv.sh`
+   - `bash setup-dotenv.sh --profile compose`
    - `bash run-compose.sh --no-app` (initial setup) or `bash run-compose.sh --no-app --resume` (explicit reuse)
    - `pixi run test-unit|test-routes|test-integration-ci`
 3. Startup decision rules (must follow):
     - Initial setup in a new thread/scope:
-      - Run `bash setup-dotenv.sh`, then `bash run-compose.sh --no-app`.
+      - Run `bash setup-dotenv.sh --profile compose`, then `bash run-compose.sh --no-app`.
     - Iteration preference:
       - In the same thread/scope, treat the compose stack as stateful and prefer keeping it running between commands.
       - Avoid shutting it down or fully recreating during continuation unless you need it explicitly stopped/restarted.

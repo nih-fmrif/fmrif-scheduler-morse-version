@@ -45,7 +45,8 @@ Primary threats addressed by built-in controls:
 | Server-side session + hardened cookie flags + SID rotation | `SESSION__*` | session theft impact, session fixation, CSRF risk (via SameSite) |
 | CSRF tokens on forms | Flask-WTF + `SECRET_KEY` | cross-site form submission attacks |
 | Signed action links for join/deny flows | `CORE__SECRET_KEY` | tampering with approval-action URLs |
-| Browser hardening headers (CSP, HSTS, XFO, nosniff, referrer) | `SECURITY__*` | XSS blast radius, clickjacking, MIME confusion, TLS downgrade |
+| Browser hardening headers (CSP, XFO, nosniff, referrer) | `SECURITY__*` | XSS blast radius, clickjacking, MIME confusion |
+| Edge TLS/browser hardening (HSTS) | deployment edge config | TLS downgrade after initial secure visit |
 | Auth endpoint rate limiting | `SECURITY__AUTH_RATE_LIMIT_*` | brute force and high-rate auth abuse |
 | Mock auth endpoint guardrails | `AUTH_TEST__*` | unauthorized test-session minting (when correctly configured) |
 | Startup validation guardrails | `AUTH_TEST__ENABLED`, `CORE__*`, `SESSION__*`, `ENTRA__*` | insecure production startup due to config drift |
@@ -214,7 +215,7 @@ Headers and controls:
 
 - `Content-Security-Policy` (default policy is nonce-backed for scripts: `script-src 'self' 'nonce-{nonce}' 'strict-dynamic'`, plus `script-src-attr 'none'`, `style-src 'self'`, `style-src-attr 'none'`, and `report-to csp-endpoint`)
 - `Reporting-Endpoints: csp-endpoint="/csp-report"`
-- `Strict-Transport-Security` (HTTPS edge responses only, emitted by nginx)
+- `Strict-Transport-Security` (HTTPS edge responses only, emitted by the deployment edge such as installer-managed nginx)
 - `X-Frame-Options: DENY`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
@@ -232,10 +233,6 @@ Configuration:
 - `SECURITY__ENABLE_CSP` (default `true`)
 - `SECURITY__CSP_REPORT_ONLY` (default `false`)
 - `SECURITY__CSP_POLICY` (default restrictive policy without inline-style allowances; custom policies may still use `{nonce}`)
-- `SECURITY__ENABLE_HSTS` (default `true`)
-- `SECURITY__HSTS_MAX_AGE` (default `63072000`)
-- `SECURITY__HSTS_INCLUDE_SUBDOMAINS` (default `true`)
-- `SECURITY__HSTS_PRELOAD` (default `false`)
 - `SECURITY__FRAME_OPTIONS` (default `DENY`)
 - `SECURITY__CONTENT_TYPE_OPTIONS` (default `nosniff`)
 - `SECURITY__REFERRER_POLICY` (default `strict-origin-when-cross-origin`)
@@ -327,7 +324,9 @@ Attack classes mitigated:
 Operational note:
 
 - this limiter is process-local and memory-backed
-- for production-scale defense, pair with ingress/API gateway rate limiting
+- installer-managed nginx deployments also enforce `/auth/` edge throttling and
+  `host-test.py` verifies a real 429 burst response on that path
+- broader ingress/API gateway rate limiting and WAF rules are still required
 
 ## Mock/Test Authentication Controls
 
@@ -457,7 +456,6 @@ ENTRA__BEARER_AUTO_PROVISION_ENABLED=false
 
 SECURITY__ENABLE_CSP=true
 SECURITY__CSP_REPORT_ONLY=false
-SECURITY__ENABLE_HSTS=true
 SECURITY__AUTH_RATE_LIMIT_ENABLED=true
 
 LOGGING__REVEAL_SENSITIVE_DATA=false
@@ -469,7 +467,8 @@ Built-in controls are strong for app-layer defaults, but you should still add
 platform controls:
 
 - enforce TLS termination and modern ciphers at ingress
-- add edge/API rate limiting and WAF rules
+- keep broader edge/API rate limiting and WAF rules in place; the installer now
+  covers only the `/auth/` path on nginx-managed deployments
 - route auth/security events to centralized SIEM
 - run dependency scanning and SBOM generation in CI
 - limit network access to internal/test-only routes

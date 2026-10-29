@@ -289,7 +289,6 @@ def test_app_config_mapping(config_dict, expected_keys):
 
 
 def test_app_config_maps_mail_suppress_send_flag():
-    # TODO: add an end-to-end assertion that suppressed mail avoids SMTP network calls.
     settings = make_settings(mail={"suppress_send": True})
     app_config = AppConfig(settings)
     assert app_config["MAIL_SUPPRESS_SEND"] is True
@@ -574,7 +573,6 @@ def test_logging_config_validation():
 
 def test_security_config_validation():
     config = SecurityConfig()
-    assert config.enable_hsts is True
     assert config.enable_csp is True
     assert config.csp_report_only is False
     assert config.auth_rate_limit_enabled is True
@@ -588,6 +586,15 @@ def test_security_config_validation():
     assert "style-src 'self'" in config.csp_policy
     assert "style-src-attr 'none'" in config.csp_policy
     assert "'unsafe-inline'" not in config.csp_policy
+
+
+def test_app_config_does_not_emit_hsts_runtime_settings():
+    app_config = AppConfig(make_settings())
+
+    assert "SECURITY_ENABLE_HSTS" not in app_config
+    assert "SECURITY_HSTS_MAX_AGE" not in app_config
+    assert "SECURITY_HSTS_INCLUDE_SUBDOMAINS" not in app_config
+    assert "SECURITY_HSTS_PRELOAD" not in app_config
 
 
 @pytest.mark.parametrize(
