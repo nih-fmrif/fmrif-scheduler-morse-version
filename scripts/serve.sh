@@ -65,6 +65,88 @@ validate_non_negative_int() {
   fi
 }
 
+wait_for_local_http_ready() {
+  local url=$1
+  local timeout_seconds=${2:-60}
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while (( SECONDS < deadline )); do
+    if [ -n "${SERVER_PID:-}" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
+      echo "ERROR: app server exited before readiness probe succeeded." >&2
+      return 1
+    fi
+
+    if curl --silent --fail --output /dev/null --max-time 2 "$url"; then
+      return 0
+    fi
+
+    sleep 1
+  done
+
+  echo "ERROR: timed out waiting for local app readiness at $url" >&2
+  return 1
+}
+
+stop_server() {
+  if [ -z "${SERVER_PID:-}" ]; then
+    return 0
+  fi
+
+  if kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+}
+
+forward_signal() {
+  local signal=$1
+  if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill -s "$signal" "$SERVER_PID" 2>/dev/null || true
+  fi
+}
+
+run_edge_header_gate() {
+  local script_path="${SCRIPT_DIR}/check-edge-security-headers.py"
+
+  if ! python3 "$script_path"; then
+    echo "ERROR: final edge security header validation failed. The app server was stopped because the served response is missing required security headers or the wrong edge URL is configured." >&2
+    echo "  Production target is derived from ENTRA__REDIRECT_URI by removing /auth/callback." >&2
+    echo "  Outside production, the probe falls back to http://localhost:${APP_PORT}." >&2
+    return 1
+  fi
+}
+
+build_gunicorn_command() {
+  local bind_addr="0.0.0.0:${APP_PORT}"
+  local workers="${GUNICORN_WORKERS:-2}"
+  local worker_class="${GUNICORN_WORKER_CLASS:-sync}"
+  local timeout="${GUNICORN_TIMEOUT:-120}"
+  local threads="${GUNICORN_THREADS:-}"
+
+  local -a command=(
+    gunicorn
+    --bind
+    "$bind_addr"
+    --workers
+    "$workers"
+    --worker-class
+    "$worker_class"
+    --timeout
+    "$timeout"
+    --access-logfile
+    -
+    --error-logfile
+    -
+  )
+
+  if [ -n "$threads" ]; then
+    command+=(--threads "$threads")
+  fi
+
+  command+=(scheduler.wsgi:app)
+  printf '%s\n' "${command[@]}"
+}
+
 coalesce_session_cookie_name() {
   local base_cookie="${1:-}"
   local scope="${RUNTIME_SCOPE:-default}"
@@ -196,4 +278,38 @@ export RUNTIME_SCOPE_SESSION__COOKIE_NAME="$SESSION__COOKIE_NAME"
 export RUNTIME_SCOPE_AUTH_TEST__SHARED_SECRET="${AUTH_TEST__SHARED_SECRET:-}"
 runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
 
-exec flask run --host 0.0.0.0 --port "$APP_PORT"
+app_server="${APP_SERVER:-flask}"
+declare -a server_command=()
+case "$app_server" in
+  flask)
+    server_command=(flask run --host 0.0.0.0 --port "$APP_PORT")
+    ;;
+  gunicorn)
+    mapfile -t gunicorn_command < <(build_gunicorn_command)
+    server_command=("${gunicorn_command[@]}")
+    ;;
+  *)
+    echo "ERROR: APP_SERVER must be one of: flask, gunicorn" >&2
+    exit 1
+    ;;
+esac
+
+SERVER_PID=""
+trap 'forward_signal TERM' TERM
+trap 'forward_signal INT' INT
+
+"${server_command[@]}" &
+SERVER_PID=$!
+
+readiness_url="http://127.0.0.1:${APP_PORT}/robots.txt"
+if ! wait_for_local_http_ready "$readiness_url"; then
+  stop_server
+  exit 1
+fi
+
+if ! run_edge_header_gate; then
+  stop_server
+  exit 1
+fi
+
+wait "$SERVER_PID"

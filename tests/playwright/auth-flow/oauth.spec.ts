@@ -4,7 +4,7 @@ import { test, expect, request } from '@playwright/test';
 import { waitForAppShell } from '../utils/test-helpers';
 import { signInWithCredentials } from '../utils/entra-login';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
+const TEST_BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:5051';
 const storageStatePath = process.env.PLAYWRIGHT_STORAGE_STATE;
 const hasCreds = Boolean(process.env.OAUTH_TEST_USERNAME && process.env.OAUTH_TEST_PASSWORD);
 const isRealAuthMode = (process.env.PLAYWRIGHT_AUTH_MODE ?? 'mock').toLowerCase() === 'entra';
@@ -51,7 +51,7 @@ function parseBooleanEnv(name: string, fallback: boolean = false): boolean {
 
 const ignoreHTTPSErrors = parseBooleanEnv(
   'PLAYWRIGHT_IGNORE_HTTPS_ERRORS',
-  shouldIgnoreHTTPSErrorsByDefault(BASE_URL)
+  shouldIgnoreHTTPSErrorsByDefault(TEST_BASE_URL)
 );
 const proxyServer = (
   process.env.ALL_PROXY ||
@@ -68,7 +68,7 @@ let baseUrlError = '';
 
 test.beforeAll(async () => {
   const probeClient = await request.newContext({
-    baseURL: BASE_URL,
+    baseURL: TEST_BASE_URL,
     ignoreHTTPSErrors,
     ...(proxyServer ? { proxy: { server: proxyServer } } : {}),
   });
@@ -86,7 +86,7 @@ test.beforeAll(async () => {
 test.describe('Login page basics', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     if (!baseUrlReachable) {
-      testInfo.skip(`BASE_URL not reachable: ${baseUrlError || BASE_URL}`);
+      testInfo.skip(`TEST_BASE_URL not reachable: ${baseUrlError || TEST_BASE_URL}`);
       return;
     }
 
@@ -117,7 +117,7 @@ test.describe('Real Entra sign-in (credentials)', () => {
       return;
     }
     if (!baseUrlReachable) {
-      testInfo.skip(`BASE_URL not reachable: ${baseUrlError || BASE_URL}`);
+      testInfo.skip(`TEST_BASE_URL not reachable: ${baseUrlError || TEST_BASE_URL}`);
       return;
     }
     if (!hasCreds) {
@@ -158,7 +158,7 @@ test.describe('Real Entra sign-in (storage state)', () => {
       return;
     }
     if (!baseUrlReachable) {
-      testInfo.skip(`BASE_URL not reachable: ${baseUrlError || BASE_URL}`);
+      testInfo.skip(`TEST_BASE_URL not reachable: ${baseUrlError || TEST_BASE_URL}`);
       return;
     }
 

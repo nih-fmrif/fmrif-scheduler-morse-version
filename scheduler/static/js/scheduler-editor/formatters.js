@@ -276,6 +276,7 @@ function fmt_editor_diffs(human_hours, templateEditor, diffs) {
     for (const k of ["tech", "train", "med"]) {
       const sr = diff[k];
       if (sr) {
+        notifications += 1;
         fmt_sr_diff(out, k, sr);
       }
     }
@@ -394,8 +395,28 @@ function fmt_save_errors(data, cells, human_hours) {
   return out;
 }
 
+function fmt_template_errors(messages) {
+  if (!Array.isArray(messages) || messages.length == 0) {
+    return null;
+  }
+  const out = document.createDocumentFragment();
+  const intro = document.createElement("p");
+  intro.textContent =
+    "Template compatibility issues are still present. Review and repair them before retrying.";
+  out.append(intro);
+  const list = document.createElement("ul");
+  for (const message of messages) {
+    const item = document.createElement("li");
+    item.textContent = String(message);
+    list.append(item);
+  }
+  out.append(list);
+  return out;
+}
+
 function fmt_save_results(data, cells, human_hours) {
   const errors = Object.entries(data.errors ?? []);
+  const templateErrors = fmt_template_errors(data.template_errors ?? []);
   if (data.saved > 0) {
     const out = document.createDocumentFragment();
     let s = "entry";
@@ -419,6 +440,10 @@ function fmt_save_results(data, cells, human_hours) {
             );
             break;
 
+          case "skipped":
+            item.append(`${key} notification delivery suppressed`);
+            break;
+
           case "success":
             item.append(`${key} notification sent`);
             break;
@@ -427,9 +452,22 @@ function fmt_save_results(data, cells, human_hours) {
       }
       out.append(list);
     }
+    if (templateErrors) {
+      out.append(templateErrors);
+    }
     if (errors.length > 0) {
       out.append(fmt_save_errors(data, cells, human_hours));
     }
+    return out;
+  }
+
+  if (templateErrors) {
+    if (errors.length == 0) {
+      return templateErrors;
+    }
+    const out = document.createDocumentFragment();
+    out.append(templateErrors);
+    out.append(fmt_save_errors(data, cells, human_hours));
     return out;
   }
 

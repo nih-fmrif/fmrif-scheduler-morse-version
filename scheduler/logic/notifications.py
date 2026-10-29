@@ -26,9 +26,8 @@ def _get_user(user_id: str) -> Optional[model.User]:
     return model.get(model.User, user_id)
 
 
-def notify_dev_pi_of_tech_join_form(user: model.User) -> str:
+def _get_dev_pi_recipient() -> Optional[model.User]:
     membership_model = model.Membership
-    current_app.logger.info("%s submitted the technologist join form", user.id)
     membership = (
         membership_model.query.filter(membership_model.group == "DEV")
         .filter(membership_model.pi)
@@ -36,14 +35,22 @@ def notify_dev_pi_of_tech_join_form(user: model.User) -> str:
     )
     if membership is None:
         current_app.logger.warning("no DEV PI found")
-        return EMAIL_STATUS_FAILED
+        return None
 
     dev_pi = _get_user(membership.user)
     if dev_pi is None:
         current_app.logger.warning("no DEV PI user found for id %s", membership.user)
-        return EMAIL_STATUS_FAILED
+        return None
     if dev_pi.addr == "":
         current_app.logger.warning("could not find email address for dev pi")
+        return None
+    return dev_pi
+
+
+def notify_dev_pi_of_tech_join_form(user: model.User) -> str:
+    current_app.logger.info("%s submitted the technologist join form", user.id)
+    dev_pi = _get_dev_pi_recipient()
+    if dev_pi is None:
         return EMAIL_STATUS_FAILED
 
     token = sign_message(["join-tech", user.id, "DEV"])
@@ -68,6 +75,31 @@ or go to {page} to manage this user in RBAC explorer.
             "how": "join-tech-request",
             "details": f"group=DEV, requester={user.id}, pi={dev_pi.id}",
             "issue_key": f"join-tech:DEV:{user.id}",
+        },
+    )
+    return EMAIL_STATUS_SENT if ok else EMAIL_STATUS_FAILED
+
+
+def notify_dev_pi_of_tech_autoapproval(user: model.User) -> str:
+    current_app.logger.info("%s was auto-approved for technologist access", user.id)
+    dev_pi = _get_dev_pi_recipient()
+    if dev_pi is None:
+        return EMAIL_STATUS_FAILED
+
+    page = url_for("rbac", scope="user", entity=user.id)
+
+    ok = message.send(
+        dev_pi.addr,
+        f"{user.id} was granted technologist access",
+        f"""
+{user.id} was granted technologist access automatically via the technologist join form.
+
+go to {page} to review this user in RBAC explorer.
+        """.strip(),
+        audit_context={
+            "action": "email.join.tech.autoapprove.notify-dev-pi",
+            "how": "join-tech-autoapprove",
+            "details": f"group=DEV, requester={user.id}, pi={dev_pi.id}",
         },
     )
     return EMAIL_STATUS_SENT if ok else EMAIL_STATUS_FAILED
@@ -291,17 +323,24 @@ def notify_user_of_tech_join_request_outcome(approved: bool, user: model.User) -
 
 def prepare_notifications(send_notifications, when, diffs, srs_notes):
     # filter out diffs that won't cause a notification
-    diffs_out = []
     if not send_notifications:
-        for diff in diffs:
-            entry_id = int(diff["id"])
-            # old entry
-            if when[entry_id][0]:
-                continue
-            # only has SR
-            if not any(key in diff for key in ("group", "member")):
-                continue
-            diffs_out.append(diff)
+        return [], {
+            "schedule": [],
+            "training": [],
+            "medical": [],
+            "technologist": [],
+        }
+
+    diffs_out = []
+    for diff in diffs:
+        entry_id = int(diff["id"])
+        # old entry
+        if when[entry_id][0]:
+            continue
+        # only has SR
+        if not any(key in diff for key in ("group", "member")):
+            continue
+        diffs_out.append(diff)
 
     srs_out = {
         "schedule": [],
@@ -444,7 +483,12 @@ def send_scheduler_notifications(device: model.Device, msgs: dict[str, str]):
                 "details": f"device={device.id}, stream={key}",
             },
         )
-        note("failed" if not ok else "success")
+        if not ok:
+            note("failed")
+        elif current_app.config.get("MAIL_SUPPRESS_SEND", False):
+            note("skipped")
+        else:
+            note("success")
 
     return notes
 
@@ -452,6 +496,7 @@ def send_scheduler_notifications(device: model.Device, msgs: dict[str, str]):
 __all__ = [
     "EMAIL_STATUS_SENT",
     "EMAIL_STATUS_FAILED",
+    "notify_dev_pi_of_tech_autoapproval",
     "notify_dev_pi_of_tech_join_form",
     "notify_group_pi_of_join_form",
     "notify_user_of_join_request_outcome",

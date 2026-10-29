@@ -193,6 +193,9 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
     "/app/issues/notifications/state": protected_route(
         "/app/issues/notifications/state", ["POST"]
     ),
+    "/app/issues/organization/history-scan": protected_route(
+        "/app/issues/organization/history-scan", ["POST"]
+    ),
     "/app/issues/config": protected_route("/app/issues/config", ["POST"]),
     "/app/issues/mapping/import": protected_route(
         "/app/issues/mapping/import", ["POST"]
@@ -235,6 +238,8 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
         "/json/v1/device/TEST/schedule-next-day?start=2026-02-01&direction=1",
         ["GET"],
     ),
+    "/csp-report": public_route("/csp-report", {"POST": 204}),
+    "/json/v1/app-errors": protected_route("/json/v1/app-errors", ["GET"]),
     "/json/v1/rbac/mutate": protected_route("/json/v1/rbac/mutate", ["POST"]),
     "/json/v1/rbac/audit": protected_route("/json/v1/rbac/audit", ["GET"]),
     "/json/v1/email/audit": protected_route("/json/v1/email/audit", ["GET"]),
@@ -301,6 +306,7 @@ RBAC_GET_EXPECTATIONS: Dict[str, RbacRouteExpectation] = {
     "/json/v1/device/<the_device>/schedule-next-day": rbac_login_required(
         "/json/v1/device/TEST/schedule-next-day?start=2026-02-01&direction=1"
     ),
+    "/json/v1/app-errors": rbac_admin_only("/json/v1/app-errors"),
     "/json/v1/rbac/audit": rbac_admin_only("/json/v1/rbac/audit"),
     "/json/v1/email/audit": rbac_admin_only("/json/v1/email/audit"),
     "/json/v1/rbac/explorer": rbac_admin_only("/json/v1/rbac/explorer"),
@@ -316,9 +322,9 @@ RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
         "/device/TEST",
         admin=True,
         member=False,
-        # Baseline dev mock profile has no seeded per-device edit grant.
-        dev=False,
-        tech=False,
+        # Seeded dev/tech mock profiles reach route validation for the sample device.
+        dev=True,
+        tech=True,
         inactive=False,
     ),
     ("/device/<the_device>/templates", "POST"): rbac_mutating_admin_only(
@@ -343,6 +349,9 @@ RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
     ),
     ("/app/issues/notifications/state", "POST"): rbac_mutating_admin_only(
         "/app/issues/notifications/state"
+    ),
+    ("/app/issues/organization/history-scan", "POST"): rbac_mutating_admin_only(
+        "/app/issues/organization/history-scan"
     ),
     ("/app/issues/config", "POST"): rbac_mutating_admin_only("/app/issues/config"),
     (
@@ -411,6 +420,10 @@ BEHAVIOR_TEST_REQUIREMENTS: Dict[tuple[str, str], str] = {
         "POST",
     ): "Admin configuration changes must validate values and persist when valid.",
     (
+        "/app/issues/organization/history-scan",
+        "POST",
+    ): "Admin issues panel history scan toggle must preserve filters and require CSRF.",
+    (
         "/app/issues/mapping/import",
         "POST",
     ): "Admin mapping import must validate CSV payload before replacing mappings.",
@@ -451,4 +464,9 @@ BEHAVIOR_TEST_REQUIREMENTS: Dict[tuple[str, str], str] = {
 # Route methods intentionally not required in no-browser route tests yet.
 # Keep this list explicit so adding/changing mutating routes always requires
 # deciding whether to add a behavioral test or document why it is deferred.
-BEHAVIOR_TEST_EXEMPTIONS: Dict[tuple[str, str], str] = {}
+BEHAVIOR_TEST_EXEMPTIONS: Dict[tuple[str, str], str] = {
+    (
+        "/csp-report",
+        "POST",
+    ): "CSP browser reports are anonymous/public machine POSTs and do not follow normal user mutation behavior.",
+}

@@ -2,7 +2,12 @@ import logging
 
 from flask import Flask
 
-from scheduler.logging import SensitiveDataFilter, configure_app_logging, redact_string
+from scheduler.logging import (
+    SensitiveDataFilter,
+    configure_app_logging,
+    redact_string,
+    redact_value,
+)
 
 
 def test_redact_string_masks_query_and_bearer_tokens():
@@ -52,6 +57,24 @@ def test_sensitive_data_filter_can_be_disabled():
     redact_filter = SensitiveDataFilter(reveal_sensitive_data=True)
     assert redact_filter.filter(record) is True
     assert "top-secret-token" in record.getMessage()
+
+
+def test_redact_value_masks_nested_sensitive_payloads():
+    value = {
+        "state": "secret-state",
+        "nested": {
+            "authorization": "Bearer abc123",
+            "note": "safe text",
+        },
+        "items": ["keep", {"refresh_token": "secret-refresh"}],
+    }
+
+    redacted = redact_value(value)
+
+    assert redacted["state"] == "[REDACTED]"
+    assert redacted["nested"]["authorization"] == "[REDACTED]"
+    assert redacted["nested"]["note"] == "safe text"
+    assert redacted["items"][1]["refresh_token"] == "[REDACTED]"
 
 
 def test_configure_app_logging_installs_filter():

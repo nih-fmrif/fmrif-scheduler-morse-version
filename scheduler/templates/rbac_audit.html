@@ -4,6 +4,7 @@ body %}
   class="rbac-audit-page"
   data-audit-max-limit="{{ audit_max_limit }}"
   data-audit-show-more-increment="{{ audit_show_more_increment }}"
+  data-app-error-default-limit="{{ app_error_limit }}"
   data-email-audit-default-limit="{{ email_limit }}"
 >
   <header class="rbac-audit-page-header">
@@ -44,6 +45,36 @@ body %}
       method="get"
       id="notification-issues-filters"
     >
+      <input
+        type="hidden"
+        name="app_error_actor"
+        value="{{ app_error_actor }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_reference_id"
+        value="{{ app_error_reference_id }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_exception_type"
+        value="{{ app_error_exception_type }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_where_path"
+        value="{{ app_error_where_path }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_search"
+        value="{{ app_error_search }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_limit"
+        value="{{ app_error_limit }}"
+      />
       <input type="hidden" name="email_scope" value="{{ email_scope }}" />
       <input type="hidden" name="email_entity" value="{{ email_entity }}" />
       <input type="hidden" name="email_limit" value="{{ email_limit }}" />
@@ -306,6 +337,303 @@ body %}
     {% endif %}
   </section>
 
+  <section class="email-audit-log-panel" aria-labelledby="csp-report-log-title">
+    <h2 id="csp-report-log-title">CSP reports</h2>
+    <p>
+      Recent browser-reported content security policy violations captured from
+      the live application.
+    </p>
+
+    {% set has_csp_violation_events = csp_violation_events|length != 0 %} {% if
+    not csp_violation_events_available %}
+    <p class="none">CSP violation event table is unavailable.</p>
+    {% else %}
+    <p class="none" {% if has_csp_violation_events %}hidden{% endif %}>
+      No CSP violations have been reported recently.
+    </p>
+    <div
+      class="rbac-audit-table-wrap"
+      {%
+      if
+      not
+      has_csp_violation_events
+      %}hidden{%
+      endif
+      %}
+    >
+      <table class="rbac-audit-table">
+        <thead>
+          <tr>
+            <th>when</th>
+            <th>mode</th>
+            <th>directive</th>
+            <th>blocked</th>
+            <th>document</th>
+            <th>details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in csp_violation_events %}
+          <tr>
+            <td>{{ event.when or "-" }}</td>
+            <td>{{ event.disposition or "-" }}</td>
+            <td>
+              {{ event.effective_directive or event.violated_directive or "-" }}
+            </td>
+            <td>{{ event.blocked_uri or "-" }}</td>
+            <td>{{ event.document_uri or "-" }}</td>
+            <td>
+              <details>
+                <summary>view</summary>
+                <p>type: {{ event.report_type or "-" }}</p>
+                <p>user: {{ event.actor or "-" }}</p>
+                <p>status: {{ event.status_code or "-" }}</p>
+                <p>source: {{ event.source_file or "-" }}</p>
+                <p>
+                  line: {{ event.line_number or "-" }} | column: {{
+                  event.column_number or "-" }}
+                </p>
+                <p>ip: {{ event.ip or "-" }}</p>
+                <p>referrer: {{ event.referrer or "-" }}</p>
+                <p>user agent: {{ event.user_agent or "-" }}</p>
+                {% if event.script_sample %}
+                <pre>{{ event.script_sample }}</pre>
+                {% endif %}
+                <pre>{{ event.report_body | tojson(indent=2) }}</pre>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="email-audit-log-panel" aria-labelledby="app-error-log-title">
+    <h2 id="app-error-log-title">Application errors</h2>
+    <p>
+      Unhandled request exceptions captured at failure time with sanitized
+      request context and traceback details.
+    </p>
+    <form
+      class="rbac-audit-filters"
+      action="{{ url_for('app_issues') }}"
+      method="get"
+      id="app-error-filters"
+      data-audit-kind="app-error"
+      data-audit-endpoint="{{ url_for('app_error_feed') }}"
+    >
+      <input
+        type="hidden"
+        name="notification_category"
+        value="{{ notification_category }}"
+      />
+      <input type="hidden" name="notification_state_filter" value="1" />
+      <input
+        type="hidden"
+        name="notification_include_open"
+        value="{% if notification_include_open %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_include_resolved"
+        value="{% if notification_include_resolved %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_include_ignored"
+        value="{% if notification_include_ignored %}1{% endif %}"
+      />
+      <input
+        type="hidden"
+        name="notification_search"
+        value="{{ notification_search }}"
+      />
+      <input
+        type="hidden"
+        name="notification_search_field"
+        value="{{ notification_search_field }}"
+      />
+      <input type="hidden" name="email_scope" value="{{ email_scope }}" />
+      <input type="hidden" name="email_entity" value="{{ email_entity }}" />
+      <input type="hidden" name="email_status" value="{{ email_status }}" />
+      <input
+        type="hidden"
+        name="email_issue_state"
+        value="{{ email_issue_state }}"
+      />
+      <input type="hidden" name="email_search" value="{{ email_search }}" />
+      <input
+        type="hidden"
+        name="email_search_field"
+        value="{{ email_search_field }}"
+      />
+      <input
+        type="hidden"
+        id="app-error-limit"
+        name="app_error_limit"
+        value="{{ app_error_limit }}"
+      />
+
+      <div class="admin-filter-field">
+        <label for="app-error-reference-id">reference id</label>
+        <input
+          id="app-error-reference-id"
+          type="text"
+          name="app_error_reference_id"
+          value="{{ app_error_reference_id }}"
+          placeholder="APP-ERR-..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="admin-filter-field">
+        <label for="app-error-actor">user</label>
+        <input
+          id="app-error-actor"
+          type="text"
+          name="app_error_actor"
+          value="{{ app_error_actor }}"
+          placeholder="user id"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="admin-filter-field">
+        <label for="app-error-exception-type">exception</label>
+        <input
+          id="app-error-exception-type"
+          type="text"
+          name="app_error_exception_type"
+          value="{{ app_error_exception_type }}"
+          placeholder="RuntimeError"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="admin-filter-field admin-filter-last-row">
+        <label for="app-error-where-path">path</label>
+        <input
+          id="app-error-where-path"
+          type="text"
+          name="app_error_where_path"
+          value="{{ app_error_where_path }}"
+          placeholder="/device/TEST"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="admin-filter-field admin-filter-last-row">
+        <label for="app-error-search">search</label>
+        <input
+          id="app-error-search"
+          type="text"
+          name="app_error_search"
+          value="{{ app_error_search }}"
+          placeholder="reference, user, path, message, fingerprint"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+    </form>
+
+    {% set has_app_error_events = app_error_events|length != 0 %} {% if not
+    app_error_events_available %}
+    <p class="none">Application error event table is unavailable.</p>
+    {% else %}
+    <p
+      class="none"
+      id="app-error-empty"
+      {%
+      if
+      has_app_error_events
+      %}hidden{%
+      endif
+      %}
+    >
+      No application errors match the current filters.
+    </p>
+    <div
+      class="rbac-audit-table-wrap"
+      id="app-error-table-wrap"
+      {%
+      if
+      not
+      has_app_error_events
+      %}hidden{%
+      endif
+      %}
+    >
+      <table class="rbac-audit-table">
+        <thead>
+          <tr>
+            <th>when</th>
+            <th>reference</th>
+            <th>user</th>
+            <th>route</th>
+            <th>exception</th>
+            <th>message</th>
+            <th>fingerprint</th>
+            <th>details</th>
+          </tr>
+        </thead>
+        <tbody id="app-error-body">
+          {% for event in app_error_events %}
+          <tr>
+            <td>{{ event.when or "-" }}</td>
+            <td>{{ event.reference_id or "-" }}</td>
+            <td>{{ event.actor or "-" }}</td>
+            <td>{{ event.method }} {{ event.where }}</td>
+            <td>{{ event.exception_type or "-" }}</td>
+            <td>{{ event.message or "-" }}</td>
+            <td>{{ event.fingerprint or "-" }}</td>
+            <td>
+              <details>
+                <summary>view</summary>
+                <p>endpoint: {{ event.endpoint or "-" }}</p>
+                <p>status: {{ event.status_code }}</p>
+                <p>ip: {{ event.ip or "-" }}</p>
+                <p>user agent: {{ event.user_agent or "-" }}</p>
+                <pre>{{ event.request_context | tojson(indent=2) }}</pre>
+                <pre>{{ event.stack_trace }}</pre>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% set app_error_show_more_hidden = not (app_error_events|length ==
+    app_error_limit and app_error_limit < audit_max_limit) %}
+    <div
+      class="admin-show-more-wrap"
+      id="app-error-show-more-wrap"
+      {%
+      if
+      app_error_show_more_hidden
+      %}hidden{%
+      endif
+      %}
+    >
+      <button
+        type="button"
+        class="admin-show-more-button"
+        data-form="app-error-filters"
+        data-limit-input="app-error-limit"
+        data-limit-step="{{ audit_show_more_increment }}"
+        data-limit-max="{{ audit_max_limit }}"
+      >
+        show more
+      </button>
+    </div>
+    {% endif %}
+  </section>
+
   <section
     class="email-audit-log-panel"
     aria-labelledby="email-audit-log-title"
@@ -323,6 +651,36 @@ body %}
       data-audit-kind="email"
       data-audit-endpoint="{{ url_for('email_audit_feed') }}"
     >
+      <input
+        type="hidden"
+        name="app_error_actor"
+        value="{{ app_error_actor }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_reference_id"
+        value="{{ app_error_reference_id }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_exception_type"
+        value="{{ app_error_exception_type }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_where_path"
+        value="{{ app_error_where_path }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_search"
+        value="{{ app_error_search }}"
+      />
+      <input
+        type="hidden"
+        name="app_error_limit"
+        value="{{ app_error_limit }}"
+      />
       <input
         type="hidden"
         name="notification_category"
@@ -597,6 +955,28 @@ body %}
 </textarea
         >
       </label>
+      <label for="admin-group-institute-mapping" class="admin-config-field">
+        group institute mapping (JSON)
+        <textarea
+          id="admin-group-institute-mapping"
+          name="admin_group_institute_mapping"
+          class="admin-config-textarea"
+          rows="16"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder='{"canonical_institutes": {}, "raw_aliases": {}, "group_defaults": {}, "exceptions": []}'
+        >
+{{- admin_group_institute_mapping -}}
+</textarea
+        >
+      </label>
+      {% if admin_group_institute_mapping_uses_recommended_default %}
+      <p class="admin-config-help">
+        No stored mapping exists yet. The editor is showing the recommended
+        baseline: the current NIH Institutes and Centers canonical set plus
+        local operational institutes and legacy aliases.
+      </p>
+      {% endif %}
       <button type="submit">save admin configuration</button>
     </form>
     {% else %}
@@ -607,16 +987,216 @@ body %}
     {% endif %}
   </section>
 
+  <section
+    class="admin-config-panel"
+    aria-labelledby="organization-mapping-title"
+  >
+    <h2 id="organization-mapping-title">Organization mapping</h2>
+    <p>
+      Raw values in <code>tlkpinst</code>, <code>tlkpdept.inst</code>, and
+      <code>tbltemplate.instcode</code> remain authoritative. This mapping JSON
+      overlays canonical interpretation and exceptions so current production
+      drift can be reviewed without forcing a rewrite.
+    </p>
+    <div class="admin-section-actions">
+      <form
+        class="admin-inline-form"
+        action="{{ url_for('app_issues_organization_history_scan') }}"
+        method="post"
+      >
+        {{ organization_history_scan_form.csrf_token }}
+        <input
+          type="hidden"
+          name="return_query"
+          value="{{ request.query_string.decode('utf-8', errors='ignore') }}"
+        />
+        <input type="hidden" name="enabled" value="1" />
+        <label class="admin-inline-field" for="organization-history-years">
+          years
+        </label>
+        <input
+          id="organization-history-years"
+          class="admin-inline-input"
+          type="number"
+          name="organization_history_years"
+          min="1"
+          max="{{ organization_history_scan_window_years_max }}"
+          step="1"
+          value="{{ organization_history_scan_window_years }}"
+        />
+        <button type="submit">
+          {% if organization_history_scan_enabled %}refresh{% else %}run{% endif
+          %} recent schedule scan
+        </button>
+      </form>
+      {% if organization_history_scan_enabled %}
+      <form
+        class="admin-inline-form"
+        action="{{ url_for('app_issues_organization_history_scan') }}"
+        method="post"
+      >
+        {{ organization_history_scan_form.csrf_token }}
+        <input
+          type="hidden"
+          name="return_query"
+          value="{{ request.query_string.decode('utf-8', errors='ignore') }}"
+        />
+        <input type="hidden" name="enabled" value="0" />
+        <input
+          type="hidden"
+          name="organization_history_years"
+          value="{{ organization_history_scan_window_years }}"
+        />
+        <button type="submit">hide recent schedule scan</button>
+      </form>
+      {% endif %}
+      <a
+        href="{% if organization_history_scan_enabled %}{{ url_for('app_issues_export_mapping', mapping_kind='organization-issues', organization_history_scan='1', organization_history_years=organization_history_scan_window_years) }}{% else %}{{ url_for('app_issues_export_mapping', mapping_kind='organization-issues', organization_history_years=organization_history_scan_window_years) }}{% endif %}"
+        class="admin-mapping-link"
+        >download issues (CSV)</a
+      >
+    </div>
+    <p class="admin-config-help">
+      The optional recent schedule scan reads
+      <code>tblsched.orig_deptcode</code> and
+      <code>tblsched.orig_instcode</code> for the selected number of years only,
+      up to {{ organization_history_scan_window_years_max }} years. Use it when
+      you want recent production drift surfaced in addition to current group and
+      template configuration.
+    </p>
+    <p class="admin-config-help">
+      Current raw institute ids in this environment ({{
+      organization_mapping_summary.raw_institute_count }}): {% for institute_id
+      in organization_mapping_summary.raw_institutes %}<code
+        >{{ institute_id }}</code
+      >{% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    <p class="admin-config-help">
+      Active groups with canonical defaults: {{
+      organization_mapping_summary.groups_with_canonical_default_count }} / {{
+      organization_mapping_summary.active_group_count }}. Template entries
+      scanned: {{ organization_mapping_summary.template_entry_count }}.
+      Canonical institutes configured: {{
+      organization_mapping_summary.canonical_institute_count }}.
+    </p>
+    {% if organization_history_scan_enabled and
+    organization_history_scan_summary %}
+    <p class="admin-config-help">
+      Recent schedule window: {{ organization_history_scan_summary.window_start
+      }} to {{ organization_history_scan_summary.window_end }}. Schedule rows
+      scanned: {{ organization_history_scan_summary.schedule_entry_count }}.
+      Flagged rows: {{
+      organization_history_scan_summary.flagged_schedule_row_count }}.
+    </p>
+    {% else %}
+    <p class="admin-config-help">
+      Recent schedule history is not scanned by default.
+    </p>
+    {% endif %} {% if admin_group_institute_mapping_error %}
+    <p class="admin-config-error">
+      Stored mapping JSON is invalid in this environment: {{
+      admin_group_institute_mapping_error }}
+    </p>
+    {% endif %} {% if organization_mapping_issue_sections|length == 0 %}
+    <p class="none">No organization mapping issues detected.</p>
+    {% else %}
+    <div class="potential-issues-cards organization-mapping-cards">
+      {% for section in organization_mapping_issue_sections %}
+      <details
+        class="potential-issue-card{% if section.severity == 'critical' %} urgent{% endif %}"
+      >
+        <summary class="potential-issue-card-summary">
+          <span class="potential-issue-card-category">{{ section.title }}</span>
+          <span class="potential-issue-card-count"
+            >{{ section.issue_count }} issue{% if section.issue_count != 1 %}s{%
+            endif %}</span
+          >
+        </summary>
+        <ul class="potential-issues-list">
+          {% for item in section.rows %}
+          <li class="potential-issue potential-issue-{{ section.severity }}">
+            <p class="potential-issue-title">
+              <span class="potential-issue-category">{{ item.label }}</span>
+            </p>
+            <p class="potential-issue-detail">{{ item.detail }}</p>
+          </li>
+          {% endfor %} {% if section.hidden_count > 0 %}
+          <li class="potential-issue potential-issue-warning">
+            <p class="potential-issue-detail">
+              {{ section.hidden_count }} more issue{% if section.hidden_count !=
+              1 %}s{% endif %} not shown.
+            </p>
+          </li>
+          {% endif %}
+        </ul>
+      </details>
+      {% endfor %}
+    </div>
+    {% endif %} {% if organization_history_scan_enabled %}
+    <h3>Recent schedule history</h3>
+    {% if organization_history_issue_sections|length == 0 %}
+    <p class="none">No recent schedule history issues detected.</p>
+    {% else %}
+    <div class="potential-issues-cards organization-mapping-cards">
+      {% for section in organization_history_issue_sections %}
+      <details class="potential-issue-card">
+        <summary class="potential-issue-card-summary">
+          <span class="potential-issue-card-category">{{ section.title }}</span>
+          <span class="potential-issue-card-count"
+            >{{ section.issue_count }} issue{% if section.issue_count != 1 %}s{%
+            endif %}</span
+          >
+        </summary>
+        <ul class="potential-issues-list">
+          {% for item in section.rows %}
+          <li class="potential-issue potential-issue-{{ section.severity }}">
+            <p class="potential-issue-title">
+              <span class="potential-issue-category">{{ item.label }}</span>
+            </p>
+            <p class="potential-issue-detail">{{ item.detail }}</p>
+          </li>
+          {% endfor %} {% if section.hidden_count > 0 %}
+          <li class="potential-issue potential-issue-warning">
+            <p class="potential-issue-detail">
+              {{ section.hidden_count }} more issue{% if section.hidden_count !=
+              1 %}s{% endif %} not shown.
+            </p>
+          </li>
+          {% endif %}
+        </ul>
+      </details>
+      {% endfor %}
+    </div>
+    {% endif %} {% endif %}
+  </section>
+
   <section class="admin-config-panel" aria-labelledby="admin-mapping-title">
     <h2 id="admin-mapping-title">RBAC mapping files</h2>
     <p>
-      Import a CSV to replace each mapping dataset, then export to review
-      current effective values.
+      Use the <a href="{{ url_for('rbac') }}">RBAC explorer</a> for day-to-day
+      production membership and device/group changes so audited field-level
+      mutations stay visible there. Use the CSV controls below for bulk review,
+      import/export, and reconciliation.
+    </p>
+    <p class="admin-config-help">
+      Legacy CSV headers still use <code>dept</code> where present because the
+      older schema/bootstrap stored group ids in
+      <code>deptcode</code>/<code>tlkpdept</code>. In the current app those
+      values are current group ids.
     </p>
     <div class="admin-mapping-grid">
       {% for mapping in admin_mapping_kinds %}
       <article class="admin-mapping-card">
-        <h3>{{ mapping.label }}</h3>
+        <h3>
+          {{ mapping.label }} {% if mapping.legacy_tooltip %}
+          <span
+            class="admin-inline-help"
+            tabindex="0"
+            title="{{ mapping.legacy_tooltip }}"
+            >why <code>dept</code>?</span
+          >
+          {% endif %}
+        </h3>
         <p>{{ mapping.description }}</p>
         <div class="admin-mapping-actions">
           <a
@@ -637,13 +1217,29 @@ body %}
               value="{{ request.query_string.decode('utf-8', errors='ignore') }}"
             />
             <input type="hidden" name="mapping_kind" value="{{ mapping.id }}" />
+            <label
+              for="admin-mapping-{{ mapping.id }}"
+              class="admin-config-field"
+            >
+              current values (CSV)
+              <textarea
+                id="admin-mapping-{{ mapping.id }}"
+                name="mapping_text"
+                class="admin-config-textarea"
+                rows="8"
+                spellcheck="false"
+                autocomplete="off"
+              >
+{{- mapping.current_value -}}
+</textarea
+              >
+            </label>
             <input
               type="file"
               name="mapping_file"
               accept=".csv,text/csv,text/plain"
-              required
             />
-            <button type="submit">import</button>
+            <button type="submit">save mapping</button>
           </form>
         </div>
       </article>
@@ -651,5 +1247,8 @@ body %}
     </div>
   </section>
 </article>
-<script src="{{ url_for('static', filename='js/admin-audit.js') }}"></script>
+<script
+  nonce="{{ current_csp_nonce() }}"
+  src="{{ static_asset_url('js/admin-audit.js') }}"
+></script>
 {% endblock %}

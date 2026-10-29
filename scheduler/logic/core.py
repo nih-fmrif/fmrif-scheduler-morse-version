@@ -808,8 +808,7 @@ class DevicePerms(object):
 
     @property
     def template(self) -> bool:
-        # TODO: templates flag in DB/UI is currently not what gates template access
-        return self._slot or self.doa
+        return self._tmpl or self.doa
 
     @property
     def tech(self) -> bool:

@@ -8,8 +8,15 @@ block body %}
     <a href="{{ next_url }}">continue</a>.
   </p>
 </div>
-<script id="auth-callback-next-url" type="application/json">
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="auth-callback-next-url"
+  type="application/json"
+>
   {{ next_url|tojson }}
 </script>
-<script src="{{ url_for('static', filename='js/auth-callback.js') }}"></script>
+<script
+  nonce="{{ current_csp_nonce() }}"
+  src="{{ static_asset_url('js/auth-callback.js') }}"
+></script>
 {% endblock %}

@@ -1,11 +1,36 @@
 const container = document.querySelector(".apply-helper");
+const noJsHelper = container?.querySelector(".apply-helper-no-js");
+const jsHelper = container?.querySelector(".apply-helper-js");
 const templates = document.querySelector("#templates");
 const form = document.querySelector(".template-apply");
-const submitButton = form?.querySelector("button[type='submit']");
+const submitButton = form?.querySelector("button[data-js-submit]");
+const templatesField = templates?.closest("input-set");
+const initialServerErrorMessage =
+  form?.dataset.hasServerErrors === "1"
+    ? form.dataset.serverErrorMessage ||
+      templatesField
+        ?.querySelector("input-errors input-error span")
+        ?.textContent?.trim() ||
+      ""
+    : "";
+
+const EMPTY_TEMPLATES_MESSAGE = "enter one or more template codes";
 
 if (container && templates) {
   const readyTemplates = new Set();
   const blockedTemplates = new Map();
+  let dirty =
+    (form?.dataset.initialState || "pristine") != "pristine" ||
+    Boolean(initialServerErrorMessage);
+  let serverErrorMessage = initialServerErrorMessage;
+
+  if (templates.required) {
+    templates.required = false;
+    templates.setAttribute("aria-required", "true");
+  }
+
+  noJsHelper?.setAttribute("hidden", "");
+  jsHelper?.removeAttribute("hidden");
 
   container.querySelectorAll("button[data-tc]").forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) {
@@ -15,12 +40,21 @@ if (container && templates) {
     if (!templateCode) {
       return;
     }
-    if (button.disabled) {
+    if (button.dataset.templateState === "blocking") {
       blockedTemplates.set(templateCode, button.title || "repair required");
       return;
     }
     readyTemplates.add(templateCode);
   });
+
+  const setFieldState = (state) => {
+    if (templatesField) {
+      templatesField.dataset.fieldState = state;
+    }
+    if (form) {
+      form.dataset.formState = state;
+    }
+  };
 
   const normalizeCodes = () =>
     Array.from((templates.value || "").replace(/\s+/g, ""))
@@ -63,18 +97,64 @@ if (container && templates) {
     return messages.join(" ");
   };
 
-  const syncValidity = () => {
-    templates.setCustomValidity(validationMessage());
-    return !templates.validationMessage;
+  const syncFormState = ({ forSubmit = false } = {}) => {
+    const codes = normalizeCodes();
+    let state = "pristine";
+    let valid = false;
+
+    if (serverErrorMessage) {
+      templates.setCustomValidity(serverErrorMessage);
+      state = "invalid";
+    } else if (!dirty) {
+      templates.setCustomValidity("");
+      state = "pristine";
+    } else if (!codes.length) {
+      if (forSubmit) {
+        templates.setCustomValidity(EMPTY_TEMPLATES_MESSAGE);
+        state = "invalid";
+      } else {
+        templates.setCustomValidity("");
+        state = "empty";
+      }
+    } else {
+      const message = validationMessage();
+      if (message) {
+        templates.setCustomValidity(message);
+        state = "invalid";
+      } else {
+        templates.setCustomValidity("");
+        state = "valid";
+        valid = true;
+      }
+    }
+
+    setFieldState(state);
+    if (submitButton instanceof HTMLButtonElement) {
+      submitButton.disabled = !valid;
+    }
+    return valid;
   };
 
   const blockInvalidSubmit = (event) => {
-    if (syncValidity()) {
+    dirty = true;
+    const clientValid = syncFormState({ forSubmit: true });
+    const htmlValid = templates.checkValidity();
+    if (clientValid && htmlValid) {
       return;
     }
     event.preventDefault();
     event.stopImmediatePropagation();
     templates.reportValidity();
+  };
+
+  const markDirty = () => {
+    dirty = true;
+    serverErrorMessage = "";
+    form?.setAttribute("data-initial-state", "dirty");
+    if (form) {
+      form.dataset.hasServerErrors = "0";
+      form.dataset.serverErrorMessage = "";
+    }
   };
 
   container.addEventListener("click", (event) => {
@@ -86,18 +166,25 @@ if (container && templates) {
     if (!button) {
       return;
     }
-    if (button.disabled) {
+    if (button.dataset.templateState === "blocking") {
       return;
     }
     event.preventDefault();
+    markDirty();
     templates.value += button.dataset.tc || "";
-    syncValidity();
+    syncFormState();
   });
 
-  templates.addEventListener("input", syncValidity);
-  templates.addEventListener("change", syncValidity);
+  templates.addEventListener("input", () => {
+    markDirty();
+    syncFormState();
+  });
+  templates.addEventListener("change", () => {
+    markDirty();
+    syncFormState();
+  });
   form?.addEventListener("submit", blockInvalidSubmit);
   submitButton?.addEventListener("click", blockInvalidSubmit, true);
-  syncValidity();
+  syncFormState();
   container.classList.add("js-loaded");
 }

@@ -1,6 +1,6 @@
 import { request } from '@playwright/test';
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
+const baseURL = process.env.TEST_BASE_URL || 'http://localhost:5051';
 const timeoutMs = Number.parseInt(process.env.PLAYWRIGHT_APP_READY_TIMEOUT_MS ?? '60000', 10);
 const intervalMs = Number.parseInt(process.env.PLAYWRIGHT_APP_READY_INTERVAL_MS ?? '1000', 10);
 

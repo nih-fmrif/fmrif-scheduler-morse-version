@@ -90,8 +90,27 @@ body.body-scroll-locked {
   --dialog-overlay: rgb(0 0 0 / 0.5);
 }
 
+:root[data-theme="dark"] {
+  --fg: #afaeae;
+  --bg: #1c1c25;
+  --link: #30a3e8;
+  --link-active: #f2564f;
+  --link-visited: #e0a6eb;
+  --ok: #85c252;
+  --warn: #cc0;
+  --err: var(--link-active);
+  --focus: var(--warn);
+  --btn: var(--input);
+  --btn-bg: #333;
+  --btn-hover: #7c7c7c;
+  --input: #eee;
+  --input-bg: #222;
+  --border: #dad0b3;
+  --dialog-overlay: rgb(0 0 0 / 0.7);
+}
+
 @media screen and (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --fg: #afaeae;
     --bg: #1c1c25;
     --link: #30a3e8;
@@ -144,7 +163,6 @@ body {
 @media screen {
   html,
   body {
-    color-scheme: light dark;
     accent-color: var(--link);
   }
 }
@@ -208,7 +226,6 @@ fieldset {
 }
 
 .validation-icons > :first-child,
-.edit-icons svg:not(:nth-child(2)),
 input-error svg,
 .legend .red {
   color: var(--err);

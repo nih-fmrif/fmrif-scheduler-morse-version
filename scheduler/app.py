@@ -1,19 +1,34 @@
+import hashlib
 import os
 import re
 import secrets
+import subprocess
+import traceback
+import uuid
 from datetime import timedelta
 from functools import wraps
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import click
-from flask import Blueprint, Flask, abort, current_app, g, redirect, request
+from flask import (
+    Blueprint,
+    Flask,
+    abort,
+    current_app,
+    g,
+    got_request_exception,
+    redirect,
+    request,
+)
 from flask.helpers import flash, url_for
+from flask.json import jsonify
 from flask.templating import render_template
 from flask.wrappers import Response
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 from markupsafe import Markup, escape
 from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.exceptions import HTTPException
 
 from scheduler.auth.session import (
     authenticate_bearer_token,
@@ -28,7 +43,7 @@ from scheduler.auth.views import auth
 
 from . import logic, message, model
 from .config import app_config, normalize_app_env, settings
-from .logging import configure_app_logging
+from .logging import configure_app_logging, redact_string, redact_value
 from .routes.entity_routes import register_entity_routes
 from .routes.rbac_routes import audit_rbac_action, register_rbac_blueprint
 
@@ -48,6 +63,12 @@ def current_csp_nonce() -> str:
 
 core = Blueprint("", __name__)
 _SHARED_SESSION_INTERFACE = None
+_APP_ERROR_REFERENCE_PREFIX = "APP-ERR"
+_APP_ERROR_BODY_PREVIEW_CHARS = 4096
+_APP_ERROR_HEADER_NAMES = ("Accept", "Content-Type", "Referer")
+_CSP_REPORT_TEXT_LIMIT = 2048
+_CSP_REPORTING_GROUP = "csp-endpoint"
+_STATIC_ASSET_VERSION: Optional[str] = None
 
 
 def proxy_fix(app):
@@ -56,6 +77,37 @@ def proxy_fix(app):
         from werkzeug.middleware.proxy_fix import ProxyFix
 
         app.wsgi_app = ProxyFix(app.wsgi_app, **counts)
+
+
+def _resolve_static_asset_version() -> str:
+    global _STATIC_ASSET_VERSION
+    if _STATIC_ASSET_VERSION is not None:
+        return _STATIC_ASSET_VERSION
+
+    for name in (
+        "STATIC_ASSET_VERSION",
+        "GIT_SHA",
+        "SOURCE_VERSION",
+        "GITHUB_SHA",
+    ):
+        value = str(os.environ.get(name, "") or "").strip()
+        if value != "":
+            _STATIC_ASSET_VERSION = value[:12]
+            return _STATIC_ASSET_VERSION
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        _STATIC_ASSET_VERSION = completed.stdout.strip()
+    except (FileNotFoundError, PermissionError, subprocess.SubprocessError):
+        _STATIC_ASSET_VERSION = ""
+    return _STATIC_ASSET_VERSION
 
 
 def create_app() -> Flask:
@@ -71,6 +123,7 @@ def create_app() -> Flask:
     app.config["AUTH_TEST_ENABLED"] = settings.auth_test.enabled
     app.config["SESSION_COOKIE_SECURE"] = settings.session.cookie_secure
     app.config["TEMPLATES_AUTO_RELOAD"] = settings.core.debug
+    app.config["STATIC_ASSET_VERSION"] = _resolve_static_asset_version()
 
     if app_env == "development":
         os.environ.setdefault("FLASK_ENV", "development")
@@ -80,7 +133,7 @@ def create_app() -> Flask:
         app.config["TEMPLATES_AUTO_RELOAD"] = True
 
     if not app.config.get("SESSION_COOKIE_PATH"):
-        app.config["SESSION_COOKIE_PATH"] = app.config.get("APPLICATION_ROOT") or "/"
+        app.config["SESSION_COOKIE_PATH"] = "/"
 
     app.config.update(
         SESSION_COOKIE_SECURE=settings.session.cookie_secure,
@@ -129,6 +182,13 @@ def create_app() -> Flask:
         subpage_nav_fn=subpage_nav,
     )
 
+    @got_request_exception.connect_via(app)
+    def _capture_request_exception(
+        sender: Flask, exception: BaseException, **_extra: object
+    ) -> None:
+        _ = sender
+        _capture_unhandled_app_exception(exception)
+
     return app
 
 
@@ -159,6 +219,153 @@ def setup_user():
 
     # Try to get user from session
     g.user = get_user_from_session()
+
+
+def _request_client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "").strip()
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        if first:
+            return first
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    remote = (request.remote_addr or "").strip()
+    return remote or "unknown"
+
+
+def _csp_policy_with_reporting(policy: str) -> str:
+    normalized = (policy or "").strip()
+    if normalized == "":
+        return normalized
+    if re.search(r"(?i)\breport-to\b", normalized):
+        return normalized
+    separator = "" if normalized.endswith(";") else ";"
+    return f"{normalized}{separator} report-to {_CSP_REPORTING_GROUP}"
+
+
+def _csp_report_entries(payload: Any) -> List[Tuple[str, Dict[str, Any]]]:
+    if not isinstance(payload, list):
+        return []
+
+    entries: List[Tuple[str, Dict[str, Any]]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        report_type = str(item.get("type", "") or "").strip().lower()
+        if report_type != "csp-violation":
+            continue
+        body = item.get("body")
+        if isinstance(body, dict):
+            entries.append((report_type, body))
+    return entries
+
+
+def _csp_report_text(
+    report: Dict[str, Any], *keys: str, limit: int = _CSP_REPORT_TEXT_LIMIT
+) -> str:
+    for key in keys:
+        value = report.get(key)
+        if value is None:
+            continue
+        token = str(value).strip()
+        if token != "":
+            return token[:limit]
+    return ""
+
+
+def _csp_report_int(report: Dict[str, Any], *keys: str) -> Optional[int]:
+    for key in keys:
+        value = report.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _csp_report_actor() -> str:
+    user = getattr(g, "user", None)
+    if user is None:
+        return "anonymous"
+    user_id = str(getattr(user, "id", "") or "").strip()
+    return user_id or "anonymous"
+
+
+@core.route("/csp-report", methods=["POST"])
+def csp_report():
+    if not logic.csp_violation_event_table_available():
+        return ("", 204)
+
+    payload = request.get_json(silent=True, force=True)
+    entries = _csp_report_entries(payload)
+    if not entries:
+        return ("", 204)
+
+    actor = _csp_report_actor()
+    ip_addr = _request_client_ip()
+    user_agent = request.headers.get("User-Agent", "")
+
+    try:
+        for report_type, report in entries:
+            sanitized_report = redact_value(report)
+            if not isinstance(sanitized_report, dict):
+                continue
+            logic.record_csp_violation_event(
+                report_type=report_type,
+                actor=actor,
+                ip_addr=ip_addr,
+                user_agent=user_agent,
+                document_uri=_csp_report_text(
+                    sanitized_report, "document-uri", "documentURL"
+                ),
+                referrer=_csp_report_text(sanitized_report, "referrer"),
+                blocked_uri=_csp_report_text(
+                    sanitized_report, "blocked-uri", "blockedURL"
+                ),
+                violated_directive=_csp_report_text(
+                    sanitized_report,
+                    "violated-directive",
+                    "violatedDirective",
+                ),
+                effective_directive=_csp_report_text(
+                    sanitized_report,
+                    "effective-directive",
+                    "effectiveDirective",
+                ),
+                original_policy=_csp_report_text(
+                    sanitized_report,
+                    "original-policy",
+                    "originalPolicy",
+                    limit=8192,
+                ),
+                source_file=_csp_report_text(
+                    sanitized_report, "source-file", "sourceFile"
+                ),
+                line_number=_csp_report_int(
+                    sanitized_report, "line-number", "lineNumber"
+                ),
+                column_number=_csp_report_int(
+                    sanitized_report, "column-number", "columnNumber"
+                ),
+                disposition=_csp_report_text(sanitized_report, "disposition"),
+                status_code=_csp_report_int(
+                    sanitized_report, "status-code", "statusCode"
+                ),
+                script_sample=_csp_report_text(
+                    sanitized_report, "script-sample", "sample", limit=512
+                ),
+                report_body=sanitized_report,
+            )
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception("Failed to persist CSP violation report")
+    except Exception:
+        current_app.logger.exception("Failed to process CSP violation report")
+
+    return ("", 204)
 
 
 def _cached_memberships() -> List[str]:
@@ -369,15 +576,15 @@ def inject_template_context():
         is_admin_user = _cached_is_admin() if user is g.user else logic.is_admin(user)
         menu_links.append(("email", url_for("mailing_lists"), "email"))
         if user.active:
-            menu_links.insert(0, ("join form", url_for("join_form"), "join"))
+            menu_links.insert(0, ("join form", url_for("join_form"), "form"))
             if _cached_show_tech_join_form(user):
                 menu_links.append(
-                    ("technologist join form", url_for("join_form_tech"), "tech")
+                    ("technologist join form", url_for("join_form_tech"), "form")
                 )
         if _rbac_user_can_access(user, is_admin=is_admin_user):
-            admin_menu_links.append(("RBAC", url_for("rbac"), "lock"))
+            admin_menu_links.append(("RBAC", url_for("rbac"), "rbac"))
         if is_admin_user:
-            admin_menu_links.append(("Admin Panel", url_for("app_issues"), "warning"))
+            admin_menu_links.append(("Admin Panel", url_for("app_issues"), "admin"))
 
     return {
         "logout_form": logic.CsrfOnlyForm(),
@@ -395,7 +602,7 @@ def apply_security_headers(response: Response):
     response.headers["Referrer-Policy"] = settings.security.referrer_policy
 
     if settings.security.enable_csp:
-        policy = settings.security.csp_policy
+        policy = _csp_policy_with_reporting(settings.security.csp_policy)
         nonce = getattr(g, "csp_nonce", "")
         if "{nonce}" in policy:
             policy = policy.replace("{nonce}", nonce)
@@ -409,6 +616,9 @@ def apply_security_headers(response: Response):
             response.headers.pop("Content-Security-Policy", None)
         else:
             response.headers.pop("Content-Security-Policy-Report-Only", None)
+        response.headers["Reporting-Endpoints"] = (
+            f'{_CSP_REPORTING_GROUP}="{url_for("csp_report")}"'
+        )
 
     if settings.security.enable_hsts and request.is_secure:
         hsts_parts = [f"max-age={settings.security.hsts_max_age}"]
@@ -437,6 +647,15 @@ def _current_csp_nonce_global() -> str:
     return current_csp_nonce()
 
 
+@core.app_template_global("static_asset_url")
+def _static_asset_url_global(filename: str) -> str:
+    params: Dict[str, str] = {"filename": filename}
+    version = str(current_app.config.get("STATIC_ASSET_VERSION", "") or "").strip()
+    if version != "":
+        params["v"] = version
+    return url_for("static", **params)
+
+
 def active_user_required(f):
     @wraps(f)
     @require_jwt
@@ -462,11 +681,176 @@ def admin_only(f):
 ## Error handlers
 
 
+def _request_prefers_json() -> bool:
+    if request.path.startswith("/json/"):
+        return True
+    accept = request.accept_mimetypes
+    if not accept:
+        return False
+    best = accept.best_match(["application/json", "text/html"])
+    return (
+        best == "application/json" and accept["application/json"] >= accept["text/html"]
+    )
+
+
+def _request_client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "").strip()
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        if first:
+            return first
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    remote = (request.remote_addr or "").strip()
+    return remote or "unknown"
+
+
+def _error_reference_id() -> str:
+    return f"{_APP_ERROR_REFERENCE_PREFIX}-{uuid.uuid4().hex[:12].upper()}"
+
+
+def _redacted_multidict(multi_dict) -> Dict[str, object]:
+    redacted: Dict[str, object] = {}
+    for key in multi_dict.keys():
+        values = [str(value) for value in multi_dict.getlist(key)]
+        payload: object = values[0] if len(values) == 1 else values
+        masked = redact_value({str(key): payload})
+        if len(values) == 1:
+            redacted[str(key)] = masked[str(key)]
+        else:
+            redacted[str(key)] = masked[str(key)]
+    return redacted
+
+
+def _error_request_context_payload() -> Dict[str, object]:
+    user = getattr(g, "user", None)
+    payload: Dict[str, object] = {
+        "actor": {
+            "id": str(getattr(user, "id", "") or "").strip() or "anonymous",
+            "active": bool(getattr(user, "active", False)),
+        },
+        "request": {
+            "method": request.method,
+            "path": request.path,
+            "endpoint": request.endpoint or "",
+            "view_args": redact_value(dict(request.view_args or {})),
+            "query": _redacted_multidict(request.args),
+            "form": _redacted_multidict(request.form),
+            "headers": {
+                key.lower().replace("-", "_"): redact_string(value.strip())
+                for key in _APP_ERROR_HEADER_NAMES
+                if (value := request.headers.get(key, ""))
+            },
+        },
+    }
+
+    try:
+        json_body = request.get_json(silent=True)
+    except Exception:
+        json_body = None
+    if json_body is not None:
+        payload["request"]["json"] = redact_value(json_body)
+
+    raw_body = ""
+    try:
+        raw_body = request.get_data(cache=True, as_text=True) or ""
+    except Exception:
+        raw_body = ""
+    if raw_body != "":
+        trimmed = raw_body[:_APP_ERROR_BODY_PREVIEW_CHARS]
+        if len(raw_body) > _APP_ERROR_BODY_PREVIEW_CHARS:
+            trimmed = f"{trimmed}..."
+        payload["request"]["raw_body_preview"] = redact_string(trimmed)
+
+    return payload
+
+
+def _top_application_frame(exception: BaseException) -> str:
+    frames = traceback.extract_tb(exception.__traceback__)
+    if len(frames) == 0:
+        return "unknown"
+
+    for frame in reversed(frames):
+        marker = f"{os.sep}scheduler{os.sep}"
+        if marker in frame.filename:
+            suffix = frame.filename.split(marker, 1)[1]
+            return f"{suffix}:{frame.name}:{frame.lineno}"
+
+    frame = frames[-1]
+    return f"{os.path.basename(frame.filename)}:{frame.name}:{frame.lineno}"
+
+
+def _app_error_fingerprint(exception: BaseException) -> str:
+    raw = "|".join(
+        [
+            exception.__class__.__name__,
+            str(request.endpoint or request.path or ""),
+            _top_application_frame(exception),
+        ]
+    )
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+    return f"{exception.__class__.__name__}:{digest}"
+
+
+def _capture_unhandled_app_exception(exception: BaseException) -> Optional[str]:
+    if isinstance(exception, HTTPException):
+        return None
+    if getattr(g, "_app_error_captured", False):
+        return getattr(g, "_app_error_reference_id", None)
+
+    g._app_error_captured = True
+
+    try:
+        model.db.session.rollback()
+    except Exception:
+        pass
+
+    if not logic.app_error_event_table_available():
+        return None
+
+    reference_id = _error_reference_id()
+    stack_trace = redact_string(
+        "".join(
+            traceback.format_exception(
+                type(exception), exception, exception.__traceback__
+            )
+        )
+    )
+    try:
+        stored = logic.record_app_error_event(
+            reference_id=reference_id,
+            actor=str(getattr(getattr(g, "user", None), "id", "") or "anonymous"),
+            ip_addr=_request_client_ip(),
+            user_agent=redact_string(request.headers.get("User-Agent", "").strip()),
+            method=request.method,
+            where_path=request.path,
+            endpoint=request.endpoint or "",
+            status_code=500,
+            exception_type=exception.__class__.__name__,
+            exception_message=redact_string(
+                str(exception) or "Unhandled application error"
+            ),
+            fingerprint=_app_error_fingerprint(exception),
+            request_context=_error_request_context_payload(),
+            stack_trace=stack_trace,
+        )
+    except SQLAlchemyError:
+        current_app.logger.exception("Failed to persist app error event")
+        return None
+
+    if stored:
+        g._app_error_reference_id = reference_id
+        return reference_id
+    return None
+
+
 def render_error_page(
     code: int,
     title: str,
     detail: Optional[str] = None,
     show_login: bool = False,
+    reference_id: str = "",
 ) -> Tuple[str, int]:
     data = {
         "code": code,
@@ -474,6 +858,7 @@ def render_error_page(
         "detail": detail,
         "assurance": "The application administrators have been notified.",
         "show_login": show_login,
+        "reference_id": reference_id,
         **breadcrumb(),
     }
     return render_template("error.html", **data), code
@@ -527,6 +912,28 @@ def not_found(e):
         "Page Not Found",
         "The page you requested could not be found.",
         show_login=g.user is None,
+    )
+
+
+@core.app_errorhandler(500)
+def internal_server_error(e):
+    _ = e
+    reference_id = str(getattr(g, "_app_error_reference_id", "") or "")
+    if _request_prefers_json():
+        payload = {
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred.",
+        }
+        if reference_id != "":
+            payload["reference_id"] = reference_id
+        return jsonify(payload), 500
+
+    detail = "An unexpected error occurred while processing your request."
+    return render_error_page(
+        500,
+        "Internal Server Error",
+        detail,
+        reference_id=reference_id,
     )
 
 
@@ -804,6 +1211,7 @@ def join_form_tech():
             how="form",
             what=f"user={g.user.id}, group=DEV, approved=true",
         )
+        logic.notify_dev_pi_of_tech_autoapproval(g.user)
         logic.notify_user_of_tech_join_request_outcome(True, g.user)
         try:
             model.db.session.commit()

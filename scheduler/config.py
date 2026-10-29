@@ -20,7 +20,7 @@ Pydantic-settings is used to load the environment variables from the .env file.
 import logging
 import os
 from typing import Dict, List, Optional
-from urllib.parse import quote
+from urllib.parse import SplitResult, quote, urlsplit, urlunsplit
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,6 +37,7 @@ PLACEHOLDER_UUID = "00000000-0000-0000-0000-000000000000"
 APP_ENV_DEFAULT = "development"
 PRODUCTION_ENVIRONMENTS = {"prod", "production", "stage", "staging"}
 DEVELOPMENT_ENVIRONMENTS = {"dev", "development", "local", "test", "testing"}
+AUTH_CALLBACK_PATH = "/auth/callback"
 
 
 def normalize_app_env(value: str | None) -> str:
@@ -60,6 +61,31 @@ def _is_mailpit_configured_for(env: str, mail_server: str) -> bool:
         var in os.environ and str(os.environ.get(var, "")).strip()
         for var in mailpit_variables
     )
+
+
+def parse_entra_redirect_uri(value: str) -> SplitResult:
+    redirect_uri = value.strip()
+    if not redirect_uri:
+        raise ValueError("ENTRA__REDIRECT_URI must not be empty")
+
+    parsed = urlsplit(redirect_uri)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(
+            "ENTRA__REDIRECT_URI must be an absolute http(s) URL ending with "
+            f"{AUTH_CALLBACK_PATH}"
+        )
+
+    if parsed.path != AUTH_CALLBACK_PATH:
+        raise ValueError(
+            f"ENTRA__REDIRECT_URI must use the root callback path {AUTH_CALLBACK_PATH}"
+        )
+
+    return parsed
+
+
+def derive_entra_edge_base_url(value: str) -> str:
+    parsed = parse_entra_redirect_uri(value)
+    return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
 class EntraConfig(BaseModel):
@@ -92,6 +118,15 @@ class EntraConfig(BaseModel):
             raise ValueError(
                 "ENTRA__ALLOWED_ALGORITHMS must include at least one value"
             )
+        return normalized
+
+    @field_validator("redirect_uri")
+    @classmethod
+    def validate_redirect_uri(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            return ""
+        parse_entra_redirect_uri(normalized)
         return normalized
 
     @field_validator("bearer_auto_provision_domains")
@@ -132,6 +167,12 @@ class EntraConfig(BaseModel):
             audiences.append(api_audience)
         return audiences
 
+    @property
+    def edge_base_url(self) -> str:
+        if not self.redirect_uri:
+            return ""
+        return derive_entra_edge_base_url(self.redirect_uri)
+
 
 class DatabaseConfig(BaseModel):
     # Required credentials with development defaults
@@ -153,7 +194,6 @@ class ServerConfig(BaseModel):
     server_name: str = (
         ""  # Empty allows Flask to work with reverse proxies (nginx, etc.)
     )
-    application_root: str = ""
 
 
 class MailConfig(BaseModel):
@@ -211,8 +251,10 @@ class SecurityConfig(BaseModel):
     csp_report_only: bool = False
     csp_policy: str = (
         "default-src 'self'; "
-        "script-src 'self'; "
-        "style-src 'self' 'nonce-{nonce}'; "
+        "script-src 'self' 'nonce-{nonce}' 'strict-dynamic'; "
+        "script-src-attr 'none'; "
+        "style-src 'self'; "
+        "style-src-attr 'none'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
         "connect-src 'self'; "
@@ -224,6 +266,18 @@ class SecurityConfig(BaseModel):
     auth_rate_limit_enabled: bool = True
     auth_rate_limit_window_seconds: int = 60
     auth_rate_limit_max_requests: int = 30
+
+    @field_validator("csp_policy")
+    @classmethod
+    def validate_csp_policy(cls, value: str) -> str:
+        normalized = value.strip()
+        lowered = normalized.lower()
+        if "report-uri" in lowered or "report-to" in lowered:
+            raise ValueError(
+                "SECURITY__CSP_POLICY must not define report-uri/report-to; "
+                "the app injects Reporting API directives and headers."
+            )
+        return normalized
 
 
 class LoggingConfig(BaseModel):
@@ -425,6 +479,7 @@ class Settings(BaseSettings):
                     "Missing required Entra settings when APP_ENV is production: "
                     + ", ".join(missing)
                 )
+            _ = self.entra.edge_base_url
             if self.core.debug:
                 raise ValueError("CORE__DEBUG must be false when APP_ENV is production")
             if (
@@ -542,9 +597,6 @@ class AppConfig(dict):
         # Only set SERVER_NAME if not empty (for reverse proxy compatibility)
         if settings.server.server_name.strip():
             config_dict["SERVER_NAME"] = settings.server.server_name
-        # Only set APPLICATION_ROOT if not empty to avoid empty cookie paths
-        if settings.server.application_root.strip():
-            config_dict["APPLICATION_ROOT"] = settings.server.application_root
 
         self.update(config_dict)
 

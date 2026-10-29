@@ -39,7 +39,7 @@ repos:
           language: system
           pass_filenames: false
         - id: csp-inline-style-nonce
-          name: csp inline style nonce
+          name: no inline template styles
           entry: bash scripts/check-csp-inline-style-nonce.sh
           language: system
           pass_filenames: false

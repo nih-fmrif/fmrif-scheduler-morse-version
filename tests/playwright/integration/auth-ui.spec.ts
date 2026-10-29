@@ -24,6 +24,41 @@ test.describe('Auth UI (Mock Profiles)', () => {
       await page.goto('/auth/login');
       await expect(page).toHaveURL(/\/$/);
     });
+
+    test('should persist theme selection from the account menu', async ({ page }) => {
+      await page.emulateMedia({ colorScheme: 'light' });
+      await page.goto('/');
+      await waitForAppShell(page);
+
+      await page.locator('#user-menu-toggle').click();
+      await expect(
+        page.locator('[data-theme-toggle]').getByRole('button', { name: 'Auto' })
+      ).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('[data-theme-status]')).toContainText('Following system (light)');
+
+      await page.locator('[data-theme-toggle]').getByRole('button', { name: 'Dark' }).click();
+      await expect.poll(() =>
+        page.evaluate(() => document.documentElement.dataset.theme ?? null)
+      ).toBe('dark');
+      await expect(page.locator('[data-theme-status]')).toContainText('Dark theme active');
+
+      await page.reload();
+      await waitForAppShell(page);
+      await expect.poll(() =>
+        page.evaluate(() => document.documentElement.dataset.theme ?? null)
+      ).toBe('dark');
+
+      await page.locator('#user-menu-toggle').click();
+      await expect(
+        page.locator('[data-theme-toggle]').getByRole('button', { name: 'Dark' })
+      ).toHaveAttribute('aria-pressed', 'true');
+
+      await page.locator('[data-theme-toggle]').getByRole('button', { name: 'Auto' }).click();
+      await expect.poll(() =>
+        page.evaluate(() => document.documentElement.dataset.theme ?? null)
+      ).toBe(null);
+      await expect(page.locator('[data-theme-status]')).toContainText('Following system (light)');
+    });
   });
 
   test.describe('member profile', () => {

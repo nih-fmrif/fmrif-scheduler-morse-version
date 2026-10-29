@@ -1,7 +1,7 @@
 {% extends "page.html" %} {% import "svg/icons.html" as icons %} {% block title
 %}{{ title }}{% endblock %} {% block body %}
 <article class="list-with-description" aria-labelledby="list-lbl">
-  <h1 id="list-lbl">{{ icons.person_circle() }} Groups</h1>
+  <h1 id="list-lbl">{{ icons.people() }} Groups</h1>
   <ul>
     {% for group in groups %}
     <li>

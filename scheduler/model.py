@@ -530,3 +530,73 @@ class AppSetting(Model):
         server_default=func.now(),
     )
     updated_by: Optional[str] = db.Column("updated_by", db.String(20), nullable=True)
+
+
+class AppErrorEvent(Model):
+    __tablename__ = "app_error_event"
+
+    id: int = db.Column("eventid", db.BigInteger(), primary_key=True)
+    reference_id: str = db.Column(
+        "reference_id", db.String(32), nullable=False, unique=True
+    )
+    occurred_at: Any = db.Column(
+        "occurred_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    actor: str = db.Column("actor", db.String(20), nullable=False)
+    ip: Optional[str] = db.Column("ip_addr", db.String(64), nullable=True)
+    user_agent: str = db.Column("user_agent", db.Text(), nullable=False, default="")
+    method: str = db.Column("method", db.String(8), nullable=False)
+    where_path: str = db.Column("where_path", db.Text(), nullable=False)
+    endpoint: Optional[str] = db.Column("endpoint", db.Text(), nullable=True)
+    status_code: int = db.Column(
+        "status_code", db.Integer(), nullable=False, default=500
+    )
+    exception_type: str = db.Column("exception_type", db.Text(), nullable=False)
+    exception_message: str = db.Column("exception_message", db.Text(), nullable=False)
+    fingerprint: str = db.Column("fingerprint", db.Text(), nullable=False)
+    request_context: Any = db.Column("request_context", db.JSON(), nullable=False)
+    stack_trace: str = db.Column("stack_trace", db.Text(), nullable=False)
+
+
+class CspViolationEvent(Model):
+    __tablename__ = "csp_violation_event"
+
+    id: int = db.Column("eventid", db.BigInteger(), primary_key=True)
+    occurred_at: Any = db.Column(
+        "occurred_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    report_type: str = db.Column("report_type", db.String(32), nullable=False)
+    actor: str = db.Column("actor", db.String(20), nullable=False)
+    ip: Optional[str] = db.Column("ip_addr", db.String(64), nullable=True)
+    user_agent: str = db.Column("user_agent", db.Text(), nullable=False, default="")
+    document_uri: str = db.Column("document_uri", db.Text(), nullable=False, default="")
+    referrer: Optional[str] = db.Column("referrer", db.Text(), nullable=True)
+    blocked_uri: Optional[str] = db.Column("blocked_uri", db.Text(), nullable=True)
+    violated_directive: str = db.Column(
+        "violated_directive", db.Text(), nullable=False, default=""
+    )
+    effective_directive: Optional[str] = db.Column(
+        "effective_directive", db.Text(), nullable=True
+    )
+    original_policy: Optional[str] = db.Column(
+        "original_policy", db.Text(), nullable=True
+    )
+    source_file: Optional[str] = db.Column("source_file", db.Text(), nullable=True)
+    line_number: Optional[int] = db.Column("line_number", db.Integer(), nullable=True)
+    column_number: Optional[int] = db.Column(
+        "column_number", db.Integer(), nullable=True
+    )
+    disposition: str = db.Column("disposition", db.String(16), nullable=False)
+    status_code: Optional[int] = db.Column("status_code", db.Integer(), nullable=True)
+    script_sample: Optional[str] = db.Column("script_sample", db.Text(), nullable=True)
+    report_body: Any = db.Column("report_body", db.JSON(), nullable=False)

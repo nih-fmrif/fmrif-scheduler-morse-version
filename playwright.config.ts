@@ -37,7 +37,7 @@ function loadEnvFile(filePath: string): void {
 
 loadEnvFile(path.resolve(__dirname, '.env'));
 
-const configuredBaseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
+const configuredBaseURL = process.env.TEST_BASE_URL || 'http://localhost:5051';
 const flaskApp = process.env.FLASK_APP || 'scheduler.app:create_app';
 
 function parseBooleanEnv(name: string, fallback: boolean = false): boolean {
@@ -109,7 +109,7 @@ function shouldIgnoreHTTPSErrorsByDefault(urlString: string): boolean {
 }
 
 const baseURL = normalizeBaseURL(syncLocalBaseURLPort(configuredBaseURL));
-process.env.PLAYWRIGHT_BASE_URL = baseURL;
+process.env.TEST_BASE_URL = baseURL;
 const proxyServer = normalizeProxyServer(
   process.env.PLAYWRIGHT_PROXY_SERVER ||
   process.env.ALL_PROXY ||

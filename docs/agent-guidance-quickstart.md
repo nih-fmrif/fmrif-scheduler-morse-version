@@ -18,6 +18,16 @@ pixi run test-routes
 pixi run test-integration-ci
 ```
 
+Targeted pytest runs still go through Pixi tasks:
+
+```bash
+pixi run test-unit -- tests/unit/test_some_file.py -q
+pixi run test-routes -- tests/unit/test_some_route_file.py -q
+```
+
+When explicit test selectors are supplied, the task drops its default collection
+root instead of widening scope.
+
 Reuse existing services/data when iterating:
 
 ```bash
@@ -29,6 +39,7 @@ bash run-compose.sh --no-app --resume
 ## Rules
 - Always use Pixi tasks for tests.
 - Do not run ad-hoc test commands that bypass wrappers unless explicitly debugging isolation internals.
+- Prefer `pixi run <suite> -- <selector ...>` for narrowed pytest runs.
 - If scope is already in use, pick a different `FMRIF_RUNTIME_SCOPE`.
 
 ## Deep dive

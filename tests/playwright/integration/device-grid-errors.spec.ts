@@ -21,6 +21,7 @@ test.describe('Device Grid Error Guards', () => {
     });
 
     await openSeededDeviceGrid(page);
+    await expect(page.locator('style')).toHaveCount(0);
 
     const cspStyleErrors = consoleErrors.filter((text) => text.includes('Refused to apply a stylesheet'));
     expect(cspStyleErrors).toEqual([]);

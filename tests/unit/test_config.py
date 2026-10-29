@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from scheduler.config import (
+    AUTH_CALLBACK_PATH,
     AppConfig,
     CoreConfig,
     EntraConfig,
@@ -17,6 +18,8 @@ from scheduler.config import (
     ServerConfig,
     SessionConfig,
     Settings,
+    derive_entra_edge_base_url,
+    parse_entra_redirect_uri,
 )
 
 # tests/unit/test_config.py
@@ -62,7 +65,6 @@ def clean_env(monkeypatch):
         "ENTRA__REDIRECT_URI",
         "ENTRA__JWKS_CACHE_TTL",
         "SERVER__SERVER_NAME",
-        "SERVER__APPLICATION_ROOT",
         "SESSION__COOKIE_NAME",
         "SESSION__COOKIE_SECURE",
         "SESSION__TYPE",
@@ -305,6 +307,31 @@ def test_entra_config_validation():
     assert "custom-audience" in custom_config.audiences
 
 
+def test_entra_redirect_uri_helpers():
+    parsed = parse_entra_redirect_uri("https://app.example.test/auth/callback")
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "app.example.test"
+    assert parsed.path == AUTH_CALLBACK_PATH
+    assert derive_entra_edge_base_url("https://app.example.test/auth/callback") == (
+        "https://app.example.test"
+    )
+
+
+@pytest.mark.parametrize(
+    "redirect_uri,expected_message",
+    [
+        ("not-a-url", "absolute http"),
+        ("https://app.example.test/path/auth/callback", "root callback path"),
+        ("https://app.example.test/auth/callback/", "root callback path"),
+    ],
+)
+def test_entra_redirect_uri_validation_rejects_invalid_values(
+    redirect_uri: str, expected_message: str
+):
+    with pytest.raises((ValidationError, ValueError), match=expected_message):
+        EntraConfig(redirect_uri=redirect_uri)
+
+
 def test_entra_bearer_auto_provision_lists_are_normalized():
     config = EntraConfig(
         bearer_auto_provision_domains=["@NIH.gov", "nih.gov", " ", "@Nih.Gov "],
@@ -317,10 +344,9 @@ def test_entra_bearer_auto_provision_lists_are_normalized():
 
 def test_server_config():
     """Test server configuration"""
-    config = ServerConfig(server_name="test.server:8080", application_root="/app")
+    config = ServerConfig(server_name="test.server:8080")
 
     assert config.server_name == "test.server:8080"
-    assert config.application_root == "/app"
 
 
 def test_database_config_validation():
@@ -365,11 +391,9 @@ def test_server_config_validation():
     """Test ServerConfig validation - empty server_name for reverse proxy compatibility"""
     config = ServerConfig()
     assert config.server_name == ""  # Empty for reverse proxy (nginx) compatibility
-    assert config.application_root == ""
 
-    config = ServerConfig(server_name="test.server:8080", application_root="/app")
+    config = ServerConfig(server_name="test.server:8080")
     assert config.server_name == "test.server:8080"
-    assert config.application_root == "/app"
 
 
 def test_mail_config_validation():
@@ -441,8 +465,24 @@ def test_security_config_validation():
     assert config.auth_rate_limit_max_requests == 30
     assert "default-src 'self'" in config.csp_policy
     assert "script-src 'self'" in config.csp_policy
-    assert "style-src 'self' 'nonce-{nonce}'" in config.csp_policy
+    assert "'nonce-{nonce}'" in config.csp_policy
+    assert "'strict-dynamic'" in config.csp_policy
+    assert "script-src-attr 'none'" in config.csp_policy
+    assert "style-src 'self'" in config.csp_policy
+    assert "style-src-attr 'none'" in config.csp_policy
     assert "'unsafe-inline'" not in config.csp_policy
+
+
+@pytest.mark.parametrize(
+    ("policy", "message"),
+    [
+        ("default-src 'self'; report-uri /csp-report", "report-uri/report-to"),
+        ("default-src 'self'; report-to csp-endpoint", "report-uri/report-to"),
+    ],
+)
+def test_security_config_rejects_custom_reporting_directives(policy, message):
+    with pytest.raises(ValidationError, match=message):
+        SecurityConfig(csp_policy=policy)
 
 
 def _valid_entra_settings() -> dict[str, str]:
@@ -513,6 +553,22 @@ def test_settings_production_rejects_mailpit():
             session={"cookie_secure": True},
             mail={"server": "mailpit", "default_sender": "noreply@example.com"},
             entra=_valid_entra_settings(),
+        )
+
+
+def test_settings_production_requires_root_auth_callback_redirect_uri():
+    with pytest.raises((ValidationError, ValueError), match="root callback path"):
+        Settings(
+            app_env="production",
+            _env_file=None,
+            auth_test={"enabled": False},
+            core={"debug": False, "secret_key": "prod-secret"},
+            session={"cookie_secure": True},
+            mail={"default_sender": "noreply@example.com"},
+            entra={
+                **_valid_entra_settings(),
+                "redirect_uri": "https://app.example.test/prefix/auth/callback",
+            },
         )
 
 

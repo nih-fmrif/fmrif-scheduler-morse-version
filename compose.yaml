@@ -1,5 +1,9 @@
+x-service-platform: &service-platform
+  linux/amd64
+
 services:
   postgres:
+    platform: *service-platform
     image: postgres:15
     environment:
       PGUSER: ${PGUSER}
@@ -25,30 +29,35 @@ services:
       - scheduler_pgdata:/var/lib/postgresql/data
 
   mailpit_app:
+    platform: *service-platform
     image: axllent/mailpit:latest
     ports:
       - "${MAILPIT__PORT:-5445}:8025"
       - "${MAILPIT__SMTP_PORT:-5446}:1025"
 
   mailpit_unit:
+    platform: *service-platform
     image: axllent/mailpit:latest
     ports:
       - "${MAILPIT_UNIT__PORT:-5465}:8025"
       - "${MAILPIT_UNIT__SMTP_PORT:-5466}:1025"
 
   mailpit_routes:
+    platform: *service-platform
     image: axllent/mailpit:latest
     ports:
       - "${MAILPIT_ROUTES__PORT:-5485}:8025"
       - "${MAILPIT_ROUTES__SMTP_PORT:-5486}:1025"
 
   mailpit_integration:
+    platform: *service-platform
     image: axllent/mailpit:latest
     ports:
       - "${MAILPIT_INTEGRATION__PORT:-5505}:8025"
       - "${MAILPIT_INTEGRATION__SMTP_PORT:-5506}:1025"
 
   scheduler:
+    platform: *service-platform
     build:
       context: .
       dockerfile: Dockerfile
@@ -57,14 +66,18 @@ services:
     environment:
       PGHOST: postgres
       PGPORT: 5432
+      APP_SERVER: gunicorn
       SERVER__SERVER_NAME: ${SERVER__SERVER_NAME:-}
       MAIL__SERVER: mailpit_app
       MAIL__PORT: 1025
       MAIL__SUPPRESS_SEND: false
+      MMSCHED_X_FORWARDED_FOR: 1
+      MMSCHED_X_FORWARDED_PROTO: 1
+      MMSCHED_X_FORWARDED_HOST: 1
     labels:
       - "com.fmrif.compose_wrapper=${FMRIF_COMPOSE_WRAPPER:?Set FMRIF_COMPOSE_WRAPPER=run-compose.sh and launch with ./run-compose.sh}"
-    ports:
-      - "${APP_PORT:-5051}:5051"
+    expose:
+      - "5051"
 
     volumes:
       - ./scheduler:/app/scheduler
@@ -75,6 +88,17 @@ services:
         condition: service_healthy
       mailpit_app:
         condition: service_started
+
+  nginx:
+    platform: *service-platform
+    image: nginx:1.27-alpine
+    depends_on:
+      scheduler:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-5051}:80"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
   scheduler_pgdata:

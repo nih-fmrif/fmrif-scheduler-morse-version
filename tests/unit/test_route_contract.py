@@ -14,7 +14,7 @@ from route_contract import (
     RBAC_ROLES,
     ROUTE_EXPECTATIONS,
 )
-from route_seed import seeded_scanner_id, seeded_sched_log_id
+from route_seed import seeded_group_scanner_id, seeded_sched_log_id
 
 from scheduler import model
 from scheduler.auth import views as auth_views
@@ -96,7 +96,7 @@ def _rbac_mutating_route_cases() -> list[tuple[str, str, str]]:
 
 
 def _seed_rbac_contract_data() -> None:
-    scanner_id = seeded_scanner_id()
+    scanner_id = seeded_group_scanner_id("DEV")
     # RBAC contract paths for template edit routes depend on a concrete template id.
     existing = model.get(model.Template, ("A", scanner_id))
     if existing is not None:
@@ -116,7 +116,9 @@ def _seed_rbac_contract_data() -> None:
 def _resolve_seeded_device_sample_path(sample_path: str) -> str:
     resolved = sample_path
     if "/device/TEST" in resolved:
-        resolved = resolved.replace("/device/TEST", f"/device/{seeded_scanner_id()}")
+        resolved = resolved.replace(
+            "/device/TEST", f"/device/{seeded_group_scanner_id('DEV')}"
+        )
     if "/json/v1/log/1" in resolved:
         try:
             resolved = resolved.replace(

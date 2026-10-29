@@ -498,8 +498,8 @@ if [ "$suite" = "integration" ]; then
   validate_port "$isolated_app_port" "APP_PORT"
   export APP_PORT="$isolated_app_port"
 
-  if [ -z "${PLAYWRIGHT_BASE_URL:-}" ] || [[ "${PLAYWRIGHT_BASE_URL}" =~ ^https?://(localhost|localhost\.localdomain|127\.0\.0\.1)(:[0-9]+)?(/.*)?$ ]]; then
-    export PLAYWRIGHT_BASE_URL="http://localhost:${APP_PORT}"
+  if [ -z "${TEST_BASE_URL:-}" ] || [[ "${TEST_BASE_URL}" =~ ^https?://(localhost|localhost\.localdomain|127\.0\.0\.1)(:[0-9]+)?(/.*)?$ ]]; then
+    export TEST_BASE_URL="http://localhost:${APP_PORT}"
   else
     should_check_integration_port=false
   fi
@@ -970,7 +970,7 @@ echo "  MAILPIT__SMTP_PORT=${MAILPIT__SMTP_PORT}"
 if [ "$suite" = "integration" ]; then
   echo "  PGDATABASE=${PGDATABASE}"
   echo "  APP_PORT=${APP_PORT}"
-  echo "  PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL:-}"
+  echo "  TEST_BASE_URL=${TEST_BASE_URL:-}"
 fi
 
 "$@"

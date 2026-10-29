@@ -359,19 +359,28 @@ def device(the_device):
     support = logic.SupportRequestDatalists([], [], [])
     members_of_groups = {}
     groups = []
+    selection_groups = []
     device_groups = logic.all_groups_of_device(device)
+    can_fulfill_support = perms.tech or perms.medical or perms.training
 
     # load any data user may need to edit
-    if device.active and perms.edit:
+    if device.active and (perms.edit or can_fulfill_support):
         support = logic.support_request_datalists(device)
 
-        # load all relevant group-member datalists
-        if perms.edit_any:
-            members_of_groups = logic.all_member_datalists_by_group(device)
-            groups = device_groups
-        else:
-            members_of_groups = logic.member_datalists_by_group_for(device, g.user)
-            groups = logic.groups_of_device_for(device, g.user)
+        if perms.edit:
+            # load all relevant group-member datalists
+            if perms.edit_any:
+                members_of_groups = logic.all_member_datalists_by_group(device)
+                groups = device_groups
+            else:
+                members_of_groups = logic.member_datalists_by_group_for(device, g.user)
+                groups = logic.groups_of_device_for(device, g.user)
+                selection_groups = [
+                    pair for pair in groups if pair[0] not in ("training", "maint")
+                ]
+
+            if not selection_groups:
+                selection_groups = groups
 
     perms_json = {  # the permissions the js needs
         "edit": perms.edit,
@@ -423,7 +432,7 @@ def device(the_device):
 
     form = logic.JsonForm()
     if request.method == "POST":
-        if not perms.edit:
+        if not (perms.edit or can_fulfill_support):
             # direct request or user lost edit access between fetching page and submitting form
             abort(403)
         if not form.validate():
@@ -529,6 +538,7 @@ def device(the_device):
         "support": support,
         "members_of_groups": members_of_groups,
         "groups": groups,
+        "selection_groups": selection_groups,
         "groups_json": groups_json,
         "device_groups_json": device_groups_json,
         "off_hours": list(off_hours),
@@ -539,7 +549,6 @@ def device(the_device):
             "endpoint": url_for("device_schedule_rows", the_device=device.id),
             "start": fmt_start_date,
             "days": days,
-            "slotMinutes": 60,
         },
         "cur_date": cur_date,
         "cur_hour": cur_hour,
@@ -915,6 +924,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
     )
     colors = logic.all_group_colors()
     hours = logic.fmt_hours()
+    off_hours = list(logic.off_hours())
 
     form = logic.JsonForm()
     if request.method == "POST":
@@ -948,6 +958,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
 
     return {
         "title": f"edit template schedule {device.label}/{tmpl.label}",
+        "schedule_label": device.label,
         "entries": grouped_entries,
         "institutes": institutes,
         "groups": groups,
@@ -955,6 +966,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
         "members_of_groups": members_of_groups,
         "colors": colors,
         "hours": hours,
+        "off_hours": off_hours,
         "form": form,
         "template_compatibility": compatibility,
         **template_breadcrumb(device, tmpl),

@@ -212,17 +212,24 @@ Implemented in `scheduler/app.py` response middleware and `SecurityConfig`.
 
 Headers and controls:
 
-- `Content-Security-Policy` (with per-request nonce support for style policy)
+- `Content-Security-Policy` (default policy is nonce-backed for scripts: `script-src 'self' 'nonce-{nonce}' 'strict-dynamic'`, plus `script-src-attr 'none'`, `style-src 'self'`, `style-src-attr 'none'`, and `report-to csp-endpoint`)
+- `Reporting-Endpoints: csp-endpoint="/csp-report"`
 - `Strict-Transport-Security` (HTTPS responses only)
 - `X-Frame-Options: DENY`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 
+Additional behavior:
+
+- The app generates one request-scoped nonce and renders it onto every `<script>` tag, including non-executable JSON bootstrap tags used for page state.
+- CSP violations posted to `/csp-report` are redacted before persistence, stored in the database, and surfaced in the Admin Panel.
+- Top-level static asset URLs include a deploy-scoped version query parameter, which reduces stale HTML/asset mismatches after deploys.
+
 Configuration:
 
 - `SECURITY__ENABLE_CSP` (default `true`)
 - `SECURITY__CSP_REPORT_ONLY` (default `false`)
-- `SECURITY__CSP_POLICY` (default restrictive policy with nonce placeholder)
+- `SECURITY__CSP_POLICY` (default restrictive policy without inline-style allowances; custom policies may still use `{nonce}`)
 - `SECURITY__ENABLE_HSTS` (default `true`)
 - `SECURITY__HSTS_MAX_AGE` (default `63072000`)
 - `SECURITY__HSTS_INCLUDE_SUBDOMAINS` (default `true`)
@@ -237,6 +244,23 @@ Attack classes mitigated:
 - script/content injection impact (reduced via CSP)
 - MIME sniffing-based execution
 - protocol downgrade after initial secure visit (HSTS)
+
+Verification and guardrails:
+
+- `tests/unit/test_security_headers.py` covers baseline headers, report-only mode,
+  optional nonce substitution for custom CSP policies, no-inline-style device markup,
+  and ProxyFix reconstruction of forwarded scheme/host/port.
+- `tests/playwright/integration/security-headers.spec.ts` checks the final served
+  login response for a single active CSP authority and scheme-aware HSTS behavior.
+- `scripts/check-edge-security-headers.py` provides a deploy/compose smoke check for
+  the externally served response headers. Outside production it defaults to
+  `http://localhost:${APP_PORT}`; in production it derives the probe target from
+  `ENTRA__REDIRECT_URI` by stripping `/auth/callback`.
+- `scripts/check-csp-inline-style-nonce.sh` now blocks inline `<style>` tags and
+  `style=` attributes in tracked templates so the repo stays compatible with the
+  stricter default policy.
+- `scripts/serve.sh` now runs the edge-header probe automatically after local
+  readiness, so host-mode startup fails fast if the final served headers are wrong.
 
 ## XSS Rendering Guardrails and Anti-Regression Checks
 
@@ -339,7 +363,7 @@ When `APP_ENV=production`, startup validation enforces:
 - non-placeholder Entra client ID
 - non-placeholder Entra tenant ID
 - Entra discovery URL set
-- Entra redirect URI set
+- Entra redirect URI set to an absolute root callback URL ending at `/auth/callback`
 - `CORE__DEBUG=false`
 - non-default `CORE__SECRET_KEY`
 - `SESSION__COOKIE_SECURE=true`

@@ -94,7 +94,7 @@
 ### Phase D: Schedule Header/Inspector/Modal Contract
 - Current implementation decisions for this pass:
   - Single-slot anchor inspector modal is authoritative for both view and edit; there will be no separate edit form modal.
-  - Permission-aware action label is set per selected slot (`View/Edit` when editable, `View` otherwise).
+  - Primary slot action remains `Details`; selected read-only slots surface an explicit lock cue while editable slots show no edit icon.
   - Modal must render identical slot field structure in both modes; read-only mode disables the same fields rather than replacing/removing form content.
   - Error details will use an expandable `Errors` section inside inspector status/modal (not a `?` icon/button), rendered as compact list items.
   - Save flow is fully modal-driven with explicit guard checks for `No changes` and `Outstanding errors`.
@@ -103,7 +103,7 @@
   - After save success, restore the selected slot in view whenever possible.
   - Pre-existing selected-slot blocking errors are surfaced immediately from loaded data.
   - Empty slots are editable targets (permission permitting); no separate create modal.
-  - Multi-slot duration apply is anchor-driven from modal (`+30 min` and longer options) and submitted atomically.
+  - Multi-slot duration apply is anchor-driven from modal (`+1 hour` and longer options) and submitted atomically.
   - No page-level save/apply button for device scheduler; modal apply only.
 - Off-hour-specific expando control remains removed; row density is indicated by faded empty-slot styling.
 - Remove dynamic range copy (`schedule for ... from ... to ...`).
@@ -113,9 +113,9 @@
 - Keep `View` and `Legend` visible before selection.
 - Keep `View` read-only informational behavior available before selection.
 - Update modal title to `Selection Details`.
-- Use per-slot label behavior: `View/Edit` only when selected slot is editable, `View` otherwise.
+- Use per-slot read-only cue behavior: keep the primary action label as `Details`, add a lock cue when the selected slot is read-only, and show no icon for editable slots.
 - Consolidate edit/save flow in modal for editable users; add modal `Exit` button and `Esc` close behavior.
-- Ensure keyboard parity: `Enter` on selected slot opens the same modal flow as clicking `View`/`View/Edit`.
+- Ensure keyboard parity: `Enter` on selected slot opens the same modal flow as clicking `Details`.
 - Enforce modal save guards: `No changes` dialog blocks empty submits, `Outstanding errors` dialog blocks invalid submits (including pre-existing blocking errors), and no confirm-before-publish step.
 - On save success, full page refresh is acceptable only if current viewed columns/window are restored.
 - Surface pre-existing selected-slot errors in the same details view and include source/message attribution.
@@ -124,17 +124,17 @@
 - Keep scheduler grid available in windows with no pre-existing entries (no blocking/no-editor empty-state path).
 - Keep all 24 rows visible in the current date window and use faded styling for empty slots to preserve scanability.
 - Add modal duration actions:
-  - `+30 min` quick action
-  - preset increment actions (`+60`, `+90`, `+120`)
+  - `+1 hour` quick action
+  - preset increment actions (`+2 hours`, `+3 hours`, `+4 hours`)
   - end-time selector in the same modal flow
 - Do not enforce a maximum duration cap in the modal UI contract.
 - Keep duration increments/end-time selector enabled while anchor slot is editable (bounded only by available in-window slots).
-- Canonical booking expansion granularity is 30 minutes.
-- Scheduler row model and row keyboard traversal must match 30-minute granularity.
+- Canonical booking expansion granularity is one hour.
+- Scheduler row model and row keyboard traversal must match hourly granularity.
 - Require modal affected-slot preview (start/end/count) before apply.
 - Require atomic apply semantics for multi-slot duration operations; block submit when any targeted slot is invalid/conflicting/non-editable.
 - On submit conflicts, keep modal state retryable and report conflicts so user can choose a different multi-slot window; do not auto-lock slots due to conflict.
-- Double-click on a slot must open the same modal flow as `Enter` and `View`/`View/Edit`.
+- Double-click on a slot must open the same modal flow as `Enter` and `Details`.
 - Keyboard arrows must move one adjacent visible cell in the indicated direction without skipping.
 - Keyboard left/right at the grid edge should shift the date window by one day and keep the current row anchored.
 - Left/right day controls must shift view by exactly one day per activation.
@@ -164,7 +164,7 @@ Usability corrections from in-app review (2026-03-05):
   - Grid never owns vertical scrollbars; page scroll owns vertical movement across full 24-hour content.
   - Skeleton-backed lateral scanning is expected behavior for wheel/trackpad movement; left/right day controls and keyboard edge-shifts should hydrate immediately with skeletons only when target-window cache is missing.
 - Interaction parity:
-  - Double-click cell open behavior must match `Enter` and `View`/`View/Edit`.
+  - Double-click cell open behavior must match `Enter` and `Details`.
   - Arrow-key navigation must move to adjacent visible cells only, without intermittent skips.
 - Sticky behavior:
   - mobile keeps the grid day/date header sticky
@@ -173,13 +173,13 @@ Usability corrections from in-app review (2026-03-05):
   - sticky header rail/background should reserve its own height so elements above do not shift during scroll
   - sticky arrows must remain visible above grid cells (left arrow must never be obscured)
 - Action-label and duration reliability:
-  - `View`/`View/Edit` label must update deterministically as selection/editability changes.
+  - The read-only lock cue on `Details` must update deterministically as selection/editability changes.
   - Duration increment buttons and end-time selector remain enabled while editing is allowed.
 
 Implementation notes:
 - Errors are surfaced through the slot modal `Errors` expander using compact source/message rows.
 - `Legend` belongs to the status card action area and replaces the previous save-button slot.
-- Slot-level permissions drive the primary action label (`View/Edit` or `View`) and modal edit controls remain field-structure preserving in read-only mode.
+- Slot-level permissions drive the read-only lock cues on slots and the primary `Details` action while modal edit controls remain field-structure preserving in read-only mode.
 - Empty and filled slots both use the same modal flow and field structure; editable empty slots can be populated in place.
 - Scheduler slot data and error handling use one canonical schema across frontend/backend.
 - Anchor-slot selection remains singular in the grid, while modal apply may target multiple consecutive slots as one transaction.
@@ -192,7 +192,7 @@ Resolved implementation checklist (completed by 2026-03-06):
 - Playwright scenario coverage for save-path and interaction corrections.
 - always-visible 24 rows with empty-slot faded-state rendering.
 - deterministic one-day left/right controls and adjacent-cell arrow navigation behavior.
-- double-click parity with `Enter` and `View`/`View/Edit`.
+- double-click parity with `Enter` and `Details`.
 - duration controls remain enabled while editable; idle-gated skeleton-to-cell replacement behavior validated in Playwright.
 ### Phase E: Lateral Navigation Engine Refactor
 - Replace reload/navigation-based lateral movement with in-place state transitions.

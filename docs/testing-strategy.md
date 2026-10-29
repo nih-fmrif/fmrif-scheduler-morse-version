@@ -25,6 +25,8 @@
 - Scope: end-to-end workflows using test-only mock auth sessions
 - Auth mode: `PLAYWRIGHT_AUTH_MODE=mock`, `AUTH_TEST__ENABLED=true`
 - CI: yes
+- Heavy contention specs are tagged `@heavy` and excluded from the default integration tasks; run them via `pixi run test-integration-heavy`.
+- Manual load checks live under `tests/load/`; `pixi run test-load-moderate` runs both scheduler-only and notification-inclusive passes under Gunicorn by default, while `pixi run test-load-moderate-scheduler` and `pixi run test-load-moderate-notify` run each pass individually. These are opt-in and not part of the CI-friendly integration suite.
 
 4. Auth-flow tests (`Playwright`, real Entra)
 - Location: `tests/playwright/auth-flow/`
@@ -72,11 +74,13 @@ Prerequisites:
 Unit tests:
 ```bash
 pixi run test-unit
+pixi run test-unit -- tests/unit/test_some_file.py -q
 ```
 
 Route tests:
 ```bash
 pixi run test-routes
+pixi run test-routes -- tests/unit/test_some_route_file.py -q
 ```
 
 Integration tests (CI mode, mock auth):
@@ -84,7 +88,23 @@ Integration tests (CI mode, mock auth):
 pixi run test-integration
 ```
 
-The `test-unit`, `test-routes`, and `test-integration*` tasks are wrapped by
+Heavy integration tests (manual/opt-in):
+```bash
+pixi run test-integration-heavy
+```
+
+Moderate load test (manual/opt-in):
+```bash
+pixi run test-load-moderate
+pixi run test-load-moderate-scheduler
+pixi run test-load-moderate-notify
+```
+
+The `test-unit` and `test-routes` tasks use
+`scripts/run-target-aware-pytest-suite.py`, which forwards into
+`scripts/run-isolated-test-suite.sh`. When explicit test selectors are passed,
+the task drops its default collection root instead of silently widening scope.
+`test-integration*` tasks are wrapped directly by
 `scripts/run-isolated-test-suite.sh`, which assigns suite-scoped test DB names
 and Mailpit ports so those suites can run in parallel without sharing test mail
 or route-template DB resources.

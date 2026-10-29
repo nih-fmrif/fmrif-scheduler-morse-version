@@ -16,7 +16,7 @@ _FMT_HOURS = {
     0: "Mid.",
     12: "Noon",
 }
-_OFF_HOURS = frozenset({*range(0, 8), 22, 23})
+_OFF_HOURS = frozenset({*range(0, 7), 23})
 
 for _i in range(1, 24):
     if _i == 12:
@@ -26,12 +26,37 @@ for _i in range(1, 24):
     _FMT_HOURS[_i] = f"{_hour}{_meridiem}m"
 
 Datalist = List[Tuple[str, str]]
+_SUPPORT_PERMISSION_ATTRS = {
+    1: "medical",
+    2: "training",
+    3: "tech",
+}
+_SUPPORT_DIFF_KEYS = frozenset({"med", "train", "tech"})
+_SUPPORT_BOOKING_KEYS = frozenset({"requested", "subkind"})
 
 
 @dataclass(frozen=True)
 class SchedulerStagedEntry:
     entry: model.ScheduleEntry
     server_ref: str
+
+
+def _support_diff_requires_booking_edit(diff: object) -> bool:
+    if not isinstance(diff, dict):
+        return False
+    return any(key in diff for key in _SUPPORT_BOOKING_KEYS)
+
+
+def _diff_requires_booking_edit(diff: dict) -> bool:
+    if "group" in diff or "member" in diff:
+        return True
+    return any(
+        _support_diff_requires_booking_edit(diff.get(key)) for key in _SUPPORT_DIFF_KEYS
+    )
+
+
+def _support_request_is_active(sr: Optional[model.SupportRequest]) -> bool:
+    return sr is not None and sr.approved is not False
 
 
 def schedule_for(
@@ -598,6 +623,9 @@ def verify_scheduler_diffs(
     def fail_user_removed(entry_id, key, value):
         fail(entry_id, {"type": "user-removed", "key": key, "value": value})
 
+    def fail_permission(entry_id: int, message: str, source: str = "permission"):
+        fail(entry_id, {"source": source, "message": message})
+
     def compact():
         if len(xs) != len(referenced):
             return [
@@ -617,6 +645,15 @@ def verify_scheduler_diffs(
 
         xs = compact()
 
+    if not perms.edit:
+        for entry_id, diff, _ in xs:
+            if _diff_requires_booking_edit(diff):
+                fail_permission(entry_id, "this change requires booking edit access")
+                del referenced[entry_id]
+        if len(referenced) == 0:
+            return [], [], {}, errors
+        xs = compact()
+
     valid_groups = frozenset(group_id for (group_id, _) in groups)
 
     members: Dict[str, FrozenSet[str]] = {
@@ -628,6 +665,8 @@ def verify_scheduler_diffs(
         members[group_id] = frozenset(user_id for (user_id, _) in values)
 
     for entry_id, diff, entry in xs:
+        if not perms.edit and not _diff_requires_booking_edit(diff):
+            continue
         group = null2epsilon(entry.group)
 
         if "group" not in diff:
@@ -660,6 +699,8 @@ def verify_scheduler_diffs(
     xs = compact()
 
     for entry_id, diff, entry in xs:
+        if not perms.edit and not _diff_requires_booking_edit(diff):
+            continue
         if "member" not in diff:
             continue
 
@@ -730,16 +771,35 @@ def verify_scheduler_diffs(
         return returns()
 
     for entry_id, kind, diff, sr, is_new, _ in srs:
+        permission_attr = _SUPPORT_PERMISSION_ATTRS[sr.supportkind]
+        request_active = _support_request_is_active(None if is_new else sr)
+        request_will_be_active = diff.get("requested", request_active)
+
+        if _support_diff_requires_booking_edit(diff) and not perms.edit:
+            fail_permission(entry_id, "this change requires booking edit access", kind)
+            continue
+
+        if "requested" in diff and not diff["requested"]:
+            continue
+
+        if "handler" in diff and not getattr(perms, permission_attr):
+            fail_permission(
+                entry_id,
+                f"{kind} handler changes require {kind} support access",
+                kind,
+            )
+            continue
+
         if not is_new and "handler" in diff:
             old, _ = diff["handler"]
             handler = null2epsilon(sr.fulfilled_by)
             if handler != "" and handler != old:
                 fail_overwrote(entry_id, f"{kind} handler", handler, old)
 
-        if "requested" in diff and not diff["requested"]:
-            continue
-
         if "handler" in diff:
+            if not request_will_be_active:
+                fail_permission(entry_id, "no active request to fulfill", kind)
+                continue
             _, new = diff["handler"]
             if new != "" and new not in support_staff[sr.supportkind]:
                 fail_removed(entry_id, f"{kind} handler", new)

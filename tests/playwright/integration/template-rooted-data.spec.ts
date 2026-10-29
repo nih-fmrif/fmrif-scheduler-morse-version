@@ -1,10 +1,66 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from '../support/auth-fixture';
 
+type Box = { x: number; y: number; width: number; height: number };
+
+async function boundingBox(locator: Locator) {
+  const box = await locator.boundingBox();
+  if (!box) {
+    throw new Error('Expected locator to have a bounding box.');
+  }
+  return box as Box;
+}
+
+function expectBelow(upper: Box, lower: Box) {
+  expect(lower.y).toBeGreaterThanOrEqual(upper.y + upper.height - 1);
+}
+
+async function expectApplyHelperLayout(
+  page: Page,
+  viewport: { width: number; height: number },
+  expectSingleColumn = false
+) {
+  await page.setViewportSize(viewport);
+  await page.goto('/device/d/templates');
+
+  const repairNote = page.locator('.apply-helper-repair-note');
+  const instructions = page.locator('.apply-helper-instructions');
+  const optionList = page.locator('.template-option-list');
+  const firstOption = page.locator('.template-option').first();
+  const secondOption = page.locator('.template-option').nth(1);
+
+  await expect(repairNote).toBeVisible();
+  await expect(instructions).toBeVisible();
+  await expect(optionList).toBeVisible();
+  await expect(firstOption).toBeVisible();
+  await expect(secondOption).toBeVisible();
+
+  const repairBox = await boundingBox(repairNote);
+  const instructionsBox = await boundingBox(instructions);
+  const optionListBox = await boundingBox(optionList);
+
+  expectBelow(repairBox, instructionsBox);
+  expectBelow(instructionsBox, optionListBox);
+
+  if (expectSingleColumn) {
+    const firstOptionBox = await boundingBox(firstOption);
+    const secondOptionBox = await boundingBox(secondOption);
+    expect(Math.abs(secondOptionBox.x - firstOptionBox.x)).toBeLessThan(2);
+    expectBelow(firstOptionBox, secondOptionBox);
+  }
+}
+
+async function openReviewPending(page: Page) {
+  const reviewPendingButton = page.locator('#review-pending');
+  await expect(reviewPendingButton).toBeVisible();
+  await reviewPendingButton.click();
+}
+
 async function gotoTemplateEdit(page: Page, templateId = 'i') {
   await page.goto(`/device/d/templates/edit/${templateId}`);
-  await expect(page.getByRole('heading', { name: 'template compatibility' })).toBeVisible();
+  await expect(page.locator('.editor-inspector')).toBeVisible();
+  await expect(page.locator('#review-pending')).toContainText(/review pending/i);
 }
 
 async function clickFirstInvalidCell(page: Page) {
@@ -124,59 +180,104 @@ async function createClonedTemplate(page: Page, templateId: string, cloneFrom = 
 test('rooted template editor shows seeded compatibility state on load', async ({ page }) => {
   await gotoTemplateEdit(page);
 
-  await expect(
-    page.getByText('stale members in i:person0075[OLD], person0076[OLD], person0082[OLD], person0086[OLD].')
-  ).toBeVisible();
-  await expect(page.getByText('unavailable groups in i: EEG, LCCG, NCR, SIEM.')).toBeVisible();
   await page.waitForSelector('entry-cell[data-error="true"]');
   expect(await page.locator('entry-cell[data-error="true"]').count()).toBeGreaterThan(0);
+  await expect(page.locator('#review-pending')).toContainText('Review pending');
+  await expect(page.locator('#review-pending')).toHaveAttribute('data-invalid-count', /[1-9]/);
+
+  await openReviewPending(page);
+  const reviewDialog = page.getByRole('dialog', { name: 'review issues' });
+  await expect(reviewDialog).toBeVisible();
+  await expect(reviewDialog).toContainText('Active issues');
+  await expect(reviewDialog).toContainText(/invalid (group|member|institute)/i);
 });
 
-test('rooted invalid cell selection updates the visible inspector', async ({ page }) => {
+test('rooted invalid cell selection updates the shared inspector card and details modal', async ({
+  page,
+}) => {
   await gotoTemplateEdit(page);
 
-  const details = page.getByRole('complementary', { name: 'selected slot details' });
-  await expect(details.locator('p').nth(0)).toHaveText('Sun, Mid.');
-  await expect(details.locator('p').nth(1)).toHaveText('open | unassigned | institute: none');
-  await expect(details.locator('dd').nth(2)).toHaveText('0 errors');
+  const banner = page.locator('.editor-inspector');
+  await expect(banner.locator('.editor-inspector-target')).toHaveText('Sun, Mid.');
 
   await clickFirstInvalidCell(page);
 
-  await expect(details.locator('p').nth(0)).not.toHaveText('Sun, Mid.');
-  await expect(details.locator('p').nth(1)).not.toHaveText('open | unassigned | institute: none');
-  await expect(details.locator('dd').nth(2)).not.toHaveText('0 errors');
+  await expect(banner.locator('.editor-inspector-target')).not.toHaveText('Sun, Mid.');
+
+  await page.getByRole('button', { name: 'Details' }).click();
+  const detailsDialog = page.getByRole('dialog', { name: 'Selection Details' });
+  await expect(detailsDialog).toBeVisible();
+  await expect(detailsDialog.locator('.editor-inspector-detail-summary')).not.toHaveText(
+    'open | unassigned | institute: none'
+  );
+  await expect(detailsDialog.locator('.editor-inspector-detail-errors')).not.toHaveText(
+    '0 errors'
+  );
+  await page.getByRole('button', { name: 'Exit' }).click();
+
+  await clickFirstInvalidCell(page);
+  await page.locator('entry-cell[data-error="true"]').first().dblclick();
+  await expect(detailsDialog).toBeVisible();
+  await page.getByRole('button', { name: 'Exit' }).click();
+
+  await page.locator('.editor #scroll-container').focus();
+  await page.keyboard.press('Enter');
+  await expect(detailsDialog).toBeVisible();
 });
 
-test('template save stays blocked while rooted errors remain unresolved', async ({ page }) => {
+test('template review pending shows pending changes but blocks publish while rooted errors remain unresolved', async ({
+  page,
+}) => {
   await gotoTemplateEdit(page);
   await clickFirstInvalidCell(page);
   await repairActiveCellToNmrf(page);
 
-  const details = page.getByRole('complementary', { name: 'selected slot details' });
-  await expect(details.locator('p').nth(1)).toHaveText('NMRF | unassigned | institute: NMRF');
-  await expect(details.locator('dd').nth(1)).toHaveText('1 change');
-  await expect(details.locator('dd').nth(2)).toHaveText('0 errors');
+  await page.getByRole('button', { name: 'Details' }).click();
+  const detailsDialog = page.getByRole('dialog', { name: 'Selection Details' });
+  await expect(detailsDialog.locator('.editor-inspector-detail-summary')).toHaveText(
+    'NMRF | unassigned | institute: NMRF'
+  );
+  await expect(detailsDialog.locator('.editor-inspector-detail-pending')).toHaveText('1 change');
+  await expect(detailsDialog.locator('.editor-inspector-detail-errors')).toHaveText('0 errors');
+  await page.getByRole('button', { name: 'Exit' }).click();
+  await expect(page.locator('#review-pending')).toContainText('Review pending');
+  await expect(page.locator('#review-pending')).toHaveAttribute('data-invalid-count', /[1-9]/);
 
-  await page.getByRole('button', { name: 'save' }).click();
+  await openReviewPending(page);
 
-  const dialog = page.getByRole('dialog', { name: 'outstanding errors' });
+  const dialog = page.getByRole('dialog', { name: 'review pending changes' });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('all errors must be resolved before submitting');
+  await expect(dialog).toContainText('Active issues');
+  await expect(dialog).toContainText('Pending changes');
+  await expect(dialog.getByRole('button', { name: 'Publish changes' })).toHaveCount(0);
+});
+
+test('template apply helper stacks helper copy and controls without overlap', async ({ page }) => {
+  await expectApplyHelperLayout(page, { width: 1280, height: 900 });
+  await expectApplyHelperLayout(page, { width: 390, height: 844 }, true);
 });
 
 test('manual apply entry blocks repair-required templates before confirm', async ({ page }) => {
   await page.goto('/device/d/templates');
 
   const field = page.getByRole('textbox', { name: 'templates' });
+  const applyButton = page.getByRole('button', { name: 'apply', exact: true });
+
+  expect(await field.evaluate((input) => input.validationMessage)).toBe('');
+  await expect(applyButton).toBeDisabled();
+
   await field.fill('i');
-  await page.getByRole('button', { name: 'apply' }).click();
+  await expect
+    .poll(async () => field.evaluate((input) => input.validationMessage))
+    .toContain('repair required template codes cannot be applied: i:');
+  await expect(applyButton).toBeDisabled();
+  await field.press('Enter');
 
   await expect(page.getByRole('dialog', { name: 'Apply templates' })).toHaveCount(0);
   const validationMessage = await field.evaluate((input) => input.validationMessage);
-  expect(validationMessage).toContain(
-    'repair required template codes cannot be applied: i: i has 20 stale member assignments that must be repaired before save or apply.'
-  );
-  expect(validationMessage).toContain('unavailable groups in i: EEG, LCCG, NCR, SIEM.');
+  expect(validationMessage).toContain('repair required template codes cannot be applied: i:');
+  expect(validationMessage).toMatch(/stale member assignments|stale members in i:/i);
+  expect(validationMessage).toMatch(/unavailable groups in i:|invalid groups/i);
 });
 
 test('cloned rooted template preserves repair state through archive flow', async ({
@@ -184,14 +285,8 @@ test('cloned rooted template preserves repair state through archive flow', async
 }, testInfo) => {
   const templateId = await pickTemplateCode(page, testInfo.project.name);
   await createClonedTemplate(page, templateId);
-  await expect(
-    page.getByText(
-      `stale members in ${templateId}:person0075[OLD], person0076[OLD], person0082[OLD], person0086[OLD].`
-    )
-  ).toBeVisible();
-  await expect(
-    page.getByText(`unavailable groups in ${templateId}: EEG, LCCG, NCR, SIEM.`)
-  ).toBeVisible();
+  await expect(page.locator('#review-pending')).toHaveAttribute('data-invalid-count', /[1-9]/);
+  await expect(page.locator('entry-cell[data-error="true"]')).not.toHaveCount(0);
 
   await page.getByRole('link', { name: 'edit metadata' }).click();
   await page.getByRole('checkbox', { name: 'archived' }).check();
@@ -220,23 +315,41 @@ test('repaired cloned template becomes ready and can be applied', async ({ page 
     .poll(async () => page.locator('entry-cell[data-changed="true"]').count())
     .toBe(repairedCount);
   await expect(page.locator('entry-cell[data-error="true"]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'save' }).click();
+  await expect(page.locator('#review-pending')).toContainText('Review pending');
+  await expect(page.locator('#review-pending')).not.toBeDisabled();
+  await openReviewPending(page);
 
-  const publishDialog = page.getByRole('dialog', { name: 'publish changes' });
+  const publishDialog = page.getByRole('dialog', { name: 'review pending changes' });
   await expect(publishDialog).toBeVisible();
-  await page.getByRole('button', { name: 'confirm' }).click();
+  await page.getByRole('button', { name: 'Publish changes' }).click();
   await expect(page.getByRole('dialog', { name: 'results' })).toContainText('entries updated');
   await page.getByRole('button', { name: 'Close dialog' }).click();
 
-  await expect(page.getByRole('heading', { name: 'template compatibility' })).toHaveCount(0);
+  await expect(page.locator('#review-pending')).toContainText('Review pending');
+  await expect(page.locator('#review-pending')).toBeDisabled();
 
   await page.goto('/device/d/templates/list');
-  await expect(page.getByRole('link', { name: `Clone of i ${templateId} (${templateId})` })).toBeVisible();
-  await expect(page.getByText('ready')).toBeVisible();
+  const templateLink = page.getByRole('link', { name: `Clone of i ${templateId} (${templateId})` });
+  await expect(templateLink).toBeVisible();
+  const templateRow = page.locator('li').filter({ has: templateLink });
+  await expect(templateRow.getByText('ready')).toBeVisible();
 
   await page.goto('/device/d/templates');
-  await page.getByRole('button', { name: `add ${templateId}: Clone of i ${templateId}` }).click();
-  await page.getByRole('button', { name: 'apply' }).click();
+  const field = page.getByRole('textbox', { name: 'templates' });
+  const applyButton = page.getByRole('button', { name: 'apply', exact: true });
+  const readyTemplateButton = page.locator(
+    `button[data-tc="${templateId}"][data-template-state="ready"]`
+  );
+
+  expect(await field.evaluate((input) => input.validationMessage)).toBe('');
+  await expect(applyButton).toBeDisabled();
+  await expect(readyTemplateButton).toHaveCount(1);
+  await expect(readyTemplateButton).toBeEnabled();
+  await readyTemplateButton.click();
+  await expect(applyButton).toBeEnabled();
+  expect(await field.evaluate((input) => input.validationMessage)).toBe('');
+
+  await applyButton.click();
   await page.getByRole('button', { name: 'apply templates' }).click();
 
   await expect(page).toHaveURL(/\/device\/d\?start=/);

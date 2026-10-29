@@ -66,6 +66,36 @@ Permission state must drive visible affordances and button labels.
 - Keyboard and pointer interaction parity is required for primary controls.
 - Narrow-display behavior must avoid horizontal page overflow.
 
+### 5.1 Resolved Clarifications For This UI Pass
+- `Legend` on scheduler surfaces refers to a compact reference for non-obvious schedule states. It is not a catalog of every button glyph used on the page.
+- `Daytime band` refers to the visually emphasized standard operating window in the scheduler and does not impose any booking or validation restriction by itself.
+- `Jump-to calendar widget` means a compact date input that exposes the browser or OS calendar picker where supported. A heavyweight custom calendar dialog is not required for compliance.
+- Theme changes in this pass must define one coherent visual system that works in both light and dark mode, not two unrelated skins.
+
+### 5.2 Iconography And Semantic Cues
+- Icons are secondary cues for actions whose visible text already carries the primary meaning.
+- Within one surface, a single icon should map to one semantic family. If an icon's common meaning conflicts with the intended behavior, the icon should be replaced instead of explained away in a legend.
+- Dense schedule-cell states may use compact icon-only indicators, but those states must have a nearby textual explanation in the same workflow (for example: legend copy, counts, or an errors list).
+- Generic controls such as `Close`, `Back`, `Next`, `Settings`, and `Logout` do not belong in the scheduler legend.
+- `Lock` is reserved for actual permission or read-only states. It must not be reused for scheduler save failures.
+- Scheduler slot states should render as compact framed tokens rather than bare floating glyphs so users can visually distinguish pending edits, validation errors, rejected saves, and usage-state markers at scan speed.
+- Scheduler pending-change state should use a neutral unsaved-state marker rather than an edit-action glyph so it is not confused with `View/Edit` affordances.
+- Date-jump controls that move to the previous or next scheduled day must expose short visible text labels; chevrons alone are not sufficient.
+- Primary IA icons should follow a stable mapping across the app:
+  - MRI scanner for device lists or home/device navigation
+  - multi-person icon for group lists
+  - clipboard or form icon for application/join flows
+  - envelope for mailing-list or email surfaces
+  - shield for RBAC or access-control surfaces
+  - sliders or controls icon for admin tooling or issue panels
+
+### 5.3 Theme Direction
+- Light mode should keep a warm-paper, low-glare surface model with strong contrast for text and restrained accent usage.
+- Dark mode should be a deliberate counterpart using charcoal or slate surfaces rather than a harsh black inversion of light mode.
+- Both themes must preserve the same semantic color meanings for focus, info, warning, success, and error states.
+- Scheduler-specific cues such as off-hours shading, daytime emphasis, selection rings, and pending/error states must remain legible in both themes without relying on color alone.
+- Avoid introducing a separate purple-led palette or a dark-mode-only visual identity for this UI pass.
+
 ## 6. Top Navigation Bar
 ### 6.1 Responsiveness
 - Navigation must follow this exact responsive sequence with no abrupt lateral jump of button 4:
@@ -128,6 +158,12 @@ Permission state must drive visible affordances and button labels.
 - Empty rows remain visible; no collapse/expand control is used.
 - Empty slots use a faded visual treatment so non-empty rows remain easier to scan.
 - Row-density behavior must not introduce a grid-owned vertical scrollbar; page-owned vertical scroll remains the only vertical scroll path.
+
+### 8.3.2 Daytime band
+- The visually emphasized daytime band is tightened to rows whose slot start time is within `07:00 <= slotStart < 23:00` in scheduler local time.
+- In the current hour-row rendering, daytime rows are `07:00` through `22:00`; off-hours are `00:00` through `06:00` and `23:00`.
+- The daytime band is a scanability aid only and must not be treated as a booking rule or hard availability boundary.
+- Off-hour rows remain fully legible and interactive, and rows with scheduled activity outside the daytime band must not look disabled.
 
 ### 8.4 Horizontal navigation model
 - Horizontal wheel/trackpad movement over the schedule is continuous during gesture input and snaps to a day boundary on release.
@@ -205,44 +241,58 @@ Permission state must drive visible affordances and button labels.
 ### 8.7 Slot status card defaults
 - Default slot status text must be exactly: `Select a time slot`.
 - Before selection, no extra helper text is shown.
-- `View` and `Legend` actions remain visible before selection.
-- After selection, show:
-  - selected slot
-  - summary
-  - change count for the currently selected slot
-  - error count for the currently selected slot
+- Device and template schedulers use the same sticky slot-status card model.
+- `Details`, `Review pending`, and `Legend` actions remain visible before selection.
+- The sticky card line itself shows only `<schedule label>: <selected slot>`.
 - Selection applies to both slot states:
   - `empty` slots (no previously populated schedule payload for that day/hour)
   - `filled` slots (pre-existing populated schedule payload)
 - Empty slots are first-class editable targets when permissions allow; they are not view-only placeholders.
 - If a date window has no pre-existing entries, the scheduler still renders the grid and editable empty slots.
 - The old blocking/no-editor `no entries scheduled for ...` path is removed from schedule-page UX.
-- Error count must expose a details affordance (expandable `Errors` section or equivalent); if no existing expand control is present, provide an `Errors` section adjacent to the count.
-- Error details must list each error with source and message.
+- Selected-slot summary, change count, mode, and error count live in the `Selection Details` modal rather than in the sticky card.
+- Error details are rendered as a single flat list under the selected-slot error count; user-facing treatment must not split client/server or verifier/server errors into separate visual controls.
 - Phase D selection scope is single-slot only.
 
 ### 8.8 Slot status actions
-- Slot status card includes `View` and `Legend` buttons.
-- With a selected slot, `View` label changes to `View/Edit` only when that selected slot is editable (applies equally to `empty` and `filled` slots).
-- For read-only users, button label remains `View`; the slot modal keeps the same field structure in a disabled/read-only state and fields remain visible.
-- When no slot is selected, `View` opens a read-only informational modal template.
-- `View` vs `View/Edit` label must update deterministically on every selection/focus change and after save/error state transitions for the active slot.
+- Slot status card includes `Details`, `Review pending`, and `Legend` buttons on both schedule surfaces.
+- `Details` always opens the `Selection Details` modal; editability is conveyed inside the modal state, not by swapping the button label.
+- `Review pending` is the shared review surface for schedule issues/errors on both pages and also the publish/apply confirmation surface when pending changes exist.
+- For read-only users, `Details` still opens the same field structure in a disabled/read-only state and fields remain visible.
+- When no slot is selected, `Details` opens the same read-only informational modal structure with no slot editor unlocked.
+
+### 8.8.1 Schedule legend and iconography
+- Scheduler primary actions remain text-first: `Details`, `Review pending`, and `Legend`.
+- Auxiliary jump controls such as previous/next scheduled day should also remain text-first, with arrows treated as supporting cues.
+- Any icon shown beside those actions is a supporting cue only; the text label remains the primary affordance.
+- The schedule legend must be single-sourced across device and template schedule surfaces so state descriptions cannot drift over time.
+- Legend content is limited to non-obvious schedule semantics:
+  - pending draft state
+  - validation or blocking error state
+  - server-rejected or locked state
+  - time-recorded state (`unknown`, `used`, `unused`)
+  - optional schedule-specific color or band cues when they are present in the UI.
+- Legend content must not document generic actions such as close buttons, dialog dismissal, or obvious next/previous navigation arrows.
+- The group-color side rail in each entry cell is a supporting cue only and must not be the sole way a user understands slot meaning.
+- Pending and issue counts live inside the `Selection Details` modal and the `Review pending` workflow, not on the sticky card action labels.
 
 Conflict check against this implementation pass:
 - No additional conflicts identified.
 - The `Errors` section must always be expandable (compact compact rows) rather than a tooltip-only affordance.
 
 ### 8.9 Modal and edit flow consolidation
-- The former edit form must be integrated into the View/View-Edit modal for editable users.
+- The former edit form must be integrated into the `Details` modal for editable users.
 - Modal title text must be exactly `Selection Details`.
 - Add an explicit `Exit` button to the modal.
 - `Esc` closes the modal.
 - Save action is moved into the modal.
 - Device schedule save/apply is modal-only; there is no page-level save/apply button.
+- Template schedule publish/apply is `Review pending`-only; there is no page-level save/apply button.
 - Empty-slot and filled-slot modal bodies must use the same field structure.
 - For empty slots, save creates/populates that slot through the same modal flow (no separate create modal).
 - Pre-existing selected-slot errors loaded from server state must be surfaced in the same error-details view and included in selected-slot error count.
 - The modal form surface should preserve the existing slot entry layout for all modes, with edit mode unlocking controls and read-only mode disabling them.
+- The template page removes redundant page-level error summaries/legend blocks and surfaces compatibility repair issues through `Review pending` so the device/template schedulers teach the same interaction model.
 - Save flow for editable users:
   - If no modal change-set exists, show a `No changes` error dialog and do not submit.
   - If modal validation errors exist (including pre-existing blocking errors), show an `Outstanding errors` dialog and block submit.
@@ -255,11 +305,11 @@ Conflict check against this implementation pass:
 ### 8.9.2 Duration expansion and multi-slot booking flow
 - Selection remains a single anchor slot, but modal edit may apply one atomic change-set across multiple consecutive slots.
 - Modal must provide a fast duration action:
-  - `+30 min` action that expands the anchor booking into the next eligible slot.
+  - `+1 hour` action that expands the anchor booking into the next eligible slot.
 - Modal must also provide both of the following longer-duration controls without leaving the modal:
-  - preset increments (`+60 min`, `+90 min`, `+120 min`)
+  - preset increments (`+2 hours`, `+3 hours`, `+4 hours`)
   - explicit end-time selection
-- Duration expansion has no maximum cap in the UI contract; users may target any consecutive 30-minute slot window.
+- Duration expansion has no maximum cap in the UI contract; users may target any consecutive hourly slot window.
 - While the selected anchor slot is editable, duration controls remain interactive:
   - end-time selector must stay enabled
   - increment buttons must remain enabled and accumulate duration up to available in-window bounds.
@@ -280,9 +330,9 @@ Conflict check against this implementation pass:
 ### 8.9.1 Canonical scheduler slot schema
 - This specification defines a single canonical frontend/backend contract for schedule slots.
 - Frontend and backend must use this schema directly.
-- Canonical slot granularity is 30 minutes.
-- `slotKey` includes `date`, `hour`, and `minute` where `minute` is `0` or `30`.
-- Schedule grid rows and keyboard row traversal follow the same 30-minute slot granularity.
+- Canonical slot granularity is one hour.
+- `slotKey` includes `date` and `hour`.
+- Schedule grid rows and keyboard row traversal follow the same hourly slot granularity.
 
 Scheduler window read model (`GET /json/device/<device_id>/schedule-window?start=YYYY-MM-DD&days=1..31`):
 ```json
@@ -294,7 +344,7 @@ Scheduler window read model (`GET /json/device/<device_id>/schedule-window?start
   },
   "slots": [
     {
-      "slotKey": { "date": "2026-03-05", "hour": 9, "minute": 0 },
+      "slotKey": { "date": "2026-03-05", "hour": 9 },
       "baseline": "opaque-slot-version-token",
       "state": "empty",
       "editable": true,
@@ -323,7 +373,7 @@ Slot save contract (`POST /json/device/<device_id>/schedule-slots`):
 {
   "changes": [
     {
-      "slotKey": { "date": "2026-03-05", "hour": 9, "minute": 0 },
+      "slotKey": { "date": "2026-03-05", "hour": 9 },
       "baseline": "opaque-slot-version-token",
       "entry": {
         "group": "grp-a",
@@ -345,7 +395,7 @@ Save response contract:
 {
   "saved": [
     {
-      "slotKey": { "date": "2026-03-05", "hour": 9, "minute": 0 },
+      "slotKey": { "date": "2026-03-05", "hour": 9 },
       "baseline": "new-opaque-slot-version-token",
       "state": "filled",
       "summary": {
@@ -358,7 +408,7 @@ Save response contract:
   ],
   "failed": [
     {
-      "slotKey": { "date": "2026-03-06", "hour": 10, "minute": 30 },
+      "slotKey": { "date": "2026-03-06", "hour": 10 },
       "retryable": true,
       "errors": [
         {
@@ -437,6 +487,9 @@ Error object requirements (single schema for UI + API):
 
 ### 8.12 Jump-to control
 - Default date in Jump-to input is current ET date.
+- Jump-to uses a compact date-picker control with native browser calendar UI where supported (preferred: `input[type="date"]` or an equivalent accessible control).
+- Direct keyboard entry remains supported; the calendar picker is an enhancement, not the only input path.
+- The control should remain visually small and integrated into the scheduler control card rather than opening a large custom calendar surface.
 - Jump-to is an explicit navigation action and updates URL query state (`start`, `days`) to keep shareable/reload-safe permalinks.
 - In JS-enabled mode, Jump-to should update content in place and sync permalink state without full reload.
 - In no-JS mode, Jump-to may fallback to standard GET navigation with the same query params.
@@ -499,9 +552,9 @@ Error object requirements (single schema for UI + API):
 9. Horizontal wheel/trackpad movement drives continuous header sliding using normalized-delta scaling (`translationPx = 0.5 * normalizedHorizontalDeltaPx`) and snaps to day boundaries on release (or 120 ms idle fallback).
 10. Arrow controls move exactly one day per activation and remain visible above grid cells at all scroll positions.
 11. Vertical-intent wheel input over the schedule scrolls the page, while horizontal-intent wheel input is captured by the grid for lateral navigation.
-12. Slot status defaults to `Select a time slot`, keeps actions visible before selection, and on single-slot selection shows selected slot, summary, and selected-slot change/error counts; error count includes an `Errors` details affordance listing error source/message.
-13. Slot status card exposes `View`/`Legend`; with a selected slot, `View/Edit` appears only when that slot is editable; `Enter` opens the same modal action and `Esc` closes the modal.
-14. Modal title is `Selection Details`; save runs inside modal with `No changes` and `Outstanding errors` blocking guards (including pre-existing blocking errors), no confirm-before-publish step, and full-refresh success only when viewed columns/window are restored; multi-slot duration applies are atomic and irreconcilable save failures return conflict details for retry.
+12. Slot status defaults to `Select a time slot`, keeps `Details`/`Review pending`/`Legend` visible before selection, and on single-slot selection shows only the schedule label plus selected slot in the sticky card while summary/change/error details live in the `Selection Details` modal.
+13. Device and template schedule pages share the same sticky slot-status card and `Selection Details` modal contract; `Enter` and double-click open the same modal action and `Esc` closes the modal.
+14. Modal title is `Selection Details`; device slot saves run inside the modal with `No changes` and `Outstanding errors` blocking guards, while template publish runs through `Review pending`, which also lists active issues/errors before publish becomes available; multi-slot duration applies remain atomic and irreconcilable save failures return conflict details for retry.
 15. Jump-to defaults to current ET date and updates permalink query state (`start`, `days`) as an explicit navigation action.
 16. RBAC audit log appears on RBAC page and is absent from Admin page.
 17. Admin page has no horizontal overflow on narrow displays and keeps `Potential issues` collapsed by default, including post-scan.
@@ -515,8 +568,8 @@ Error object requirements (single schema for UI + API):
 25. Empty and filled slots both open the same modal contract; editable empty slots can be created/populated in-place without a separate create flow.
 26. Scheduler frontend/backend communication uses the canonical slot schema with unified `source/code/message/blocking/origin` error objects.
 27. Windows with no pre-existing entries still render editable empty slots (permission permitting) and do not switch to a blocking/no-editor empty-state note.
-28. Modal supports anchor-based duration expansion with both preset increments and explicit end-time selection (including `+30 min`), allows uncapped consecutive-slot windows, and applies booking changes atomically without persistent pre-submit unsaved grid state.
-29. Schedule rows and row-level keyboard traversal operate at 30-minute resolution consistent with canonical `slotKey` granularity.
+28. Modal supports anchor-based duration expansion with both preset increments and explicit end-time selection (including `+1 hour`), allows uncapped consecutive-slot windows, and applies booking changes atomically without persistent pre-submit unsaved grid state.
+29. Schedule rows and row-level keyboard traversal operate at hourly resolution consistent with canonical `slotKey` granularity.
 30. Saving edits that create/populate new slots (including Sundays) persists `scheddow` in database `0..6` encoding (`0=Sunday`) and does not trigger `tblsched_scheddow` check-constraint failures.
 31. User-correctable save failures are returned as structured slot-level errors in modal context and keep edits retryable; no HTTP 500 path is exposed for those failures.
 32. Typing in modal `group`, `member`, and support `handler` fields preserves focus/caret and does not blur or reset the cursor on each keystroke.
@@ -528,13 +581,17 @@ Error object requirements (single schema for UI + API):
 38. Keyboard arrow navigation moves exactly one adjacent visible cell in the indicated direction without unintended skipping.
 39. `View` vs `View/Edit` state updates reliably with selection/editability changes and after save/error transitions.
 40. When the anchor slot is editable, duration increment controls and end-time selector remain enabled until bounded only by available in-window slots.
-41. Support-request UI allows filing requests across visible categories; handler assignment remains permission/roster constrained without blocking request filing.
-42. Scheduler hydration/render guardrails use a single 300 ms idle gate for both fetch and render on wheel/trackpad and jump-style navigation while movement feedback stays header-first with skeleton rows.
-43. Wheel/trackpad movement updates headers immediately but defers schedule-row fetch/render until 300 ms idle; traversed/intermediate windows are not fetched.
-44. Jump-to updates target header/window state without scrolling through intervening dates, and fetch/render occurs asynchronously under the same idle-gated contract.
-45. Empty-slot fade state is correct on first committed cell render and does not require a second reconciliation pass.
-46. During active lateral movement, header feedback is delivered as smooth translation rather than discrete date-jump refresh; on settle, alignment snaps to full-day columns.
-47. Visible day columns are computed from viewport width and rendered as a whole-number count only; partial columns and horizontal grid scrollbars are non-compliant.
+41. Scheduler legend content is single-sourced across schedule surfaces, restricted to non-obvious schedule semantics, and does not include generic close or navigation icon explanations.
+42. The scheduler daytime-emphasis band is limited to `08:00 <= slotStart < 19:00`, while off-hour rows remain fully legible and interactive.
+43. Jump-to exposes a compact calendar-enabled date control while retaining direct keyboard entry and no-JS GET fallback behavior.
+44. Light and dark mode share one coherent theme system with preserved semantic colors, readable scheduler state cues, and no mode-specific loss of contrast for off-hours, selection, pending, or error states.
+45. Support-request UI allows filing requests across visible categories; handler assignment remains permission/roster constrained without blocking request filing.
+46. Scheduler hydration/render guardrails use a single 300 ms idle gate for both fetch and render on wheel/trackpad and jump-style navigation while movement feedback stays header-first with skeleton rows.
+47. Wheel/trackpad movement updates headers immediately but defers schedule-row fetch/render until 300 ms idle; traversed/intermediate windows are not fetched.
+48. Jump-to updates target header/window state without scrolling through intervening dates, and fetch/render occurs asynchronously under the same idle-gated contract.
+49. Empty-slot fade state is correct on first committed cell render and does not require a second reconciliation pass.
+50. During active lateral movement, header feedback is delivered as smooth translation rather than discrete date-jump refresh; on settle, alignment snaps to full-day columns.
+51. Visible day columns are computed from viewport width and rendered as a whole-number count only; partial columns and horizontal grid scrollbars are non-compliant.
 
 ## 14. Traceability Matrix (`ui-fixes.md` -> This Spec)
 | UI Fix Request | Spec Section |
@@ -559,7 +616,7 @@ Error object requirements (single schema for UI + API):
 | URL query state stays shareable/reload-safe and is synchronized in place without in-grid back-swipe regressions | 5, 8.6, 8.12 |
 | Integrate edit form into modal, move Save/Legend placement | 8.9 |
 | Create/populate schedule entries from empty slots using same modal flow | 8.7, 8.9, 8.9.1 |
-| Expand booking by duration from modal (`+30 min` and longer) with atomic multi-slot apply | 8.9.2 |
+| Expand booking by duration from modal (`+1 hour` and longer) with atomic multi-slot apply | 8.9.2 |
 | `scheddow` compatibility and structured save-failure handling for synthetic/empty-slot saves | 8.9.3, 8.13 |
 | Typing/caret stability in modal entry inputs | 8.9.4 |
 | Support request controls and atomic support edits inside modal flow | 8.9.5 |
@@ -638,11 +695,10 @@ Error object requirements (single schema for UI + API):
   - DB clock ET path for date defaults/day headers/jump-to default.
   - DB clock unavailability path surfaces visible error while preserving current selection/navigation state.
 - Slot status and modal flow:
-  - Before selection, slot status shows exactly `Select a time slot` with visible `View`/`Legend`.
-  - After selection, slot status shows selected slot + summary + selected-slot change/error counts.
-  - Error count exposes details via existing expander or `?`, and detail rows include source + message.
-  - `View/Edit` label is per-slot capability-based; read-only path remains informational.
-  - `View`/`View/Edit` label updates consistently with selection/editability state changes.
+  - Before selection, slot status shows exactly `<schedule label>: Select a time slot` with visible `Details`/`Legend`/`Review pending`.
+  - After selection, sticky slot status shows only `<schedule label>: <selected slot>`.
+  - Summary, pending count, mode, and errors appear in `Selection Details`, with error messages shown as one flat list.
+  - `Details` label stays stable across read-only and editable paths.
   - `Enter` opens modal from selected slot, `Esc` and `Exit` close modal.
   - Double-click on selected cell opens the same modal flow as `Enter`.
   - Save in modal blocks on `No changes` and `Outstanding errors` (including pre-existing blocking errors), submits without confirm dialog when valid.

@@ -4,11 +4,13 @@
   <p class="error-code">error {{ code }}</p>
   <h1 id="error-title">{{ title }}</h1>
   <p>
-    {{ icons.exclaim_triangle() }}
+    {{ icons.x_circle() }}
     <span>An error occurred while processing your request.</span>
   </p>
   {% if detail %}
   <p>{{ detail }}</p>
+  {% endif %} {% if reference_id %}
+  <p class="error-reference">reference id: <code>{{ reference_id }}</code></p>
   {% endif %}
   <p class="error-assurance">{{ assurance }}</p>
   <div class="error-actions">

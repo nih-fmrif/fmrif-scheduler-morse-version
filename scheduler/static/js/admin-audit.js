@@ -60,6 +60,10 @@
     1,
     parseNumber(root.dataset.rbacAuditDefaultLimit, 10),
   );
+  const defaultAppErrorLimit = Math.max(
+    1,
+    parseNumber(root.dataset.appErrorDefaultLimit, 10),
+  );
   const defaultEmailLimit = Math.max(
     1,
     parseNumber(root.dataset.emailAuditDefaultLimit, 10),
@@ -87,6 +91,26 @@
     params.set(
       "limit",
       getFieldValue(form, "email_limit", String(defaultEmailLimit)),
+    );
+    return params;
+  };
+
+  const mapAppErrorQueryParams = (form) => {
+    const params = new URLSearchParams();
+    params.set("actor", getFieldValue(form, "app_error_actor", ""));
+    params.set(
+      "reference_id",
+      getFieldValue(form, "app_error_reference_id", ""),
+    );
+    params.set(
+      "exception_type",
+      getFieldValue(form, "app_error_exception_type", ""),
+    );
+    params.set("where_path", getFieldValue(form, "app_error_where_path", ""));
+    params.set("search", getFieldValue(form, "app_error_search", ""));
+    params.set(
+      "limit",
+      getFieldValue(form, "app_error_limit", String(defaultAppErrorLimit)),
     );
     return params;
   };
@@ -159,14 +183,79 @@
     body.appendChild(fragment);
   };
 
+  const renderAppErrorRows = (events) => {
+    const body = document.getElementById("app-error-body");
+    if (!(body instanceof HTMLTableSectionElement)) {
+      return;
+    }
+    body.textContent = "";
+    const fragment = document.createDocumentFragment();
+    events.forEach((event) => {
+      const row = document.createElement("tr");
+      rowCell(row, event.when);
+      rowCell(row, event.reference_id);
+      rowCell(row, event.actor);
+      rowCell(
+        row,
+        `${textValue(event.method, "").trim()} ${textValue(
+          event.where,
+          "",
+        ).trim()}`.trim(),
+      );
+      rowCell(row, event.exception_type);
+      rowCell(row, event.message);
+      rowCell(row, event.fingerprint);
+
+      const detailCell = document.createElement("td");
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "view";
+      details.appendChild(summary);
+
+      const detailsLines = [
+        `endpoint: ${textValue(event.endpoint, "").trim() || "-"}`,
+        `status: ${parseNumber(event.status_code, 500)}`,
+        `ip: ${textValue(event.ip, "").trim() || "-"}`,
+        `user agent: ${textValue(event.user_agent, "").trim() || "-"}`,
+      ];
+      detailsLines.forEach((line) => {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = line;
+        details.appendChild(paragraph);
+      });
+
+      const contextPre = document.createElement("pre");
+      contextPre.textContent = JSON.stringify(
+        typeof event.request_context === "object" &&
+          event.request_context !== null
+          ? event.request_context
+          : {},
+        null,
+        2,
+      );
+      details.appendChild(contextPre);
+
+      const tracePre = document.createElement("pre");
+      tracePre.textContent = textValue(event.stack_trace, "").trim() || "-";
+      details.appendChild(tracePre);
+
+      detailCell.appendChild(details);
+      row.appendChild(detailCell);
+      fragment.appendChild(row);
+    });
+    body.appendChild(fragment);
+  };
+
   const syncQueryString = () => {
     const rbacForm = document.getElementById("rbac-audit-filters");
+    const appErrorForm = document.getElementById("app-error-filters");
     const emailForm = document.getElementById("email-audit-filters");
     const notificationForm = document.getElementById(
       "notification-issues-filters",
     );
     if (
       !(rbacForm instanceof HTMLFormElement) &&
+      !(appErrorForm instanceof HTMLFormElement) &&
       !(emailForm instanceof HTMLFormElement) &&
       !(notificationForm instanceof HTMLFormElement)
     ) {
@@ -184,6 +273,36 @@
       params.set(
         "audit_limit",
         getFieldValue(rbacForm, "audit_limit", String(defaultRbacLimit)),
+      );
+    }
+    if (appErrorForm instanceof HTMLFormElement) {
+      params.set(
+        "app_error_actor",
+        getFieldValue(appErrorForm, "app_error_actor", ""),
+      );
+      params.set(
+        "app_error_reference_id",
+        getFieldValue(appErrorForm, "app_error_reference_id", ""),
+      );
+      params.set(
+        "app_error_exception_type",
+        getFieldValue(appErrorForm, "app_error_exception_type", ""),
+      );
+      params.set(
+        "app_error_where_path",
+        getFieldValue(appErrorForm, "app_error_where_path", ""),
+      );
+      params.set(
+        "app_error_search",
+        getFieldValue(appErrorForm, "app_error_search", ""),
+      );
+      params.set(
+        "app_error_limit",
+        getFieldValue(
+          appErrorForm,
+          "app_error_limit",
+          String(defaultAppErrorLimit),
+        ),
       );
     }
     if (emailForm instanceof HTMLFormElement) {
@@ -245,13 +364,34 @@
   const applyAuditPayload = (form, payload) => {
     const kind = form.dataset.auditKind;
     const count = Math.max(0, parseNumber(payload.count, 0));
-    const limit = Math.max(1, parseNumber(payload.limit, defaultRbacLimit));
+    const defaultLimit =
+      kind === "email"
+        ? defaultEmailLimit
+        : kind === "app-error"
+        ? defaultAppErrorLimit
+        : defaultRbacLimit;
+    const limit = Math.max(1, parseNumber(payload.limit, defaultLimit));
     if (kind === "rbac") {
       setFieldValue(form, "audit_limit", String(limit));
       renderRbacRows(Array.isArray(payload.events) ? payload.events : []);
       const empty = document.getElementById("rbac-audit-empty");
       const tableWrap = document.getElementById("rbac-audit-table-wrap");
       const showMoreWrap = document.getElementById("rbac-audit-show-more-wrap");
+      if (empty instanceof HTMLElement) {
+        empty.hidden = count > 0;
+      }
+      if (tableWrap instanceof HTMLElement) {
+        tableWrap.hidden = count === 0;
+      }
+      if (showMoreWrap instanceof HTMLElement) {
+        showMoreWrap.hidden = !(count === limit && limit < globalMaxLimit);
+      }
+    } else if (kind === "app-error") {
+      setFieldValue(form, "app_error_limit", String(limit));
+      renderAppErrorRows(Array.isArray(payload.events) ? payload.events : []);
+      const empty = document.getElementById("app-error-empty");
+      const tableWrap = document.getElementById("app-error-table-wrap");
+      const showMoreWrap = document.getElementById("app-error-show-more-wrap");
       if (empty instanceof HTMLElement) {
         empty.hidden = count > 0;
       }
@@ -290,7 +430,11 @@
 
     const kind = form.dataset.auditKind;
     const params =
-      kind === "email" ? mapEmailQueryParams(form) : mapRbacQueryParams(form);
+      kind === "email"
+        ? mapEmailQueryParams(form)
+        : kind === "app-error"
+        ? mapAppErrorQueryParams(form)
+        : mapRbacQueryParams(form);
 
     const activeController = requestControllers.get(form);
     if (activeController instanceof AbortController) {

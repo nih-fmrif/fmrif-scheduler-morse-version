@@ -1,8 +1,9 @@
-{% import "svg/icons.html" as icons %} {% import "macros.html" as macros %} {{
-macros.entry_legend(x.group) }} {# bucket support requests #} {% set sr =
-namespace() %} {% for r in x.requests %} {% if r.supportkind == 1 %} {% set
-sr.medical = r %} {% elif r.supportkind == 2 %} {% set sr.train = r %} {% elif
-r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
+{% import "svg/icons.html" as icons %} {% import "macros.html" as macros %} {#
+bucket support requests #} {% set sr = namespace() %} {% for r in x.requests %}
+{% if r.supportkind == 1 %} {% set sr.medical = r %} {% elif r.supportkind == 2
+%} {% set sr.train = r %} {% elif r.supportkind == 3 %} {% set sr.tech = r %} {%
+endif %} {% endfor %} {% set is_future_slot = x.date > cur_date or (x.date ==
+cur_date and x.hour > cur_hour) %}
 <entry-cell
   data-id="{{ x.id }}"
   data-hour="{{ x.hour }}"
@@ -24,6 +25,7 @@ r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
   %}
   data-summary-kind="schedule"
 >
+  {{ macros.entry_legend(x.group) }}
   <entry-summary
     title="group: {{ x.group or 'open' }}; member: {{ x.user or 'unassigned' }}"
   >
@@ -149,16 +151,17 @@ r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
         data-from-template="{{ x.template }}"
         hidden
       >
-        {{ icons.book() }}<sr-only>view activity</sr-only> log
+        History
       </button>
     </entry-buttons>
   </entry-detail>
   <entry-status>
     {{ macros.edit_icons("entry") }}
     <div class="time-use-icon">
-      {% if x.used is none %} {{ icons.square_empty() }} {% elif x.used %} {{
-      icons.square_used("time used") }} {% else %} {{ icons.square_unused("time
-      unused") }} {% endif %}
+      {% if x.used is none %} {% if not is_future_slot %}{{
+      macros.usage_status_token("unrecorded") }}{% endif %} {% elif x.used %} {{
+      macros.usage_status_token("used") }} {% else %} {{
+      macros.usage_status_token("unused") }} {% endif %}
     </div>
   </entry-status>
 </entry-cell>

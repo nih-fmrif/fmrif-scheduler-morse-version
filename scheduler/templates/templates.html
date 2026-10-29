@@ -1,29 +1,32 @@
 {% extends "page.html" %} {% import "macros.html" as macros %} {% block title
-%}{{ title }}{% endblock %} {% block head %} {{ super() }} {{
-macros.swatch_styles(colors) }} {% endblock %} {% block body %} {% if
-template_compatibility.issues %}
-<section class="note" aria-labelledby="template-compatibility-title">
-  <h1 id="template-compatibility-title">template compatibility</h1>
-  <p>
-    Stale or unavailable values from the rooted production data remain visible
-    here for repair. Saving is blocked until every blocking issue below is
-    resolved.
-  </p>
-  <ul>
-    {% for summary in template_compatibility.summary %}
-    <li>{{ summary }}</li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-<script id="device-groups" type="application/json">
+%}{{ title }}{% endblock %} {% block body %}
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="device-groups"
+  type="application/json"
+>
   {{ device_groups_json|tojson }}
 </script>
-<script id="group-colors" type="application/json">
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="group-colors"
+  type="application/json"
+>
   {{ colors|tojson }}
 </script>
-<script id="human-hours" type="application/json">
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="human-hours"
+  type="application/json"
+>
   {{ hours|tojson }}
+</script>
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="schedule-off-hours"
+  type="application/json"
+>
+  {{ off_hours|tojson }}
 </script>
 {{ macros.datalist("institutes", institutes, "invalid institute") }} {{
 macros.datalist("groups", groups, "invalid group") }} {% for k, v in
@@ -33,11 +36,19 @@ member of " ~ k) }} {% endfor %}
 <div class="editor-container">
   <form class="editor template-editor">
     {{ form.csrf_token }}
-    <div id="caption" data-changed="false" data-error="false">
-      {{ title }}{{ macros.edit_icons("template") }}
-    </div>
-    <p id="editor-load-status" class="editor-load-status" aria-live="polite">
+    <p
+      id="editor-load-status"
+      class="editor-load-status"
+      aria-live="polite"
+      hidden
+    >
       preparing template editor...
+    </p>
+    {{ macros.scheduler_status_card(schedule_label) }}
+    <p class="editor-model-note">
+      Group is the schedulable group code. Member must belong to that group.
+      Institute is stored separately on the template slot and is not inferred
+      from the selected group.
     </p>
     <div class="editor-workspace">
       <div class="editor-scroll-shell">
@@ -49,8 +60,8 @@ member of " ~ k) }} {% endfor %}
         >
           <span aria-hidden="true">←</span>
         </button>
-        <div id="scroll-container" aria-labelledby="caption" tabindex="0">
-          <table aria-labelledby="caption">
+        <div id="scroll-container" aria-label="{{ title }}" tabindex="0">
+          <table aria-label="{{ title }}">
             <thead>
               <tr>
                 <td></td>
@@ -126,60 +137,10 @@ member of " ~ k) }} {% endfor %}
           <span aria-hidden="true">→</span>
         </button>
       </div>
-      <aside
-        class="editor-inspector"
-        aria-live="polite"
-        aria-label="selected slot details"
-      >
-        <h2>selected slot</h2>
-        <p class="editor-inspector-target">select a slot to inspect and edit</p>
-        <p class="editor-inspector-summary">
-          use arrow keys to move and press enter to edit
-        </p>
-        <dl class="editor-inspector-meta">
-          <div>
-            <dt>mode</dt>
-            <dd class="editor-inspector-mode">read only</dd>
-          </div>
-          <div>
-            <dt>pending</dt>
-            <dd class="editor-inspector-pending">0 changes</dd>
-          </div>
-          <div>
-            <dt>errors</dt>
-            <dd class="editor-inspector-errors">0</dd>
-          </div>
-        </dl>
-      </aside>
     </div>
     <div id="focus-trap"></div>
-    <button id="apply" type="submit" disabled>save</button>
   </form>
-  <figure class="legend">
-    <figcaption>legend</figcaption>
-    <dl>
-      <div>
-        <dt>state icons</dt>
-        <dd>
-          <dl>
-            <div>
-              <dt>{{ icons.pencil("pencil") }}</dt>
-              <dd>unsaved changes</dd>
-            </div>
-            <div>
-              <dt class="red">
-                {{ icons.exclaim_triangle("exclamation point in triangle")}}
-              </dt>
-              <dd>errors are present</dd>
-            </div>
-            <div>
-              <dt class="red">{{ icons.lock("lock") }}</dt>
-              <dd>server could not process request</dd>
-            </div>
-          </dl>
-        </dd>
-      </div>
-    </dl>
-  </figure>
+  {{ macros.schedule_legend_dialog(show_group_cues=true, show_daytime_cues=true)
+  }} {{ macros.selection_details_dialog() }}
 </div>
 {{ macros.save_dialogs() }} {% endblock %}

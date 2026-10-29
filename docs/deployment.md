@@ -100,7 +100,7 @@ OAuth 2.0 PKCE implementation successfully deployed on fmrif-staging with Flask 
 - **Language:** Python 3.11
 - **Port:** 5051 (HTTP, internal only)
 - **Status:** Running (PID 13735)
-- **Command:** `.venv/bin/python -m flask run --host=0.0.0.0 --port=5051`
+- **Command:** `/bin/bash /home/leejo/fmrif-scheduler-morse-version/scripts/serve.sh`
 - **Logs:** `/tmp/flask-staging.log`
 
 ### 2. PostgreSQL Database (fmrif-staging)
@@ -269,7 +269,7 @@ sudo systemctl status fmrif-flask
 
 **Alternative (Legacy): Start Flask with nohup** (not recommended for production)
 ```bash
-nohup .venv/bin/python -m flask run --host=0.0.0.0 --port=5051 > /tmp/flask-staging.log 2>&1 &
+nohup /bin/bash /home/leejo/fmrif-scheduler-morse-version/scripts/serve.sh > /tmp/flask-staging.log 2>&1 &
 ```
 
 ### 7. Verify
@@ -401,7 +401,7 @@ sudo systemctl status fmrif-flask
 pkill -f "flask run"
 sleep 2
 cd /home/leejo/fmrif-scheduler-morse-version
-nohup .venv/bin/python -m flask run --host=0.0.0.0 --port=5051 > /tmp/flask-staging.log 2>&1 &
+nohup /bin/bash /home/leejo/fmrif-scheduler-morse-version/scripts/serve.sh > /tmp/flask-staging.log 2>&1 &
 ```
 
 ### Restart PostgreSQL

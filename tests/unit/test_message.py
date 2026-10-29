@@ -54,6 +54,31 @@ def test_send_returns_false_when_smtp_endpoint_is_unreachable():
         assert message.send("to@example.com", "subject", "body") is False
 
 
+def test_send_marks_suppressed_delivery_as_skipped(monkeypatch):
+    app = _mail_app(
+        MAIL_SUPPRESS_SEND=True,
+        MAIL_SERVER="127.0.0.1",
+        MAIL_PORT=_unused_local_port(),
+        MAIL_USE_TLS=False,
+        MAIL_USE_SSL=False,
+    )
+    captured = {}
+
+    def fake_log_email_audit_event(*args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "scheduler.logic.log_email_audit_event", fake_log_email_audit_event
+    )
+
+    with app.app_context():
+        assert message.send("to@example.com", "subject", "body") is True
+
+    assert captured["status"] == "skipped"
+    assert captured["recipient"] == "to@example.com"
+    assert captured["subject"] == "subject"
+
+
 def test_send_uses_mail_default_sender_and_splits_recipients():
     cfg = _require_mailpit()
     app = _mail_app(

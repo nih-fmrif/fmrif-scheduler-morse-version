@@ -69,6 +69,8 @@ def test_device_get_defaults_jump_start_to_db_clock(route_client, monkeypatch):
     )
     assert start_input is not None
     assert start_input.group(1) == db_date.isoformat()
+    assert re.search(r'<input[^>]*name="start"[^>]*type="date"', body) is not None
+    assert 'id="jump-open-picker"' in body
 
 
 @pytest.mark.covers_route("/device/<the_device>", "GET")
@@ -98,6 +100,8 @@ def test_device_get_with_explicit_start_surfaces_db_clock_warning(
     )
     assert start_input is not None
     assert start_input.group(1) == chosen_date.isoformat()
+    assert re.search(r'<input[^>]*name="start"[^>]*type="date"', body) is not None
+    assert 'id="jump-open-picker"' in body
 
 
 @pytest.mark.covers_route("/device/<the_device>", "GET")
@@ -117,6 +121,67 @@ def test_device_get_without_start_returns_503_when_db_clock_unavailable(
     assert "Database time unavailable. Unable to refresh ET date right now." in (
         response.get_data(as_text=True)
     )
+
+
+@pytest.mark.covers_route("/device/<the_device>", "GET")
+def test_device_get_filters_selection_groups_for_regular_editor(route_client):
+    device_id = seeded_scanner_id()
+    group_id = create_group()
+    ensure_active_user("slot-editor", "slot-editor@example.com", "Slot Editor")
+    set_group_membership(group_id, "slot-editor", approved=True, pi=False)
+
+    if model.get(model.DeviceGroup, (device_id, group_id)) is None:
+        model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
+        model.db.session.commit()
+    _clear_reference_data_cache()
+
+    set_session_user(
+        route_client,
+        username="slot-editor",
+        email="slot-editor@example.com",
+        display_name="Slot Editor",
+        groups=[group_id],
+    )
+
+    response = route_client.get(f"/device/{device_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    match = re.search(
+        r'<datalist id="selection-groups"[^>]*>(.*?)</datalist>',
+        body,
+        re.DOTALL,
+    )
+    assert match is not None
+    options = match.group(1)
+    assert f'value="{group_id}"' in options
+    assert 'value="training"' not in options
+    assert 'value="maint"' not in options
+
+
+@pytest.mark.covers_route("/device/<the_device>", "GET")
+def test_device_get_renders_hour_aligned_duration_presets(route_client):
+    ensure_admin_user()
+    set_admin_session(route_client)
+
+    response = route_client.get(f"/device/{seeded_scanner_id()}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "+1 hour" in body
+    assert "+2 hours" in body
+    assert "+3 hours" in body
+    assert "+4 hours" in body
+    assert "+30 min" not in body
+    assert "+60 min" not in body
+    assert "+90 min" not in body
+    assert "+120 min" not in body
+    assert '"slotMinutes"' not in body
+    assert "data-duration-minutes=" not in body
+    assert 'data-duration-slots="1"' in body
+    assert 'data-duration-slots="2"' in body
+    assert 'data-duration-slots="3"' in body
+    assert 'data-duration-slots="4"' in body
 
 
 def _create_template(device_id: str, template_id: str = "A", label: str = "Template A"):
@@ -287,7 +352,38 @@ def test_device_templates_apply_post_rejects_invalid_template_code(
     )
 
     assert post_response.status_code == 200
-    assert "invalid template code(s)" in post_response.get_data(as_text=True)
+    body = post_response.get_data(as_text=True)
+    assert "invalid template code(s)" in body
+    assert 'class="template-apply"' in body
+    assert 'data-initial-state="dirty"' in body
+    assert 'data-has-server-errors="1"' in body
+    assert model.ScheduleEntry.query.filter_by(device=device_id).count() == 0
+
+
+@pytest.mark.covers_route("/device/<the_device>/templates", "POST")
+def test_device_templates_apply_post_preserves_required_field_error_state(
+    route_client, route_app_context
+):
+    ensure_admin_user()
+    device_id, _ = create_device()
+    _create_template(device_id, template_id="A", label="Template A")
+    set_admin_session(route_client)
+
+    get_response = route_client.get(f"/device/{device_id}/templates")
+    csrf_token = extract_csrf_token(get_response.get_data(as_text=True))
+
+    post_response = route_client.post(
+        f"/device/{device_id}/templates",
+        data={"csrf_token": csrf_token, "templates": ""},
+        follow_redirects=False,
+    )
+
+    assert post_response.status_code == 200
+    body = post_response.get_data(as_text=True)
+    assert "This field is required." in body
+    assert 'class="template-apply"' in body
+    assert 'data-initial-state="dirty"' in body
+    assert 'data-has-server-errors="1"' in body
     assert model.ScheduleEntry.query.filter_by(device=device_id).count() == 0
 
 
@@ -389,6 +485,130 @@ def test_seeded_template_apply_get_surfaces_repair_required_status(
     assert "repair required" in body
     assert f"<strong>{template_id}</strong>" in body
     assert stale_summary in body
+    assert 'data-template-state="blocking"' in body
+    assert 'data-initial-state="pristine"' in body
+    assert 'data-has-server-errors="0"' in body
+    assert re.search(r"<button[^>]*data-js-submit[^>]*disabled", body) is not None
+
+
+@pytest.mark.covers_route("/device/<the_device>", "GET")
+def test_device_page_shows_templates_link_for_templates_only_device_permission(
+    route_client,
+):
+    user_id = f"tmpl-route-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Template Route User")
+    device_id, _ = create_device()
+    _create_template(device_id, template_id="A", label="Template A")
+    model.db.session.add(
+        model.UserDevice(
+            user=user_id,
+            device=device_id,
+            templates=True,
+            slot=False,
+            tech=False,
+            medical=False,
+            training=False,
+        )
+    )
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Template Route User",
+    )
+
+    response = route_client.get(f"/device/{device_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert f'href="/device/{device_id}/templates"' in body
+
+
+@pytest.mark.covers_route("/device/<the_device>/templates", "GET")
+def test_templates_only_device_permission_allows_template_routes(route_client):
+    user_id = f"tmpl-only-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Template Only User")
+    device_id, _ = create_device()
+    _create_template(device_id, template_id="A", label="Template A")
+    model.db.session.add(
+        model.UserDevice(
+            user=user_id,
+            device=device_id,
+            templates=True,
+            slot=False,
+            tech=False,
+            medical=False,
+            training=False,
+        )
+    )
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Template Only User",
+    )
+
+    apply_response = route_client.get(f"/device/{device_id}/templates")
+    edit_response = route_client.get(f"/device/{device_id}/templates/edit/A")
+
+    assert apply_response.status_code == 200
+    assert edit_response.status_code == 200
+
+
+@pytest.mark.covers_route("/device/<the_device>/templates", "GET")
+def test_slot_only_device_permission_does_not_allow_template_routes(route_client):
+    user_id = f"slot-only-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Slot Only User")
+    device_id, _ = create_device()
+    _create_template(device_id, template_id="A", label="Template A")
+    model.db.session.add(
+        model.UserDevice(
+            user=user_id,
+            device=device_id,
+            templates=False,
+            slot=True,
+            tech=False,
+            medical=False,
+            training=False,
+        )
+    )
+    model.db.session.flush()
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Slot Only User",
+    )
+
+    response = route_client.get(f"/device/{device_id}/templates")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.covers_route("/device/<the_device>/templates/edit/<the_template>", "GET")
+def test_template_schedule_edit_describes_group_member_institute_fields(
+    route_client,
+):
+    ensure_admin_user()
+    set_admin_session(route_client)
+    device_id, _ = create_device()
+    _create_template(device_id, template_id="A", label="Template A")
+
+    response = route_client.get(f"/device/{device_id}/templates/edit/A")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Group is the schedulable group code." in body
+    assert "Member must belong to that group." in body
+    assert "Institute is stored separately on the template slot" in body
 
 
 @pytest.mark.covers_route("/device/<the_device>/templates", "POST")
@@ -582,7 +802,7 @@ def test_device_schedule_post_creates_synthetic_slot_and_returns_id_map(
     payload = post_response.get_json()
     assert payload is not None
     assert payload.get("saved") == 1, payload
-    assert isinstance(payload.get("notifications"), list), payload
+    assert payload.get("notifications") == [], payload
     assert slot_id in payload.get("id_map", {}), payload
 
     entry_id = int(payload["id_map"][slot_id])
@@ -593,3 +813,7 @@ def test_device_schedule_post_creates_synthetic_slot_and_returns_id_map(
     assert entry.hour == 8
     assert entry.group == group_id
     assert entry.user == member_id
+    audit_rows = model.EmailAuditLog.query.filter(
+        model.EmailAuditLog.action == "email.scheduler.notification"
+    ).all()
+    assert audit_rows == []

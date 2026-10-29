@@ -8,8 +8,9 @@
 5. [Auth Adapter Refactor Note](auth-adapter-refactor-note.md)
 6. [Containerized PostgreSQL Guide](containerized-postgres.md)
 7. [Security Guide](security.md)
-8. [UX Guidelines](ux-guidelines.md)
-9. [CSS Style Ownership](css-style-ownership.md)
+8. [Deployment Considerations](deployment-considerations.md)
+9. [UX Guidelines](ux-guidelines.md)
+10. [CSS Style Ownership](css-style-ownership.md)
 
 ## Agent guidance
 1. [Agent Guidance: Quickstart](agent-guidance-quickstart.md)

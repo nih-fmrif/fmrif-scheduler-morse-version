@@ -275,6 +275,23 @@ def seeded_dev_user_id() -> str:
     raise AssertionError("No active users exist in seeded route-test data")
 
 
+def seeded_group_scanner_id(group_id: str) -> str:
+    """Return an active scanner linked to the requested group when possible."""
+    with _route_app_context():
+        row = (
+            model.db.session.query(model.Device.id)
+            .join(model.DeviceGroup, model.DeviceGroup.device == model.Device.id)
+            .filter(model.Device.active)
+            .filter(model.DeviceGroup.group == group_id)
+            .order_by(model.Device.id)
+            .first()
+        )
+        if row is not None:
+            return str(row[0])
+
+    return seeded_scanner_id()
+
+
 def seeded_sched_log_id() -> str:
     """Return an existing schedule id for /json/v1/log/<id> contract checks."""
     with _route_app_context():

@@ -532,6 +532,7 @@ function wire_jump_form() {
 
   const startInput = jumpForm.querySelector('input[name="start"]');
   const daysInput = jumpForm.querySelector('input[name="days"]');
+  const pickerButton = jumpForm.querySelector("#jump-open-picker");
   if (!startInput || !daysInput) {
     return;
   }
@@ -578,7 +579,24 @@ function wire_jump_form() {
     scheduleJump();
   };
   startInput.addEventListener("input", onInput);
+  startInput.addEventListener("change", onInput);
   daysInput.addEventListener("input", onInput);
+  if (pickerButton instanceof HTMLButtonElement) {
+    pickerButton.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      startInput.focus({ preventScroll: true });
+      if (typeof startInput.showPicker == "function") {
+        try {
+          startInput.showPicker();
+          return;
+        } catch (_err) {
+          // Some browsers restrict showPicker to trusted contexts. Focusing
+          // the native date input is the fallback.
+        }
+      }
+      startInput.click();
+    });
+  }
   jumpForm.addEventListener("submit", (evt) => {
     evt.preventDefault();
     applyJump();
@@ -586,11 +604,9 @@ function wire_jump_form() {
   jumpForm.dataset.jsReady = "true";
 }
 
-const base = json_or(document.querySelector("#app-root").innerText, "/");
-
 async function loadLog(id, template, signal) {
   try {
-    const resp = await fetch(`${base}json/v1/log/${id}-${template}`, {
+    const resp = await fetch(`/json/v1/log/${id}-${template}`, {
       signal,
     });
     if (!resp.ok) {
@@ -750,6 +766,26 @@ function format_inspector_error_rows(errors) {
     .filter(Boolean);
 }
 
+function format_inspector_error_message(row) {
+  const source = String(row?.source ?? "")
+    .trim()
+    .toLowerCase();
+  const message = String(row?.message ?? "").trim() || "validation error";
+  if (
+    source == "" ||
+    source == "slot" ||
+    source == "server" ||
+    source == "validator" ||
+    source == "verifier"
+  ) {
+    return message;
+  }
+  if (message.toLowerCase().startsWith(`${source}:`)) {
+    return message;
+  }
+  return `${source}: ${message}`;
+}
+
 function read_slot_validation_errors(entry) {
   if (!entry) {
     return [];
@@ -868,7 +904,12 @@ function read_slot_validation_errors(entry) {
   return deduped;
 }
 
-function sanitize_and_bind_inspector_editor(source, target, editable, onSync) {
+function sanitize_and_bind_inspector_editor(
+  source,
+  target,
+  interactive,
+  onSync,
+) {
   if (!source || !target || !(source instanceof HTMLElement)) {
     return;
   }
@@ -986,7 +1027,7 @@ function sanitize_and_bind_inspector_editor(source, target, editable, onSync) {
     }
     if (c.matches("button")) {
       c.setAttribute("type", "button");
-      if (!editable) {
+      if (!interactive) {
         c.disabled = true;
       }
     }
@@ -995,22 +1036,22 @@ function sanitize_and_bind_inspector_editor(source, target, editable, onSync) {
       if (id) {
         c.id = `${id}-inspector`;
       }
-      if (!editable) {
+      if (!interactive) {
         c.disabled = true;
       }
       continue;
     }
     if (c.matches("input") || c.matches("select") || c.matches("textarea")) {
-      c.disabled = c.disabled || !editable;
-      if (editable && c.type == "radio") {
+      c.disabled = c.disabled || !interactive;
+      if (interactive && c.type == "radio") {
         if (c.name) {
           c.name = `${c.name}-inspector`;
         }
       }
-      if (!editable) {
+      if (!interactive) {
         c.setAttribute("tabindex", "-1");
       }
-      if (!editable) {
+      if (!interactive) {
         continue;
       }
       c.addEventListener("input", () => {
@@ -1096,7 +1137,7 @@ function sanitize_and_bind_inspector_editor(source, target, editable, onSync) {
     }
   }
 
-  if (editable) {
+  if (interactive) {
     const reset = cloned.querySelector("button[data-reset]");
     if (reset && reset.dataset.sourceId == null) {
       const sourceReset = source.querySelector("button[data-reset]");
@@ -1109,7 +1150,7 @@ function sanitize_and_bind_inspector_editor(source, target, editable, onSync) {
             sanitize_and_bind_inspector_editor(
               source,
               target,
-              editable,
+              interactive,
               onSync,
             );
           }, 0);
@@ -1896,7 +1937,14 @@ function editor_grid() {
   container.classList.add("js-grid");
 }
 
-function editor_dialog(save, showNotifications, titleText, content, then) {
+function editor_dialog(
+  save,
+  showNotifications,
+  titleText,
+  content,
+  then,
+  options = {},
+) {
   const con = document.getElementById("save-dialog-container");
   const modal = con.querySelector(".dialog-box-container");
   const title = con.querySelector("#save-dialog-title");
@@ -1905,9 +1953,18 @@ function editor_dialog(save, showNotifications, titleText, content, then) {
   const confirm = con.querySelector("button[name=confirm]");
   const notificationsCon = con.querySelector(".dialog-form input-set");
   const notifications = notificationsCon.querySelector("#send-notifications");
+  const defaultConfirmText =
+    confirm.dataset.defaultText ?? confirm.innerText ?? "confirm";
+  const defaultCancelText =
+    cancel.dataset.defaultText ?? cancel.innerText ?? "cancel";
+  confirm.dataset.defaultText = defaultConfirmText;
+  cancel.dataset.defaultText = defaultCancelText;
   let confirmed = false;
   title.innerText = titleText;
   replaceNodeContent(body, content);
+  confirm.innerText = options.confirmText ?? defaultConfirmText;
+  cancel.innerText = options.cancelText ?? defaultCancelText;
+  confirm.disabled = options.confirmDisabled === true;
   if (save) {
     cancel.hidden = false;
   }
@@ -1920,7 +1977,13 @@ function editor_dialog(save, showNotifications, titleText, content, then) {
     // scroll lock and focus cancel button
     disableBodyScroll(modal);
     confirmed = false;
-    cancel.focus();
+    const focusTarget =
+      !cancel.hidden && !cancel.disabled
+        ? cancel
+        : confirm.disabled
+        ? null
+        : confirm;
+    focusTarget?.focus();
   });
   const markConfirmed = () => {
     confirmed = true;
@@ -1943,6 +2006,9 @@ function editor_dialog(save, showNotifications, titleText, content, then) {
     cancel.hidden = true;
     notificationsCon.hidden = true;
     notifications.checked = true;
+    confirm.innerText = defaultConfirmText;
+    cancel.innerText = defaultCancelText;
+    confirm.disabled = false;
   });
   dialog.show();
 }
@@ -2083,7 +2149,10 @@ class SupportRequestSubForm {
       !this.handler.validity.valid
     );
   }
-  get request_editable() {
+  get request_active() {
+    return Boolean(this.requested?.checked);
+  }
+  get response_window_open() {
     if (this.parent.locked) {
       return false;
     }
@@ -2091,11 +2160,25 @@ class SupportRequestSubForm {
     if (this.parent.past) {
       return false;
     }
+    return true;
+  }
+  get request_editable() {
+    if (!this.response_window_open) {
+      return false;
+    }
     // filing requests is controlled by the slot editability.
     return this.parent.editable;
   }
+  get support_actionable() {
+    return (
+      this.response_window_open &&
+      this.request_active &&
+      this.perms[this.handler_permission_key] &&
+      this.members.size > 0
+    );
+  }
   get editable() {
-    return this.request_editable;
+    return this.request_editable || this.support_actionable;
   }
   get handler_permission_key() {
     switch (this.kind) {
@@ -2108,12 +2191,9 @@ class SupportRequestSubForm {
     }
   }
   get handler_editable() {
-    // assignment is constrained by role-specific permission and roster.
-    return (
-      this.request_editable &&
-      this.perms[this.handler_permission_key] &&
-      this.members.size > 0
-    );
+    // assignment is constrained by role-specific permission, an active request,
+    // and the current device roster.
+    return this.support_actionable;
   }
   get effective_handler() {
     if (!this.handler) {
@@ -2128,8 +2208,8 @@ class SupportRequestSubForm {
     if (this.requested) {
       this.requested.disabled = !this.request_editable;
     }
-    this.elm.disabled = !this.request_editable;
-    const requestActive = Boolean(this.requested?.checked);
+    this.elm.disabled = !this.editable;
+    const requestActive = this.request_active;
     if (this.handler) {
       if (!requestActive && this.handler.value != "") {
         this.handler.value = "";
@@ -2187,7 +2267,10 @@ class Cell {
     this.membership = cfg.membership;
     this.device_groups = cfg.device_groups;
     this.schedulable_groups = cfg.schedulable_groups;
+    this.selection_group_list = cfg.selection_group_list;
     this.colors = cfg.colors;
+    this.default_group = cfg.default_group ?? "";
+    this.autofilled_group = false;
 
     // institute may be null depending on the page
     this.institute = elm.querySelector("input[id^=ins-]");
@@ -2199,6 +2282,8 @@ class Cell {
     this.summaryPrimary = elm.querySelector(".entry-summary-primary");
     this.summarySecondary = elm.querySelector(".entry-summary-secondary");
     this.summaryTertiary = elm.querySelector(".entry-summary-tertiary");
+    this.readonlyCue = elm.querySelector('[data-readonly-cue="slot"]');
+    this.supportCue = elm.querySelector('[data-support-cue="slot"]');
 
     this.id = elm.dataset.id;
 
@@ -2227,40 +2312,62 @@ class Cell {
       new SupportRequestSubForm(sr, this, cfg),
     ]);
     this.sr = Object.fromEntries(kv);
+    this.update_swatch();
     this.update_summary();
 
-    // nothing further to do unless this is an editable cell
-    if (!this.editable) {
+    // nothing further to do unless this cell has some actionable controls.
+    if (!this.canInteract) {
       this.sync_state_flags();
       return;
     }
 
-    if (this.institute) {
+    if (this.editable && this.institute) {
       this.institute.disabled = false;
     }
-    this.group.disabled = false;
-    this.member.disabled = false;
-    this.update_list();
+    if (this.editable) {
+      this.group.disabled = false;
+      this.member.disabled = false;
+      this.update_group_list();
+      this.update_list();
+    }
 
     for (const sr of Object.values(this.sr)) {
       sr.sync_controls();
     }
 
     this.elm.dataset.canEdit = this.editable;
-    this.resetBtn.disabled = !this.editable;
+    this.resetBtn.disabled = !this.canInteract;
 
     this.resetBtn.addEventListener("click", (evt) => {
       evt.preventDefault();
       this.reset();
       this.update();
     });
-    this.elm.addEventListener("input", () => {
+    this.elm.addEventListener("input", (evt) => {
+      if (evt.target == this.group) {
+        this.autofilled_group = false;
+      }
       this.update();
     });
     this.member.addEventListener("list-change", () => {
       this.update();
     });
+    this.elm.addEventListener("focusin", () => {
+      this.preview_default_group();
+    });
+    this.elm.addEventListener("focusout", (evt) => {
+      if (this.elm.contains(evt.relatedTarget)) {
+        return;
+      }
+      this.clear_default_group();
+    });
     this.sync_state_flags();
+  }
+  get member_changed() {
+    return this.orig.member != this.member.value;
+  }
+  get group_changed() {
+    return this.orig.group != this.group.value && !this.autofilled_group;
   }
   get changed() {
     if (this.institute && this.orig.institute != this.institute.value) {
@@ -2271,13 +2378,10 @@ class Cell {
         return true;
       }
     }
-    return (
-      this.orig.group != this.group.value ||
-      this.orig.member != this.member.value
-    );
+    return this.group_changed || this.member_changed;
   }
   get invalid() {
-    if (!this.editable) {
+    if (!this.canInteract) {
       // cell state may be incorrect but the user can do nothing about it.
       return false;
     }
@@ -2324,6 +2428,12 @@ class Cell {
     }
     return false;
   }
+  get supportActionable() {
+    return Object.values(this.sr).some((sr) => sr.support_actionable);
+  }
+  get canInteract() {
+    return this.editable || this.supportActionable;
+  }
   diff() {
     if (!this.changed) {
       return null;
@@ -2337,10 +2447,10 @@ class Cell {
     if (this.institute && this.orig.institute != this.institute.value) {
       changes.institute = [this.orig.institute, this.institute.value];
     }
-    if (this.orig.group != this.group.value) {
+    if (this.group_changed || (this.autofilled_group && this.member_changed)) {
       changes.group = [this.orig.group, this.group.value];
     }
-    if (this.orig.member != this.member.value) {
+    if (this.member_changed) {
       changes.member = [this.orig.member, this.member.value];
     }
     for (const [kind, sr] of Object.entries(this.sr)) {
@@ -2352,20 +2462,36 @@ class Cell {
     return changes;
   }
   reset() {
+    this.autofilled_group = false;
     if (this.institute) {
       this.institute.value = this.orig.institute;
       resetList(this.institute);
     }
     this.group.value = this.orig.group;
+    this.update_group_list();
     resetList(this.group);
     this.member.value = this.orig.member;
+    this.update_list();
     resetList(this.member);
     for (const sr of Object.values(this.sr)) {
       sr.reset();
     }
-    this.update_list();
     this.update_summary();
     this.fire_change();
+  }
+  update_group_list() {
+    let list = this.selection_group_list;
+    const special =
+      ["training", "maint"].includes(this.orig.group) ||
+      ["training", "maint"].includes(this.group.value);
+    if (!list || this.perms.edit_any || special) {
+      list = "groups";
+    }
+    const currentListId =
+      this.group.list?.id || this.group.getAttribute("list");
+    if (currentListId != list) {
+      this.group.setAttribute("list", list);
+    }
   }
   update_list() {
     const gv = this.group.value;
@@ -2376,7 +2502,9 @@ class Cell {
     }
     // only update the list if it's different than the current value
     // to avoid unnecessary revalidation
-    if (this.member.list.id != list) {
+    const currentListId =
+      this.member.list?.id || this.member.getAttribute("list");
+    if (currentListId != list) {
       this.member.setAttribute("list", list);
       resetList(this.member);
     }
@@ -2391,10 +2519,14 @@ class Cell {
         this.legend.classList.remove(cls);
       }
     }
-    const token = this.colors[this.group.value]
-      ? cssToken(this.group.value)
-      : "none";
+    const displayGroup =
+      this.autofilled_group && !this.member_changed ? "" : this.group.value;
+    const token = this.colors[displayGroup] ? cssToken(displayGroup) : "none";
     this.legend.classList.add(`${classPrefix}${token}`);
+    this.legend.style.setProperty(
+      "--swatch",
+      this.colors[displayGroup] || "transparent",
+    );
   }
   update_summary() {
     if (
@@ -2404,7 +2536,9 @@ class Cell {
     ) {
       return;
     }
-    const group = this.group.value || "open";
+    const displayGroup =
+      this.autofilled_group && !this.member_changed ? "" : this.group.value;
+    const group = displayGroup || "open";
     const member = this.member.value || "unassigned";
     if (this.summaryPrimary) {
       this.summaryPrimary.innerText = group;
@@ -2444,6 +2578,30 @@ class Cell {
     }
     this.elm.title = tooltip.join("; ");
   }
+  preview_default_group() {
+    if (!this.default_group || !this.editable) {
+      return;
+    }
+    if (this.orig.group != "" || this.group.value != "") {
+      return;
+    }
+    this.group.value = this.default_group;
+    this.autofilled_group = true;
+    this.update_group_list();
+    this.update_list();
+    this.update_swatch();
+    this.update_summary();
+    this.sync_state_flags();
+  }
+  clear_default_group() {
+    if (!this.autofilled_group || this.member_changed) {
+      return;
+    }
+    this.group.value = this.orig.group;
+    this.autofilled_group = false;
+    this.update_group_list();
+    this.update();
+  }
   fire_change() {
     this.elm.dispatchEvent(
       new CustomEvent("cell_change", {
@@ -2453,10 +2611,20 @@ class Cell {
     );
   }
   sync_state_flags() {
+    this.elm.dataset.canEdit = from_bool(this.editable);
+    this.elm.dataset.canInteract = from_bool(this.canInteract);
+    this.elm.dataset.supportActionable = from_bool(this.supportActionable);
     this.elm.dataset.changed = from_bool(this.changed);
     this.elm.dataset.error = from_bool(this.invalid);
+    if (this.readonlyCue) {
+      this.readonlyCue.hidden = this.editable;
+    }
+    if (this.supportCue) {
+      this.supportCue.hidden = !this.supportActionable;
+    }
   }
   update() {
+    this.update_group_list();
     this.update_list();
     this.update_swatch();
     for (const sr of Object.values(this.sr)) {
@@ -2472,6 +2640,8 @@ class Cell {
     this.reset();
     this.locked = true;
     this.elm.dataset.canEdit = false;
+    this.elm.dataset.canInteract = false;
+    this.elm.dataset.supportActionable = false;
     this.elm.dataset.locked = "true";
 
     if (this.institute) {
@@ -2483,6 +2653,7 @@ class Cell {
     for (const sr of Object.values(this.sr)) {
       sr.elm.disabled = true;
     }
+    this.sync_state_flags();
   }
 }
 
@@ -2530,7 +2701,6 @@ function wire_cell_editors() {
         chunkDays: initialWindowDays,
         totalDays: initialWindowDays,
         endpoint: scheduleLoad.endpoint,
-        slotMinutes: Number.parseInt(scheduleLoad.slotMinutes, 10) || 60,
       }
     : {
         start: null,
@@ -2538,7 +2708,6 @@ function wire_cell_editors() {
         chunkDays: 7,
         totalDays: 0,
         endpoint: "",
-        slotMinutes: 60,
       };
   if (
     Number.isNaN(scheduleWindow.requestedDays) ||
@@ -2575,7 +2744,8 @@ function wire_cell_editors() {
   });
 
   // if this is missing we're on a template page so edit_any is true and it's irrelevant
-  const membership = new Set(json_from_script_or("user-groups", []));
+  const user_groups = json_from_script_or("user-groups", []);
+  const membership = new Set(user_groups);
   membership.add(""); // consider every one a member of the null group
 
   const device_groups = new Set(json_from_script_or("device-groups", []));
@@ -2584,6 +2754,7 @@ function wire_cell_editors() {
   const offHours = new Set(
     json_from_script_or("schedule-off-hours", []).map((hour) => String(hour)),
   );
+  const selectionGroups = datalist_ids_or("selection-groups", []);
 
   const tech_members = new Set(datalist_ids_or("tech", []));
   const train_members = new Set(datalist_ids_or("train", []));
@@ -2601,6 +2772,11 @@ function wire_cell_editors() {
     membership,
     device_groups,
     schedulable_groups,
+    default_group:
+      !perms.edit_any && selectionGroups.length == 1 ? selectionGroups[0] : "",
+    selection_group_list: document.querySelector("datalist#selection-groups")
+      ? "selection-groups"
+      : "groups",
     colors,
     sr_members: {
       tech: tech_members,
@@ -2633,40 +2809,27 @@ function wire_cell_editors() {
     pending: "0 changes",
     errors: "0 errors",
   };
-  const inspectorField = (detailClass, fallbackClass = detailClass) =>
-    document.querySelector(`.${detailClass}, .${fallbackClass}`);
   const inspector = {
-    detailTarget: inspectorField(
-      "editor-inspector-detail-target",
-      "editor-inspector-target",
-    ),
-    detailSummary: inspectorField(
-      "editor-inspector-detail-summary",
-      "editor-inspector-summary",
-    ),
-    detailMode: inspectorField(
-      "editor-inspector-detail-mode",
-      "editor-inspector-mode",
-    ),
-    detailPending: inspectorField(
-      "editor-inspector-detail-pending",
-      "editor-inspector-pending",
-    ),
-    detailErrors: inspectorField(
-      "editor-inspector-detail-errors",
-      "editor-inspector-errors",
-    ),
+    barTarget: document.querySelector(".editor-inspector-target"),
+    detailTarget: document.querySelector(".editor-inspector-detail-target"),
+    detailSummary: document.querySelector(".editor-inspector-detail-summary"),
+    detailMode: document.querySelector(".editor-inspector-detail-mode"),
+    detailPending: document.querySelector(".editor-inspector-detail-pending"),
+    detailErrors: document.querySelector(".editor-inspector-detail-errors"),
     open: document.querySelector("#inspector-open"),
+    openSupportCue: document.querySelector(
+      '#inspector-open [data-support-cue="selection"]',
+    ),
+    openReadonlyCue: document.querySelector(
+      '#inspector-open [data-readonly-cue="selection"]',
+    ),
     review: document.querySelector("#review-pending"),
     save: document.querySelector("#inspector-save"),
-    errorsToggle: document.querySelector("#inspector-errors-toggle"),
     errorList: document.querySelector("#inspector-error-list"),
     slotEditor: document.querySelector("#inspector-slot-editor"),
     durationRoot: document.querySelector("#inspector-duration"),
     durationButtons: [
-      ...document.querySelectorAll(
-        "#inspector-duration [data-duration-minutes]",
-      ),
+      ...document.querySelectorAll("#inspector-duration [data-duration-slots]"),
     ],
     endTimeSelect: document.querySelector("#inspector-end-slot"),
     previewStart: document.querySelector("#inspector-preview-start"),
@@ -2686,7 +2849,11 @@ function wire_cell_editors() {
         inspector.slotEditor &&
         inspector.slotEditor.hidden === false,
     );
-  const set_inspector_action_label = (editable) => {
+  const set_inspector_action_label = (
+    editable,
+    supportActionable,
+    selected = false,
+  ) => {
     if (!inspector.open) {
       return;
     }
@@ -2694,50 +2861,52 @@ function wire_cell_editors() {
     if (!label) {
       return;
     }
-    label.innerText = editable ? "View/Edit" : "View";
-    inspector.open.dataset.editMode = editable ? "editable" : "readonly";
+    label.innerText = "Details";
+    if (inspector.openSupportCue) {
+      inspector.openSupportCue.hidden = !selected || !supportActionable;
+    }
+    if (inspector.openReadonlyCue) {
+      inspector.openReadonlyCue.hidden = !selected || editable;
+    }
+    inspector.open.dataset.editMode = selected
+      ? editable
+        ? "editable"
+        : "readonly"
+      : "none";
+    const buttonTitle =
+      selected && !editable && supportActionable
+        ? "Open selection details for a read-only slot with actionable support"
+        : selected && !editable
+        ? "Open selection details for a read-only slot"
+        : "Open selection details";
+    inspector.open.title = buttonTitle;
   };
   const render_slot_errors = (rows) => {
-    if (!inspector.errorList || !inspector.errorsToggle) {
-      inspectorState.errors = `${rows.length} error${
-        rows.length == 1 ? "" : "s"
-      }`;
+    inspectorState.errors = `${rows.length} error${
+      rows.length == 1 ? "" : "s"
+    }`;
+    if (!inspector.errorList) {
       sync_inspector_modal();
       return;
     }
     inspector.errorList.replaceChildren();
-    inspectorState.errors = `${rows.length} error${
-      rows.length == 1 ? "" : "s"
-    }`;
     if (rows.length == 0) {
-      inspector.errorsToggle.hidden = true;
       inspector.errorList.hidden = true;
-      inspector.errorsToggle.setAttribute("aria-expanded", "false");
       sync_inspector_modal();
       return;
     }
-    for (const { source, message } of rows) {
+    for (const row of rows) {
       const item = document.createElement("li");
-      const sourceNode = document.createElement("strong");
-      sourceNode.textContent = `${source}: `;
-      item.append(sourceNode, String(message));
+      item.textContent = format_inspector_error_message(row);
       inspector.errorList.append(item);
     }
-    const errorsLabel = inspector.errorsToggle.querySelector(
-      ".legend-toggle-label",
-    );
-    if (errorsLabel) {
-      errorsLabel.innerText = `Errors (${rows.length})`;
-    }
-    inspector.errorsToggle.setAttribute("aria-expanded", "false");
-    inspector.errorsToggle.hidden = false;
-    inspector.errorList.hidden = !(
-      inspector.errorsToggle.getAttribute("aria-expanded") == "true"
-    );
-    inspector.errorsToggle.disabled = false;
+    inspector.errorList.hidden = false;
     sync_inspector_modal();
   };
   const sync_inspector_modal = () => {
+    if (inspector.barTarget) {
+      inspector.barTarget.innerText = inspectorState.target;
+    }
     if (inspector.detailTarget) {
       inspector.detailTarget.innerText = inspectorState.target;
     }
@@ -3614,6 +3783,14 @@ function wire_cell_editors() {
         entry.dataset.canEdit == "true" &&
         entry.dataset.locked != "true",
     );
+  const is_entry_interactive = (entry) =>
+    Boolean(
+      entry &&
+        entry.dataset.canInteract == "true" &&
+        entry.dataset.locked != "true",
+    );
+  const is_entry_support_actionable = (entry) =>
+    Boolean(entry && entry.dataset.supportActionable == "true");
   let activeEntry = null;
   let selectionVersion = 0;
   let modalDurationSlots = 1;
@@ -3651,33 +3828,119 @@ function wire_cell_editors() {
     }
     return 0;
   };
-  const sorted_changed_cells = () =>
-    [...changed].sort(compareCellsChronologically);
+  const sorted_cells_chronologically = (cellsToSort) =>
+    [...cellsToSort].sort(compareCellsChronologically);
+  const sorted_changed_cells = () => sorted_cells_chronologically(changed);
+  const sorted_invalid_cells = () => sorted_cells_chronologically(invalid);
+  const slot_summary = (entry) => {
+    if (!entry) {
+      return "no slot selected";
+    }
+    const primary =
+      entry.querySelector(".entry-summary-primary")?.innerText ?? "open";
+    const secondary =
+      entry.querySelector(".entry-summary-secondary")?.innerText ??
+      "unassigned";
+    const tertiary = entry.querySelector(".entry-summary-tertiary")?.innerText;
+    const pieces = [primary, secondary];
+    if (tertiary) {
+      pieces.push(tertiary);
+    }
+    return pieces.join(" | ");
+  };
+  const review_issue_count = () => invalid.size;
+  const collect_review_issues = () =>
+    sorted_invalid_cells()
+      .map((cell) => {
+        const errors = readSelectedErrors(cell.elm);
+        if (errors.length == 0) {
+          return null;
+        }
+        return {
+          cell,
+          label: slot_label(cell.elm),
+          summary: slot_summary(cell.elm),
+          errors,
+        };
+      })
+      .filter(Boolean);
+  const build_review_content = (issues, diffs, { blocking = false } = {}) => {
+    const out = document.createDocumentFragment();
+    const addSection = (titleText) => {
+      const section = document.createElement("section");
+      section.className = "review-section";
+      const heading = document.createElement("h2");
+      heading.textContent = titleText;
+      section.append(heading);
+      out.append(section);
+      return section;
+    };
+
+    if (issues.length > 0) {
+      const issueSection = addSection(
+        issues.length == 1 ? "Active issue" : "Active issues",
+      );
+      const intro = document.createElement("p");
+      intro.textContent = blocking
+        ? "Resolve these issues before submitting the pending changes."
+        : "Use this list to match the active error markers in the schedule.";
+      issueSection.append(intro);
+      const list = document.createElement("dl");
+      list.className = "review-issue-list";
+      for (const issue of issues) {
+        const slotRow = document.createElement("dt");
+        slotRow.textContent = issue.label;
+        list.append(slotRow);
+        const summaryRow = document.createElement("dd");
+        summaryRow.className = "review-issue-summary";
+        summaryRow.textContent = issue.summary;
+        list.append(summaryRow);
+        for (const row of issue.errors) {
+          const detailRow = document.createElement("dd");
+          detailRow.textContent = format_inspector_error_message(row);
+          list.append(detailRow);
+        }
+      }
+      issueSection.append(list);
+    }
+
+    if (diffs.length > 0) {
+      const changeSection = addSection("Pending changes");
+      const [, summary] = fmt_editor_diffs(human_hours, templateEditor, diffs);
+      changeSection.append(summary);
+    }
+
+    if (issues.length == 0 && diffs.length == 0) {
+      const empty = document.createElement("p");
+      empty.textContent = "There are no pending changes or active issues.";
+      out.append(empty);
+    }
+    return out;
+  };
   const update_pending_review_control = () => {
     if (!inspector.review) {
       return;
     }
     const total = changed.size;
-    const invalidCount = changedInvalid.size;
-    inspector.review.disabled = total == 0;
+    const invalidCount = review_issue_count();
+    inspector.review.disabled = total == 0 && invalidCount == 0;
     inspector.review.dataset.pendingCount = String(total);
     inspector.review.dataset.invalidCount = String(invalidCount);
     const label = inspector.review.querySelector(".legend-toggle-label");
     if (label) {
-      label.innerText =
-        invalidCount > 0
-          ? `Review pending (${total}, ${invalidCount} error${
-              invalidCount == 1 ? "" : "s"
-            })`
-          : `Review pending (${total})`;
+      label.innerText = `Review pending (${total})`;
     }
     inspector.review.setAttribute(
       "aria-label",
-      invalidCount > 0
+      total > 0 && invalidCount > 0
         ? `review ${total} pending change${
             total == 1 ? "" : "s"
-          }, ${invalidCount} with errors`
-        : `review ${total} pending change${total == 1 ? "" : "s"}`,
+          } and ${invalidCount} active error${invalidCount == 1 ? "" : "s"}`
+        : total > 0
+        ? `review ${total} pending change${total == 1 ? "" : "s"}`
+        : invalidCount > 0
+        ? `review ${invalidCount} active error${invalidCount == 1 ? "" : "s"}`
+        : "review pending changes",
     );
   };
   const inspector_target_entries = (entry) => {
@@ -3714,7 +3977,6 @@ function wire_cell_editors() {
     sync_inspector_modal();
     return { changes, slotErrors: errors };
   };
-  const slot_minutes = Math.max(1, scheduleWindow.slotMinutes || 60);
   const slot_label = (entry) => {
     if (!entry) {
       return "not selected";
@@ -3773,7 +4035,10 @@ function wire_cell_editors() {
   function snapshotCellValues(cell) {
     const out = {
       institute: cell.institute?.value ?? "",
-      group: cell.group?.value ?? "",
+      group:
+        cell.autofilled_group && !cell.member_changed
+          ? ""
+          : cell.group?.value ?? "",
       member: cell.member?.value ?? "",
       sr: {},
     };
@@ -3968,17 +4233,23 @@ function wire_cell_editors() {
     if (!inspector.slotEditor) {
       return;
     }
+    const cellId =
+      entry && typeof entry.dataset?.id == "string" ? entry.dataset.id : "";
+    const cell = cellId != "" ? cells.get(cellId) ?? null : null;
+    if (cell && !forceReadonly) {
+      cell.preview_default_group();
+    }
     const source = pick_inspector_editor_source(entry);
     if (!source) {
       inspector.slotEditor.replaceChildren();
       inspector.slotEditor.hidden = true;
       return;
     }
-    const editable = !forceReadonly && is_entry_editable(entry);
+    const interactive = !forceReadonly && is_entry_interactive(entry);
     sanitize_and_bind_inspector_editor(
       source,
       inspector.slotEditor,
-      Boolean(editable),
+      Boolean(interactive),
       () => {
         if (!entry) {
           return;
@@ -4003,7 +4274,7 @@ function wire_cell_editors() {
     }
     modalDurationSlots = 1;
     modalTargetEntries = [];
-    set_inspector_action_label(false);
+    set_inspector_action_label(false, false, false);
     mount_inspector_entry_editor(null, true);
     sync_duration_controls(null, false);
     sync_inspector_modal();
@@ -4015,33 +4286,27 @@ function wire_cell_editors() {
       return;
     }
     const editable = is_entry_editable(entry);
+    const interactive = is_entry_interactive(entry);
+    const supportActionable = is_entry_support_actionable(entry);
     const cell = ensure_cell(entry);
     const date = humanize_date_if_needed(entry.dataset.date ?? "");
     const hour = human_hours?.[entry.dataset.hour] ?? entry.dataset.hour ?? "";
     inspectorState.target = `${date}, ${hour}`;
-    const primary =
-      entry.querySelector(".entry-summary-primary")?.innerText ?? "open";
-    const secondary =
-      entry.querySelector(".entry-summary-secondary")?.innerText ??
-      "unassigned";
-    const tertiary = entry.querySelector(".entry-summary-tertiary")?.innerText;
-    const pieces = [primary, secondary];
-    if (tertiary) {
-      pieces.push(tertiary);
-    }
-    inspectorState.summary = pieces.join(" | ");
+    inspectorState.summary = slot_summary(entry);
     if (entry.dataset.locked == "true") {
       inspectorState.mode = "locked";
     } else if (editable) {
       inspectorState.mode = "editable";
+    } else if (supportActionable) {
+      inspectorState.mode = "read only | support available";
     } else {
       inspectorState.mode = "read only";
     }
     if (inspector.open) {
-      set_inspector_action_label(editable);
+      set_inspector_action_label(editable, supportActionable, true);
     }
     if (inspector.save) {
-      inspector.save.hidden = !editable;
+      inspector.save.hidden = !interactive;
     }
     if (inspector.slotEditor && refreshEditor) {
       mount_inspector_entry_editor(entry);
@@ -4066,19 +4331,9 @@ function wire_cell_editors() {
       inspector.save.hidden = true;
     }
     sync_duration_controls(null, false);
-    set_inspector_action_label(false);
+    set_inspector_action_label(false, false, false);
     sync_inspector_modal();
   };
-
-  if (inspector.errorsToggle && inspector.errorList) {
-    inspector.errorsToggle.hidden = true;
-    inspector.errorsToggle.addEventListener("click", () => {
-      const expanded =
-        inspector.errorsToggle.getAttribute("aria-expanded") == "true";
-      inspector.errorsToggle.setAttribute("aria-expanded", String(!expanded));
-      inspector.errorList.hidden = expanded;
-    });
-  }
   set_inspector_default_state();
   sync_row_visibility();
   if (inspector.endTimeSelect) {
@@ -4097,15 +4352,11 @@ function wire_cell_editors() {
         return;
       }
       button.addEventListener("click", () => {
-        const minutes = Number.parseInt(
-          button.dataset.durationMinutes ?? "",
-          10,
-        );
-        if (Number.isNaN(minutes) || minutes <= 0) {
+        const slots = Number.parseInt(button.dataset.durationSlots ?? "", 10);
+        if (Number.isNaN(slots) || slots <= 0) {
           return;
         }
-        const bump = Math.max(1, Math.ceil(minutes / slot_minutes));
-        modalDurationSlots += bump;
+        modalDurationSlots += Math.max(1, slots);
         sync_duration_controls(activeEntry, is_entry_editable(activeEntry));
       });
     });
@@ -4115,9 +4366,16 @@ function wire_cell_editors() {
     if (!loadStatus) {
       return;
     }
+    if (templateEditor) {
+      loadStatus.hidden = true;
+      if (!loadErrorMessage) {
+        return;
+      }
+    }
     if (loadErrorMessage) {
       loadStatus.innerText = `error loading schedule rows: ${loadErrorMessage}`;
       loadStatus.dataset.state = "error";
+      loadStatus.hidden = false;
       return;
     }
     if (is_lateral_movement_active()) {
@@ -5308,15 +5566,22 @@ function wire_cell_editors() {
     await hydrate_rows([row]);
   };
 
-  const initialRows = displayed_rows_for_hydration();
+  const initialRows = templateEditor ? rows : displayed_rows_for_hydration();
   void hydrate_rows(initialRows, { countForLock: false }).finally(() => {
     hasCompletedInitialHydration = true;
     queue_placeholder_shadow_sync();
-    queue_prefetch_adjacent_windows(scheduleWindowVersion, { initial: true });
+    if (!templateEditor) {
+      queue_prefetch_adjacent_windows(scheduleWindowVersion, { initial: true });
+    }
   });
-  queue_settled_window_hydration();
+  if (!templateEditor) {
+    queue_settled_window_hydration();
+  }
 
-  if ("IntersectionObserver" in window) {
+  if (templateEditor) {
+    // Template schedules are small and fully present in the DOM, so hydrate
+    // the full grid immediately via the initial rows path above.
+  } else if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver(
       (entries) => {
         const visible = [];
@@ -6110,33 +6375,20 @@ function wire_cell_editors() {
       },
     );
   };
-  const reviewAndSubmitDiffBatch = (
-    titleText,
-    diffs,
-    targetCells,
-    { closeInspectorOnSuccess = false, applyValues = undefined } = {},
-  ) => {
-    const [, summary] = fmt_editor_diffs(human_hours, false, diffs);
-    editor_dialog(true, true, titleText, summary, (notify) => {
-      submitDiffBatch(diffs, targetCells, {
-        notify,
-        closeInspectorOnSuccess,
-        applyValues,
-      });
-    });
-  };
   const applyValuesToCell = (cell, values) => {
     if (!cell || !values) {
       return;
     }
+    cell.autofilled_group = false;
     if (cell.institute) {
       cell.institute.value = values.institute;
       resetList(cell.institute);
     }
     cell.group.value = values.group;
-    cell.update_list();
+    cell.update_group_list();
     resetList(cell.group);
     cell.member.value = values.member;
+    cell.update_list();
     resetList(cell.member);
     for (const [kind, sr] of Object.entries(cell.sr)) {
       const incoming = values.sr?.[kind];
@@ -6163,44 +6415,101 @@ function wire_cell_editors() {
       inspectorDialog.hide();
     }
   };
-  const reviewPendingSave = () => {
+  const submitTemplateDiffs = (diffs, notify = false) => {
+    const csrf_token = document.querySelector("#csrf_token").value;
+    const body = JSON.stringify({
+      csrf_token,
+      payload: { diffs, notify },
+    });
+    result_dialog(async (signal) => {
+      try {
+        const resp = await fetch(window.location, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          signal,
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          return [fmt_save_results(data, cells, human_hours), null];
+        }
+        const parsed = await parse_server_failure(resp);
+        if (parsed.data) {
+          return [fmt_save_results(parsed.data, cells, human_hours), null];
+        }
+        return [null, parsed.message];
+      } catch (err) {
+        if (err.name == "AbortError") {
+          return [null, null];
+        }
+        return [null, `error: ${err.message}`];
+      }
+    });
+  };
+  const reviewPendingSave = async () => {
     if (templateEditor) {
-      return;
+      await hydrate_rows(rows, { countForLock: false });
     }
-    if (!any_changed()) {
+    const issues = collect_review_issues();
+    const diffs = [];
+    let targetCells = [];
+    if (templateEditor) {
+      for (const cell of sorted_changed_cells()) {
+        const diff = cell.diff();
+        if (diff) {
+          diffs.push(diff);
+        }
+      }
+    } else {
+      const batch = buildDiffBatchFromCells(sorted_changed_cells());
+      targetCells = batch.targetCells;
+      diffs.push(...batch.diffs);
+    }
+    if (diffs.length == 0 && issues.length == 0) {
       editor_dialog(
         false,
         false,
         "no pending changes",
-        "there are no pending changes to review",
+        "there are no pending changes or active issues to review",
         null,
+        { confirmText: "Close" },
       );
       return;
     }
-    if (changedInvalid.size > 0) {
-      editor_dialog(
-        false,
-        false,
-        "outstanding errors",
-        "all validation errors must be resolved before submitting",
-        null,
-      );
+    const blocking = templateEditor ? any_invalid() : changedInvalid.size > 0;
+    const titleText =
+      diffs.length > 0 ? "review pending changes" : "review issues";
+    const content = build_review_content(issues, diffs, { blocking });
+    if (diffs.length == 0 || blocking) {
+      editor_dialog(false, false, titleText, content, null, {
+        confirmText: "Close",
+      });
       return;
     }
-    const { targetCells, diffs } = buildDiffBatchFromCells(
-      sorted_changed_cells(),
+    const [showNotifications] = fmt_editor_diffs(
+      human_hours,
+      templateEditor,
+      diffs,
     );
-    if (diffs.length == 0) {
-      editor_dialog(
-        false,
-        false,
-        "no pending changes",
-        "there are no pending changes to review",
-        null,
-      );
-      return;
-    }
-    reviewAndSubmitDiffBatch("review pending changes", diffs, targetCells);
+    editor_dialog(
+      true,
+      showNotifications,
+      titleText,
+      content,
+      (notify) => {
+        if (templateEditor) {
+          submitTemplateDiffs(diffs, notify);
+          return;
+        }
+        submitDiffBatch(diffs, targetCells, {
+          notify,
+        });
+      },
+      {
+        confirmText: templateEditor ? "Publish changes" : "Confirm",
+        cancelText: "Keep editing",
+      },
+    );
   };
 
   const submitSlotSave = () => {
@@ -6305,10 +6614,10 @@ function wire_cell_editors() {
     });
   };
 
-  if (inspector.review && !templateEditor) {
+  if (inspector.review) {
     inspector.review.addEventListener("click", (evt) => {
       evt.preventDefault();
-      reviewPendingSave();
+      void reviewPendingSave();
     });
   }
 
@@ -6331,27 +6640,42 @@ function wire_cell_editors() {
     }
   }
 
-  if (inspector.open && !templateEditor) {
+  if (inspector.open) {
     inspector.open.addEventListener("click", async (evt) => {
       evt.preventDefault();
+      const selectedRowIndex = Number.isInteger(editor.scheduleGrid?.row())
+        ? editor.scheduleGrid.row()
+        : 0;
+      const selectedColIndex = Number.isInteger(editor.scheduleGrid?.col())
+        ? editor.scheduleGrid.col()
+        : 0;
       const selectedRow =
-        activeEntry?.closest("tr") ??
-        rows[
-          Number.isInteger(editor.scheduleGrid?.row())
-            ? editor.scheduleGrid.row()
-            : 0
-        ];
+        rows[selectedRowIndex] ?? activeEntry?.closest("tr") ?? null;
       if (selectedRow) {
         await hydrate_row(selectedRow);
       }
-      if (!activeEntry) {
-        set_inspector_action_label(false);
-        update_inspector_selection(null);
+      const selectedCells = selectedRow?.querySelectorAll("td") ?? [];
+      const selectedEntry =
+        selectedCells[selectedColIndex]?.querySelector("entry-cell") ??
+        activeEntry;
+      if (!selectedEntry) {
+        set_inspector_action_label(false, false, false);
+        if (selectedRow) {
+          update_inspector_empty(selectedRow, selectedColIndex);
+        } else {
+          update_inspector_selection(null);
+        }
       } else {
-        update_inspector_selection(activeEntry);
+        if (activeEntry && activeEntry !== selectedEntry) {
+          activeEntry.dataset.active = "false";
+        }
+        selectedEntry.dataset.active = "true";
+        ensure_cell(selectedEntry);
+        activeEntry = selectedEntry;
+        update_inspector_selection(selectedEntry);
       }
-      const editable = is_entry_editable(activeEntry);
-      sync_duration_controls(activeEntry, editable);
+      const editable = is_entry_editable(selectedEntry);
+      sync_duration_controls(selectedEntry, editable);
       if (inspectorDialog) {
         inspectorDialog.show();
       }
@@ -6359,102 +6683,6 @@ function wire_cell_editors() {
         inspector.save.hidden = false;
       } else if (inspector.save) {
         inspector.save.hidden = true;
-      }
-    });
-  }
-
-  if (templateEditor) {
-    const apply = document.querySelector("#apply");
-    if (apply == null) {
-      return;
-    }
-    apply.disabled = false;
-    apply.addEventListener("click", (evt) => {
-      evt.preventDefault();
-      if (!any_changed()) {
-        editor_dialog(
-          false,
-          false,
-          "no changes",
-          "there are no changes to submit",
-          null,
-        );
-      } else if (any_invalid()) {
-        editor_dialog(
-          false,
-          false,
-          "outstanding errors",
-          "all errors must be resolved before submitting",
-          null,
-        );
-      } else {
-        // at least one cell is changed and no changed cells contain errors
-        const diffs = [];
-        for (const cell of changed) {
-          diffs.push(cell.diff());
-        }
-        // order the diffs by civil time
-        diffs.sort((a, b) => {
-          if (a.date < b.date) {
-            return -1;
-          } else if (a.date > b.date) {
-            return 1;
-          }
-          if (a.hour < b.hour) {
-            return -1;
-          } else if (a.hour > b.hour) {
-            return 1;
-          }
-          return 0;
-        });
-        let [notifications, summary] = fmt_editor_diffs(
-          human_hours,
-          templateEditor,
-          diffs,
-        );
-        editor_dialog(
-          true,
-          notifications,
-          "publish changes",
-          summary,
-          (notify) => {
-            const csrf_token = document.querySelector("#csrf_token").value;
-            const body = JSON.stringify({
-              csrf_token,
-              payload: { diffs, notify },
-            });
-            result_dialog(async (signal) => {
-              try {
-                const resp = await fetch(window.location, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body,
-                  signal,
-                });
-                if (resp.ok) {
-                  const data = await resp.json();
-                  // the error is for severe errors like networking errors
-                  // validation errors are not counted here as they are
-                  // considered a normal response
-                  return [fmt_save_results(data, cells, human_hours), null];
-                }
-                const parsed = await parse_server_failure(resp);
-                if (parsed.data) {
-                  return [
-                    fmt_save_results(parsed.data, cells, human_hours),
-                    null,
-                  ];
-                }
-                return [null, parsed.message];
-              } catch (err) {
-                if (err.name == "AbortError") {
-                  return [null, null];
-                }
-                return [null, `error: ${err.message}`];
-              }
-            });
-          },
-        );
       }
     });
   }

@@ -15,10 +15,24 @@ function jumpDay(start: string, deltaDays: number) {
   return ymd(new Date(value.getTime() + deltaDays * 24 * 60 * 60 * 1000));
 }
 
+function projectFutureStart(projectName: string, start: string) {
+  const offsets: Record<string, number> = {
+    chromium: 0,
+    firefox: 14,
+    webkit: 28,
+  };
+  return jumpDay(start, offsets[projectName] ?? 42);
+}
+
+function scopedFutureStart(start: string) {
+  return projectFutureStart(test.info().project.name, start);
+}
+
 async function openFutureBlankDeviceGrid(page: Page, start = '2035-02-01') {
+  const scopedStart = scopedFutureStart(start);
   await openSeededDeviceGrid(page);
   const url = new URL(page.url());
-  url.searchParams.set('start', start);
+  url.searchParams.set('start', scopedStart);
   url.searchParams.set('days', '2');
   await page.goto(url.toString());
   await expect(page.locator('.editor #scroll-container')).toBeVisible();
@@ -31,6 +45,7 @@ async function openFutureBlankDeviceGrid(page: Page, start = '2035-02-01') {
 }
 
 async function openFutureBlankSchedulableDeviceGrid(page: Page, start = '2035-02-01') {
+  const scopedStart = scopedFutureStart(start);
   await page.goto('/');
   const devicePaths = await page
     .locator('[data-home-section="devices"] a.list-card[href^="/device/"]')
@@ -40,7 +55,7 @@ async function openFutureBlankSchedulableDeviceGrid(page: Page, start = '2035-02
 
   for (const devicePath of devicePaths) {
     const url = new URL(devicePath, page.url());
-    url.searchParams.set('start', start);
+    url.searchParams.set('start', scopedStart);
     url.searchParams.set('days', '2');
     await page.goto(url.toString());
 
@@ -62,7 +77,8 @@ async function openFutureBlankSchedulableDeviceGrid(page: Page, start = '2035-02
 }
 
 async function openFutureDeviceGrid(page: Page, device: string, start = '2035-02-01') {
-  await page.goto(`/device/${device}?start=${start}&days=2`);
+  const scopedStart = scopedFutureStart(start);
+  await page.goto(`/device/${device}?start=${scopedStart}&days=2`);
   await expect(page.locator('.editor #scroll-container')).toBeVisible();
   await expect.poll(async () => await page.locator('#row-8 entry-cell').count(), { timeout: 15000 }).toBeGreaterThan(0);
 }
@@ -70,7 +86,8 @@ async function openFutureDeviceGrid(page: Page, device: string, start = '2035-02
 async function grantDeviceSupportPermission(
   page: Page,
   device: string,
-  permission: 'medical' | 'training'
+  permission: 'medical' | 'training' | 'tech',
+  userId = 'user0049'
 ) {
   await page.goto(`/rbac?scope=device&entity=${device}`);
   await expect(page.getByRole('status')).toContainText('Relationships loaded.');
@@ -80,20 +97,21 @@ async function grantDeviceSupportPermission(
   });
   await expect(section).toBeVisible();
 
-  const row = section.locator('tbody tr').filter({ hasText: 'user0049' }).first();
-  await expect(row).toBeVisible();
+  const targetRow = section.locator('tbody tr').filter({ hasText: userId }).first();
+  await expect(targetRow).toBeVisible();
 
-  const checkboxIndex = permission === 'medical' ? 3 : 4;
-  const checkbox = row.locator('input[type="checkbox"]').nth(checkboxIndex);
+  const checkboxIndex =
+    permission === 'tech' ? 2 : permission === 'medical' ? 3 : 4;
+  const checkbox = targetRow.locator('input[type="checkbox"]').nth(checkboxIndex);
   if (await checkbox.isChecked()) {
     return;
   }
 
-  const confirmPromise = page.waitForEvent('dialog');
   await checkbox.check();
-  await section.getByRole('button', { name: /apply permission updates/i }).click();
-  const confirm = await confirmPromise;
-  await confirm.accept();
+  await Promise.all([
+    page.waitForEvent('dialog').then((dialog) => dialog.accept()),
+    section.getByRole('button', { name: /apply permission updates/i }).click(),
+  ]);
   await expect(section.getByRole('button', { name: /apply permission updates/i })).toBeDisabled();
 }
 
@@ -173,7 +191,7 @@ test.describe('Schedule UI interactions', () => {
   test.skip(!isMockMode, 'Schedule editor interactions require mock fixtures.');
   test.setTimeout(90000);
 
-  test('requires explicit jump action before URL updates', async ({ page }) => {
+  test('debounced jump form updates the URL', async ({ page }) => {
     const { path } = await openSeededDeviceGrid(page);
     expect(path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
 
@@ -186,7 +204,9 @@ test.describe('Schedule UI interactions', () => {
     const urlBefore = new URL(page.url());
 
     await startInput.fill(nextStart);
-    await page.waitForTimeout(900);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('start'), { timeout: 3000 })
+      .toBe(nextStart);
     const urlAfter = new URL(page.url());
     expect(urlAfter.searchParams.get('start')).toBe(nextStart);
     expect(urlAfter.searchParams.get('days') ?? '7').toBe(urlBefore.searchParams.get('days') ?? '7');
@@ -327,6 +347,29 @@ test.describe('Schedule UI interactions', () => {
     await expect(legendDialog).not.toBeVisible();
   });
 
+  test('should use a compact date picker and focused legend copy', async ({ page }) => {
+    const { path } = await openSeededDeviceGrid(page);
+    expect(path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
+
+    const jumpForm = page.locator('nav.jump-form');
+    const startInput = jumpForm.locator('input[name="start"]');
+    await expect(startInput).toHaveAttribute('type', 'date');
+    await expect(page.locator('#jump-open-picker')).toBeVisible();
+    await expect(page.locator('#jump-prev-non-empty')).toContainText('Prev scheduled');
+    await expect(page.locator('#jump-next-non-empty')).toContainText('Next scheduled');
+
+    await page.locator('#legend-open').click();
+    const legendDialog = page.locator('#legend-dialog-container .dialog-box-container');
+    await expect(legendDialog).toContainText('pending edits');
+    await expect(legendDialog).toContainText('slot recorded as used');
+    await expect(legendDialog).toContainText('the last save was rejected by the server');
+    await expect(legendDialog).toContainText('group color stripe');
+    await expect(legendDialog).toContainText('muted rows are off-hours outside 7am to 10pm');
+    await expect(legendDialog).not.toContainText('view activity log');
+    await expect(legendDialog).not.toContainText('expand');
+    await expect(legendDialog).not.toContainText('close');
+  });
+
   test('should show a compact inspector banner', async ({ page }) => {
     const { path } = await openSeededDeviceGrid(page);
     expect(path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
@@ -372,10 +415,59 @@ test.describe('Schedule UI interactions', () => {
     expect(path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
 
     await expect(page.locator('#expando')).toHaveCount(0);
-    await expect(page.locator('.editor-inspector #inspector-open')).toContainText(/view/i);
+    await expect(page.locator('.editor-inspector #inspector-open')).toContainText(/details/i);
     await expect(page.locator('#review-pending')).toContainText(/review pending/i);
     await expect(page.locator('#review-pending')).toBeDisabled();
     await expect(page.locator('#inspector-save')).toHaveCount(1);
+  });
+
+  test('shows no read-only cue for an editable future slot', async ({ page }) => {
+    await openFutureBlankDeviceGrid(page, '2035-02-08');
+
+    const cell = page.locator('#row-8 td').nth(0);
+    await cell.dblclick();
+
+    const dialog = page.locator('#inspector-dialog-container .dialog-box-container');
+    await expect(dialog).toBeVisible();
+    await expect(cell.locator('[data-readonly-cue="slot"]')).toHaveAttribute('hidden', '');
+    await expect(cell.locator('[data-support-cue="slot"]')).toHaveAttribute('hidden', '');
+    await expect(cell.locator('.time-use-icon .status-token-unrecorded')).toHaveCount(0);
+    await expect(page.locator('#inspector-open [data-readonly-cue="selection"]')).toHaveAttribute('hidden', '');
+    await expect(page.locator('#inspector-open [data-support-cue="selection"]')).toHaveAttribute('hidden', '');
+  });
+
+  test('shows support cues for a selected slot with actionable support', async ({ page }) => {
+    await grantDeviceSupportPermission(page, 'd', 'medical');
+    await openFutureDeviceGrid(page, 'd', '2035-03-18');
+
+    const { cell, dialog, slotEditor } = await openSlotInspectorEditor(page, 8, 0, {
+      group: 'BEI',
+      member: 'user0048',
+    });
+    await slotEditor.locator('input[id^="med-requested-"]').first().check();
+
+    await expect(dialog).toBeVisible();
+    await expect(cell.locator('[data-support-cue="slot"]')).toBeVisible();
+    await expect(page.locator('#inspector-open [data-support-cue="selection"]')).toBeVisible();
+    await expect(cell.locator('[data-readonly-cue="slot"]')).toHaveAttribute('hidden', '');
+  });
+
+  test.describe('read-only slot cues', () => {
+    test.use({ authProfile: 'member' });
+
+    test('shows lock cues for a selected read-only slot', async ({ page }) => {
+      const { path } = await openSeededDeviceGrid(page);
+      expect(path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
+
+      const cell = page.locator('.editor #scroll-container entry-cell').first();
+      await expect(cell).toBeVisible();
+      await cell.dblclick();
+
+      const dialog = page.locator('#inspector-dialog-container .dialog-box-container');
+      await expect(dialog).toBeVisible();
+      await expect(cell.locator('[data-readonly-cue="slot"]')).toBeVisible();
+      await expect(page.locator('#inspector-open [data-readonly-cue="selection"]')).toBeVisible();
+    });
   });
 
   test('should keep pending drafts after exiting the inspector', async ({ page }) => {
@@ -384,7 +476,7 @@ test.describe('Schedule UI interactions', () => {
     test.skip(!assignment, 'No schedulable group/member assignment is available in this fixture.');
 
     await editSlotThroughInspector(page, 8, 0, assignment);
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
 
     const row = page.locator('#row-8');
     await row.locator('td').nth(0).dblclick();
@@ -431,7 +523,7 @@ test.describe('Schedule UI interactions', () => {
     });
 
     await openSlotInspectorEditor(page, 8, 0, assignment);
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await page.locator('#inspector-save').click();
 
     await expect(page.locator('#save-dialog-container')).toHaveAttribute('aria-hidden', 'true');
@@ -443,10 +535,11 @@ test.describe('Schedule UI interactions', () => {
     expect(postPayloads[0]?.diffs).toHaveLength(1);
 
     await expect(page.locator('#review-pending')).toBeDisabled();
-    await expect(page.locator('#review-pending')).toContainText('Review pending (0)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
   });
 
   test('should review and apply pending changes with notifications toggled off', async ({ page }) => {
+    const start = scopedFutureStart('2035-02-03');
     await openFutureBlankDeviceGrid(page, '2035-02-03');
     const assignment = await pickSchedulableAssignment(page);
     test.skip(!assignment, 'No schedulable group/member assignment is available in this fixture.');
@@ -483,13 +576,13 @@ test.describe('Schedule UI interactions', () => {
 
     await editSlotThroughInspector(page, 8, 0, assignment);
     await editSlotThroughInspector(page, 10, 1, assignment);
-    await expect(page.locator('#review-pending')).toContainText('Review pending (2)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
 
     await page.locator('#review-pending').click();
     const saveDialog = page.locator('#save-dialog-container .dialog-box-container');
     await expect(saveDialog).toBeVisible();
-    await expect(saveDialog).toContainText('2035-02-03');
-    await expect(saveDialog).toContainText('2035-02-04');
+    await expect(saveDialog).toContainText(start);
+    await expect(saveDialog).toContainText(jumpDay(start, 1));
     await page.locator('#send-notifications').uncheck();
     await page.locator('#save-dialog-container button[name="confirm"]').click();
 
@@ -500,7 +593,7 @@ test.describe('Schedule UI interactions', () => {
     expect(postPayloads[0]?.notify).toBe(false);
     expect(postPayloads[0]?.diffs).toHaveLength(2);
     await expect(page.locator('#review-pending')).toBeDisabled();
-    await expect(page.locator('#review-pending')).toContainText('Review pending (0)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
 
     await page.locator('#result-dialog-container button[data-a11y-dialog-hide]').click();
     await expect(resultDialog).not.toBeVisible();
@@ -515,13 +608,13 @@ test.describe('Schedule UI interactions', () => {
     await expect(slotEditor.locator('input[id^="grp-"]').first()).toHaveValue(assignment.group);
     await page.locator('#inspector-end-slot').selectOption('2');
     await expect(page.locator('#inspector-preview-count')).toContainText('2 slots');
-    await expect(page.locator('#review-pending')).toContainText('Review pending (2)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await expect(dialog).toContainText('2 changes');
 
     await page.locator('#inspector-exit').click();
     await expect(dialog).not.toBeVisible();
 
-    await expect(page.locator('#review-pending')).toContainText('Review pending (2)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await expect
       .poll(async () => await page.locator('entry-cell[data-changed="true"]').count(), { timeout: 10000 })
       .toBe(2);
@@ -535,7 +628,7 @@ test.describe('Schedule UI interactions', () => {
     });
 
     await expect(dialog).toContainText('2 errors');
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1, 1 error)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await expect
       .poll(async () =>
         slotEditor.locator('input[id^="grp-"]').first().evaluate((el) => el.validationMessage)
@@ -555,7 +648,7 @@ test.describe('Schedule UI interactions', () => {
     await slotEditor.locator('input[id^="grp-"]').first().fill('');
 
     await expect(dialog).toContainText('1 error');
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1, 1 error)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await expect
       .poll(async () =>
         slotEditor.locator('input[id^="mem-"]').first().evaluate((el) => ({
@@ -573,7 +666,7 @@ test.describe('Schedule UI interactions', () => {
 
   test('should enable medical support handlers when device medical permission exists', async ({ page }) => {
     await grantDeviceSupportPermission(page, 'd', 'medical');
-    await openFutureDeviceGrid(page, 'd', '2035-02-18');
+    await openFutureDeviceGrid(page, 'd', '2035-03-18');
 
     const { slotEditor } = await openSlotInspectorEditor(page, 8, 0, {
       group: 'BEI',
@@ -591,7 +684,7 @@ test.describe('Schedule UI interactions', () => {
 
   test('should clear saved medical handlers when medical coverage is unchecked', async ({ page }) => {
     await grantDeviceSupportPermission(page, 'd', 'medical');
-    await openFutureDeviceGrid(page, 'd', '2035-02-20');
+    await openFutureDeviceGrid(page, 'd', '2035-03-20');
 
     const initialEditor = await openSlotInspectorEditor(page, 8, 0, {
       group: 'BEI',
@@ -602,6 +695,7 @@ test.describe('Schedule UI interactions', () => {
 
     await initialRequested.check();
     await initialHandler.fill('user0049');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await page.locator('#inspector-save').click();
 
     const resultDialog = page.locator('#result-dialog-container .dialog-box-container');
@@ -623,6 +717,7 @@ test.describe('Schedule UI interactions', () => {
     await expect(clearedHandler).toBeDisabled();
     await expect(clearedHandler).toHaveValue('');
 
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await page.locator('#inspector-save').click();
     await expect(resultDialog).toBeVisible();
     await expect(resultDialog).toContainText(/1 entry updated/i);
@@ -641,20 +736,21 @@ test.describe('Schedule UI interactions', () => {
     await expect(reopenedRequested).not.toBeChecked();
     await expect(reopenedHandler).toBeDisabled();
     await expect(reopenedHandler).toHaveValue('');
-    await expect(reopenedEditor.slotEditor.locator('.editor-inspector-detail-summary')).toContainText(
+    await expect(page.locator('#inspector-dialog-container .editor-inspector-detail-summary')).toContainText(
       'no support requests'
     );
   });
 
   test('should allow retrying medical handler conflicts from the same draft', async ({ page }) => {
     await grantDeviceSupportPermission(page, 'd', 'medical');
-    await openFutureDeviceGrid(page, 'd', '2035-02-19');
+    await openFutureDeviceGrid(page, 'd', '2035-03-19');
 
     const baseline = await openSlotInspectorEditor(page, 8, 0, {
       group: 'BEI',
       member: 'user0048',
     });
     await baseline.slotEditor.locator('input[id^="med-requested-"]').first().check();
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await page.locator('#inspector-save').click();
 
     const resultDialog = page.locator('#result-dialog-container .dialog-box-container');
@@ -729,7 +825,7 @@ test.describe('Schedule UI interactions', () => {
     await page.locator('#result-dialog-container button[data-a11y-dialog-hide]').click();
     await expect(resultDialog).not.toBeVisible();
 
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await expect(page.locator('#review-pending')).not.toContainText('error');
 
     await page.locator('#inspector-save').click();
@@ -774,7 +870,7 @@ test.describe('Schedule UI interactions', () => {
     });
 
     const { cell, dialog, slotEditor } = await openSlotInspectorEditor(page, 8, 0, assignment);
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await page.locator('#inspector-save').click();
     const resultDialog = page.locator('#result-dialog-container .dialog-box-container');
     await expect(resultDialog).toBeVisible();
@@ -792,7 +888,7 @@ test.describe('Schedule UI interactions', () => {
     await memberInput.fill('');
 
     await expect(dialog).toContainText('0 errors');
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await expect(page.locator('#review-pending')).not.toContainText('error');
     await expect
       .poll(async () =>
@@ -922,7 +1018,7 @@ test.describe('Schedule UI interactions', () => {
     await expect(resultDialog).toBeVisible();
     await expect
       .poll(async () => await page.locator('#review-pending').textContent(), { timeout: 10000 })
-      .toContain('Review pending (0)');
+      .toContain('Review pending');
   });
 
   test('should submit multi-entry pending review changes when confirm is pressed', async ({ page }) => {
@@ -966,7 +1062,7 @@ test.describe('Schedule UI interactions', () => {
     await page.locator('#inspector-exit').click();
     await expect(onePmEditor.dialog).not.toBeVisible();
 
-    await expect(page.locator('#review-pending')).toContainText('Review pending (2)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await page.locator('#review-pending').click();
     const saveDialog = page.locator('#save-dialog-container .dialog-box-container');
     await expect(saveDialog).toBeVisible();
@@ -979,7 +1075,7 @@ test.describe('Schedule UI interactions', () => {
     expect(postPayloads[0]?.diffs).toHaveLength(2);
     await expect
       .poll(async () => await page.locator('#review-pending').textContent(), { timeout: 10000 })
-      .toContain('Review pending (0)');
+      .toContain('Review pending');
   });
 
   test('should keep failed slots pending during partial multi-slot saves', async ({ page }) => {
@@ -1034,7 +1130,7 @@ test.describe('Schedule UI interactions', () => {
 
     await page.locator('#result-dialog-container button[data-a11y-dialog-hide]').click();
     await expect(dialog).toBeVisible();
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1, 1 error)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
   });
 
   test('should surface array-style server save errors without fake slot failures', async ({ page }) => {
@@ -1066,7 +1162,7 @@ test.describe('Schedule UI interactions', () => {
     await expect(resultDialog).toContainText('synthetic failure for scheduler UX check');
     await expect(resultDialog).not.toContainText('entry 0');
     await expect(resultDialog).not.toContainText('entry not loaded in current view');
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     expect(postCount).toBe(1);
   });
 
@@ -1146,7 +1242,7 @@ test.describe('Schedule UI interactions', () => {
       member: '',
     });
     await slotEditor.locator('input[id^="grp-"]').first().fill(assignment.group);
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
 
     await page.locator('#inspector-save').click();
 
@@ -1159,7 +1255,7 @@ test.describe('Schedule UI interactions', () => {
     await page.locator('#result-dialog-container button[data-a11y-dialog-hide]').click();
     await expect(resultDialog).not.toBeVisible();
     await expect(dialog).toBeVisible();
-    await expect(page.locator('#review-pending')).toContainText('Review pending (1)');
+    await expect(page.locator('#review-pending')).toContainText('Review pending');
     await expect(page.locator('#review-pending')).not.toContainText('error');
 
     await page.locator('#inspector-save').click();

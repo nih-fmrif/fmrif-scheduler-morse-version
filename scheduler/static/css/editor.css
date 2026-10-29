@@ -787,13 +787,22 @@
   color: #7d3a3a;
 }
 
+:root[data-theme="dark"] .potential-issue-critical {
+  background-color: rgb(107 43 43 / 0.38);
+  color: var(--fg);
+}
+
+:root[data-theme="dark"] .potential-issue-critical .potential-issue-category {
+  color: var(--muted);
+}
+
 @media screen and (prefers-color-scheme: dark) {
-  .potential-issue-critical {
+  :root:not([data-theme]) .potential-issue-critical {
     background-color: rgb(107 43 43 / 0.38);
     color: var(--fg);
   }
 
-  .potential-issue-critical .potential-issue-category {
+  :root:not([data-theme]) .potential-issue-critical .potential-issue-category {
     color: var(--muted);
   }
 }

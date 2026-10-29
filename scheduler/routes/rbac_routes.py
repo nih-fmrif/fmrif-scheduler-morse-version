@@ -5,6 +5,7 @@ import datetime
 import io
 from time import perf_counter
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import parse_qsl, urlencode
 
 from flask import (
     Response,
@@ -231,22 +232,86 @@ def _app_issues_redirect(raw_query: str):
     return redirect(target)
 
 
+def _app_issues_query_with_updates(
+    raw_query: str, updates: Dict[str, Optional[str]]
+) -> str:
+    query = _normalized_return_query(raw_query)
+    pairs = [(name, value) for name, value in parse_qsl(query, keep_blank_values=True)]
+    filtered_pairs = [
+        (name, value) for name, value in pairs if name not in set(updates.keys())
+    ]
+    for key, value in updates.items():
+        normalized = "" if value is None else str(value).strip()
+        if normalized != "":
+            filtered_pairs.append((key, normalized))
+    return urlencode(filtered_pairs)
+
+
+def _app_issues_query_with_flag(raw_query: str, key: str, enabled: bool) -> str:
+    return _app_issues_query_with_updates(raw_query, {key: "1" if enabled else None})
+
+
+def _app_error_limit_from_raw(
+    raw_limit: str,
+    *,
+    default: int,
+    max_limit: int,
+    strict: bool = False,
+) -> int:
+    token = (raw_limit or "").strip()
+    if token == "":
+        return default
+    if not token.isdigit():
+        if strict:
+            abort(400, f"invalid limit: {token}")
+        return default
+    limit = int(token)
+    if limit < 1 or limit > max_limit:
+        if strict:
+            abort(400, f"limit must be between 1 and {max_limit}")
+        return max(1, min(limit, max_limit))
+    return limit
+
+
 def _admin_mapping_kinds() -> List[Dict[str, str]]:
     return [
         {
             "id": "user-dept",
             "label": "user-dept.csv",
-            "description": "user to department membership and PI assignment",
+            "description": (
+                "user to group membership and PI assignment. Use the RBAC explorer "
+                "for day-to-day production edits; use this CSV for bulk review, "
+                "import/export, and reconciliation."
+            ),
+            "legacy_tooltip": (
+                "Legacy CSV import/export still uses the column name dept because "
+                "older schema and bootstrap scripts stored group ids in "
+                "deptcode/tlkpdept. In the current app these values are validated "
+                "against Group.id, so dept in these files means group id."
+            ),
+            "current_value": logic.format_admin_mapping_rows_for_form("user-dept"),
         },
         {
             "id": "dev-dept",
             "label": "dev-dept.csv",
-            "description": "device to department mapping",
+            "description": (
+                "device to group mapping. Use the RBAC explorer for day-to-day "
+                "production edits; use this CSV for bulk review, import/export, "
+                "and reconciliation."
+            ),
+            "legacy_tooltip": (
+                "Legacy CSV import/export still uses the column name dept because "
+                "older schema and bootstrap scripts stored group ids in "
+                "deptcode/tlkpdept. In the current app these values are validated "
+                "against Group.id, so dept in these files means group id."
+            ),
+            "current_value": logic.format_admin_mapping_rows_for_form("dev-dept"),
         },
         {
             "id": "devperm",
             "label": "devperm.csv",
             "description": "device permissions per user (templates,slot,technologist,medical,training)",
+            "current_value": logic.format_admin_mapping_rows_for_form("devperm"),
         },
     ]
 
@@ -472,6 +537,62 @@ def email_audit_feed():
     )
 
 
+def app_error_feed():
+    actor = request.args.get("actor", "").strip()
+    reference_id = request.args.get("reference_id", "").strip()
+    exception_type = request.args.get("exception_type", "").strip()
+    where_path = request.args.get("where_path", "").strip()
+    search = request.args.get("search", "").strip()
+    limit = _app_error_limit_from_raw(
+        request.args.get("limit", str(logic.APP_ERROR_EVENT_DEFAULT_LIMIT)),
+        default=logic.APP_ERROR_EVENT_DEFAULT_LIMIT,
+        max_limit=logic.APP_ERROR_EVENT_MAX_LIMIT,
+        strict=True,
+    )
+
+    if not logic.app_error_event_table_available():
+        return jsonify(
+            {
+                "actor": actor,
+                "reference_id": reference_id,
+                "exception_type": exception_type,
+                "where_path": where_path,
+                "search": search,
+                "limit": limit,
+                "count": 0,
+                "events": [],
+            }
+        )
+
+    try:
+        rows = logic.app_error_event_rows(
+            limit=limit,
+            actor=actor,
+            reference_id=reference_id,
+            exception_type=exception_type,
+            where_path=where_path,
+            search=search,
+        )
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception("Failed to query app error feed")
+        rows = []
+    events = [logic.app_error_event_payload(row) for row in rows]
+
+    return jsonify(
+        {
+            "actor": actor,
+            "reference_id": reference_id,
+            "exception_type": exception_type,
+            "where_path": where_path,
+            "search": search,
+            "limit": limit,
+            "count": len(events),
+            "events": events,
+        }
+    )
+
+
 def rbac_explorer_mutate():
     actor = _rbac_actor(g.user)
     if not bool(actor.get("can_access")):
@@ -583,6 +704,17 @@ def rbac():
 
 
 def app_issues():
+    app_error_actor = request.args.get("app_error_actor", "").strip()
+    app_error_reference_id = request.args.get("app_error_reference_id", "").strip()
+    app_error_exception_type = request.args.get("app_error_exception_type", "").strip()
+    app_error_where_path = request.args.get("app_error_where_path", "").strip()
+    app_error_search = request.args.get("app_error_search", "").strip()
+    app_error_limit = _app_error_limit_from_raw(
+        request.args.get("app_error_limit", str(logic.APP_ERROR_EVENT_DEFAULT_LIMIT)),
+        default=logic.APP_ERROR_EVENT_DEFAULT_LIMIT,
+        max_limit=logic.APP_ERROR_EVENT_MAX_LIMIT,
+        strict=False,
+    )
     email_scope = request.args.get("email_scope", "all").strip().lower()
     if email_scope not in _RBAC_AUDIT_SCOPE_LABELS:
         email_scope = "all"
@@ -640,6 +772,37 @@ def app_issues():
     ):
         notification_category = "all"
 
+    app_error_events: List[Dict[str, Any]] = []
+    app_error_events_available = logic.app_error_event_table_available()
+    if app_error_events_available:
+        try:
+            rows = logic.app_error_event_rows(
+                limit=app_error_limit,
+                actor=app_error_actor,
+                reference_id=app_error_reference_id,
+                exception_type=app_error_exception_type,
+                where_path=app_error_where_path,
+                search=app_error_search,
+            )
+            app_error_events = [logic.app_error_event_payload(row) for row in rows]
+        except SQLAlchemyError:
+            model.db.session.rollback()
+            current_app.logger.exception("Failed to query app error page")
+
+    csp_violation_events: List[Dict[str, Any]] = []
+    csp_violation_events_available = logic.csp_violation_event_table_available()
+    if csp_violation_events_available:
+        try:
+            rows = logic.csp_violation_event_rows(
+                limit=logic.CSP_VIOLATION_EVENT_DEFAULT_LIMIT
+            )
+            csp_violation_events = [
+                logic.csp_violation_event_payload(row) for row in rows
+            ]
+        except SQLAlchemyError:
+            model.db.session.rollback()
+            current_app.logger.exception("Failed to query CSP violation page")
+
     email_events: List[Dict[str, Any]] = []
     if logic.email_audit_table_available():
         try:
@@ -674,9 +837,41 @@ def app_issues():
     notification_return_query = _normalized_return_query(
         request.query_string.decode("utf-8", errors="ignore")
     )
+    organization_mapping = logic.get_admin_group_institute_mapping()
+    organization_mapping_error = logic.get_admin_group_institute_mapping_error()
+    organization_mapping_scan = logic.scan_admin_group_institute_mapping(
+        organization_mapping
+    )
+    organization_history_scan_enabled = _request_truthy(
+        request.args.get("organization_history_scan", ""),
+        default=False,
+    )
+    organization_history_window_years = (
+        logic.normalize_group_institute_history_window_years(
+            request.args.get("organization_history_years", "")
+        )
+    )
+    organization_history_scan = (
+        logic.scan_admin_group_institute_schedule_history(
+            organization_mapping,
+            window_years=organization_history_window_years,
+        )
+        if organization_history_scan_enabled
+        else {"summary": None, "sections": []}
+    )
 
     return {
         "title": "Admin Panel",
+        "app_error_events_available": app_error_events_available,
+        "app_error_events": app_error_events,
+        "csp_violation_events_available": csp_violation_events_available,
+        "csp_violation_events": csp_violation_events,
+        "app_error_limit": app_error_limit,
+        "app_error_actor": app_error_actor,
+        "app_error_reference_id": app_error_reference_id,
+        "app_error_exception_type": app_error_exception_type,
+        "app_error_where_path": app_error_where_path,
+        "app_error_search": app_error_search,
         "email_scope": email_scope,
         "email_entity": email_entity,
         "email_limit": email_limit,
@@ -757,11 +952,28 @@ def app_issues():
         ],
         "admin_config_form": logic.CsrfOnlyForm(),
         "admin_mapping_form": logic.CsrfOnlyForm(),
+        "organization_history_scan_form": logic.CsrfOnlyForm(),
         "admin_listserv": logic.get_admin_listserv(),
         "admin_default_sender": logic.get_admin_default_sender(),
         "admin_mailing_lists": logic.format_admin_mailing_lists_for_form(),
+        "admin_group_institute_mapping": (
+            logic.format_admin_group_institute_mapping_for_form()
+        ),
+        "admin_group_institute_mapping_error": organization_mapping_error,
+        "admin_group_institute_mapping_uses_recommended_default": (
+            logic.admin_group_institute_mapping_uses_recommended_default()
+        ),
         "admin_settings_available": logic.admin_settings_available(),
         "admin_mapping_kinds": _admin_mapping_kinds(),
+        "organization_mapping_summary": organization_mapping_scan["summary"],
+        "organization_mapping_issue_sections": organization_mapping_scan["sections"],
+        "organization_history_scan_enabled": organization_history_scan_enabled,
+        "organization_history_scan_window_years": organization_history_window_years,
+        "organization_history_scan_window_years_max": (
+            logic.GROUP_INSTITUTE_HISTORY_WINDOW_MAX_YEARS
+        ),
+        "organization_history_scan_summary": organization_history_scan["summary"],
+        "organization_history_issue_sections": organization_history_scan["sections"],
         **breadcrumb(("RBAC", url_for("rbac")), "Admin Panel"),
     }
 
@@ -781,9 +993,13 @@ def app_issues_config():
     listserv = (request.form.get("admin_listserv", "") or "").strip()
     default_sender = (request.form.get("admin_default_sender", "") or "").strip()
     mailing_lists_raw = request.form.get("admin_mailing_lists", "")
+    group_institute_mapping_raw = request.form.get("admin_group_institute_mapping", "")
 
     try:
         mailing_lists = logic.parse_admin_mailing_lists(mailing_lists_raw)
+        group_institute_mapping = logic.parse_admin_group_institute_mapping(
+            group_institute_mapping_raw
+        )
     except ValueError as ex:
         flash(str(ex), "error")
         return _app_issues_redirect(request.form.get("return_query", ""))
@@ -800,6 +1016,9 @@ def app_issues_config():
         logic.set_admin_listserv(listserv, updated_by=actor_id)
         logic.set_admin_default_sender(default_sender, updated_by=actor_id)
         logic.set_admin_mailing_lists(mailing_lists, updated_by=actor_id)
+        logic.set_admin_group_institute_mapping(
+            group_institute_mapping, updated_by=actor_id
+        )
         model.db.session.commit()
         flash("admin configuration updated", "message")
     except SQLAlchemyError:
@@ -819,13 +1038,17 @@ def app_issues_import_mapping():
         flash("invalid mapping kind", "error")
         return _app_issues_redirect(request.form.get("return_query", ""))
 
+    mapping_text = request.form.get("mapping_text", "")
     file = request.files.get("mapping_file")
-    if file is None:
-        flash("CSV file is required", "error")
+    if (mapping_text or "").strip() == "" and file is None:
+        flash("mapping CSV text or file is required", "error")
         return _app_issues_redirect(request.form.get("return_query", ""))
 
     try:
-        raw_rows = logic.parse_admin_mapping_file(mapping_kind, file)
+        if (mapping_text or "").strip() != "":
+            raw_rows = logic.parse_admin_mapping_text(mapping_kind, mapping_text)
+        else:
+            raw_rows = logic.parse_admin_mapping_file(mapping_kind, file)
         rows = logic.validate_import_rows(mapping_kind, raw_rows)
         applied_count = logic.apply_import_rows(mapping_kind, rows)
         model.db.session.commit()
@@ -850,24 +1073,78 @@ def app_issues_import_mapping():
 
 
 def app_issues_export_mapping(mapping_kind):
-    if mapping_kind not in {"user-dept", "dev-dept", "devperm"}:
+    if mapping_kind == "organization-issues":
+        include_recent_history = _request_truthy(
+            request.args.get("organization_history_scan", ""),
+            default=False,
+        )
+        organization_history_window_years = (
+            logic.normalize_group_institute_history_window_years(
+                request.args.get("organization_history_years", "")
+            )
+        )
+        headers, rows = logic.export_group_institute_issue_rows(
+            include_recent_history=include_recent_history,
+            window_years=organization_history_window_years,
+        )
+        filename = (
+            "organization-issues-recent-history.csv"
+            if include_recent_history
+            else "organization-issues.csv"
+        )
+    elif mapping_kind in {"user-dept", "dev-dept", "devperm"}:
+        try:
+            headers, rows = logic.export_mapping_rows(mapping_kind)
+        except ValueError as ex:
+            abort(400, str(ex))
+        filename = f"{mapping_kind}.csv"
+    else:
         abort(400, "invalid mapping kind")
-
-    try:
-        header, rows = logic.export_mapping_rows(mapping_kind)
-    except ValueError as ex:
-        abort(400, str(ex))
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(list(header))
+    writer.writerow(list(headers))
     writer.writerows(rows)
     response = Response(output.getvalue(), mimetype="text/csv")
-    response.headers["Content-Disposition"] = (
-        f'attachment; filename="{mapping_kind}.csv"'
-    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def app_issues_organization_history_scan():
+    form = logic.CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400, "invalid form submission")
+
+    return_query = request.form.get("return_query", "")
+    enabled = _request_truthy(request.form.get("enabled", ""), default=True)
+    organization_history_window_years = (
+        logic.normalize_group_institute_history_window_years(
+            request.form.get("organization_history_years", "")
+        )
+    )
+    _record_rbac_action(
+        action="organization.history.scan.toggle",
+        where="/app/issues",
+        how="admin-panel",
+        what=(f"enabled={enabled}, window_years={organization_history_window_years}"),
+    )
+    try:
+        model.db.session.commit()
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception(
+            "Failed to persist organization history scan audit"
+        )
+    return _app_issues_redirect(
+        _app_issues_query_with_updates(
+            return_query,
+            {
+                "organization_history_scan": "1" if enabled else None,
+                "organization_history_years": str(organization_history_window_years),
+            },
+        )
+    )
 
 
 def app_issues_scan():
@@ -995,6 +1272,11 @@ def register_rbac_blueprint(
     )
 
     app.add_url_rule(
+        "/json/v1/app-errors",
+        view_func=admin_only(app_error_feed),
+    )
+
+    app.add_url_rule(
         "/json/v1/rbac/mutate",
         methods=["POST"],
         view_func=active_user_required(rbac_explorer_mutate),
@@ -1015,6 +1297,12 @@ def register_rbac_blueprint(
         "/app/issues/notifications/state",
         methods=["POST"],
         view_func=admin_only(app_issues_notification_state),
+    )
+
+    app.add_url_rule(
+        "/app/issues/organization/history-scan",
+        methods=["POST"],
+        view_func=admin_only(app_issues_organization_history_scan),
     )
 
     app.add_url_rule(

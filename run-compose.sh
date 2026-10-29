@@ -27,15 +27,93 @@ runtime_scope_resolve_compose_project() {
   runtime_scope_set_compose_project_name "$base_name"
 }
 
+docker_available() {
+  command -v docker >/dev/null 2>&1
+}
+
 compose_project_has_running_services() {
   local project_name="${1:-$COMPOSE_PROJECT_NAME}"
-  if ! command -v docker >/dev/null 2>&1; then
+  if ! docker_available; then
     return 1
   fi
   docker ps \
     --filter "label=com.docker.compose.project=${project_name}" \
     --filter "status=running" \
     -q | grep -q .
+}
+
+resolve_scope_project_name() {
+  local scope_name=$1
+  local base_name=${2:-scheduler}
+  local derived=$base_name
+
+  if [ -z "$derived" ]; then
+    derived="scheduler"
+  fi
+
+  if [ "$scope_name" != "default" ]; then
+    case "$derived" in
+      *-"${scope_name}")
+        ;;
+      *)
+        derived="${derived}-${scope_name}"
+        ;;
+    esac
+  fi
+
+  runtime_scope_normalize_name "$derived"
+}
+
+SCOPE_INSPECT_METADATA_STATUS=""
+SCOPE_INSPECT_STACK_STATE=""
+SCOPE_INSPECT_PROJECT_NAME=""
+SCOPE_INSPECT_METADATA_PROJECT_NAME=""
+SCOPE_INSPECT_WORKTREE=""
+
+reset_scope_inspection() {
+  SCOPE_INSPECT_METADATA_STATUS="missing"
+  SCOPE_INSPECT_STACK_STATE="unknown"
+  SCOPE_INSPECT_PROJECT_NAME=""
+  SCOPE_INSPECT_METADATA_PROJECT_NAME=""
+  SCOPE_INSPECT_WORKTREE=""
+}
+
+inspect_scope_file() {
+  local scope_file=$1
+  local scope_name
+
+  reset_scope_inspection
+  scope_name="$(basename "$scope_file")"
+  if [ ! -f "$scope_file" ]; then
+    SCOPE_INSPECT_STACK_STATE="missing"
+    return 1
+  fi
+
+  if ! runtime_scope_load_metadata "$scope_file"; then
+    SCOPE_INSPECT_METADATA_STATUS="invalid"
+    return 1
+  fi
+
+  SCOPE_INSPECT_METADATA_PROJECT_NAME="${RUNTIME_SCOPE_COMPOSE_PROJECT_NAME:-}"
+  SCOPE_INSPECT_WORKTREE="${RUNTIME_SCOPE_WORKTREE_ROOT:-}"
+  if [ -z "$SCOPE_INSPECT_METADATA_PROJECT_NAME" ]; then
+    SCOPE_INSPECT_METADATA_STATUS="incomplete"
+    SCOPE_INSPECT_STACK_STATE="untracked"
+    return 0
+  fi
+
+  SCOPE_INSPECT_PROJECT_NAME="$SCOPE_INSPECT_METADATA_PROJECT_NAME"
+  SCOPE_INSPECT_METADATA_STATUS="valid"
+  SCOPE_INSPECT_PROJECT_NAME="$(resolve_scope_project_name "$scope_name" "$SCOPE_INSPECT_METADATA_PROJECT_NAME")"
+  if ! docker_available; then
+    SCOPE_INSPECT_STACK_STATE="unknown"
+  elif compose_project_has_running_services "$SCOPE_INSPECT_PROJECT_NAME"; then
+    SCOPE_INSPECT_STACK_STATE="running"
+  else
+    SCOPE_INSPECT_STACK_STATE="stopped"
+  fi
+
+  return 0
 }
 
 runtime_scope_current_worktree_root() {
@@ -73,9 +151,11 @@ list_all_scopes() {
   local scope_files=()
   local scope_file
   local scope_name
-  local scope_worktree
-  local project_name
-  local deployed
+  local running_count=0
+  local stopped_count=0
+  local untracked_count=0
+  local unknown_count=0
+  local invalid_count=0
 
   if [ ! -d "$RUNTIME_SCOPE_DIR" ]; then
     echo "No scope metadata directory found: ${RUNTIME_SCOPE_DIR}"
@@ -96,39 +176,61 @@ list_all_scopes() {
     if [ ! -f "$scope_file" ]; then
       continue
     fi
-
-    if ! runtime_scope_load_metadata "$scope_file"; then
-      echo "Scope: ${scope_name}"
-      echo "  metadata_status: invalid"
-      echo "  deployed: unknown"
-      echo
-      continue
-    fi
-
-    project_name="${RUNTIME_SCOPE_COMPOSE_PROJECT_NAME:-}"
-    scope_worktree="${RUNTIME_SCOPE_WORKTREE_ROOT:-}"
-    if [ -z "$project_name" ]; then
-      deployed="unknown"
-    elif compose_project_has_running_services "$project_name"; then
-      deployed="running"
-    else
-      deployed="stopped"
-    fi
+    inspect_scope_file "$scope_file" || true
 
     echo "Scope: ${scope_name}"
-    echo "  compose_project: ${project_name:-<unset>}"
-    echo "  worktree_root: ${scope_worktree:-<unset>}"
-    echo "  deployed: ${deployed}"
+    echo "  compose_project: ${SCOPE_INSPECT_PROJECT_NAME:-<unset>}"
+    if [ -n "$SCOPE_INSPECT_METADATA_PROJECT_NAME" ] && [ "$SCOPE_INSPECT_METADATA_PROJECT_NAME" != "$SCOPE_INSPECT_PROJECT_NAME" ]; then
+      echo "  metadata_compose_project: ${SCOPE_INSPECT_METADATA_PROJECT_NAME}"
+    fi
+    echo "  worktree_root: ${SCOPE_INSPECT_WORKTREE:-<unset>}"
+    echo "  metadata_status: ${SCOPE_INSPECT_METADATA_STATUS}"
+    echo "  stack_state: ${SCOPE_INSPECT_STACK_STATE}"
     echo
+
+    case "$SCOPE_INSPECT_METADATA_STATUS" in
+      invalid)
+        invalid_count=$((invalid_count + 1))
+        ;;
+    esac
+    case "$SCOPE_INSPECT_STACK_STATE" in
+      running)
+        running_count=$((running_count + 1))
+        ;;
+      stopped)
+        stopped_count=$((stopped_count + 1))
+        ;;
+      untracked)
+        untracked_count=$((untracked_count + 1))
+        ;;
+      *)
+        unknown_count=$((unknown_count + 1))
+        ;;
+    esac
   done
+
+  echo "Summary: ${running_count} running, ${stopped_count} stopped, ${untracked_count} untracked, ${invalid_count} invalid, ${unknown_count} unknown."
 }
 
-clear_all_scopes() {
+teardown_scope_project() {
+  local scope_name=$1
+  local project_name=$2
+  local stack_state=$3
+  local action_label=$4
+
+  echo "${action_label} scope '${scope_name}' (project=${project_name}, stack_state=${stack_state})."
+  docker compose \
+    --project-name "$project_name" \
+    down --volumes --remove-orphans || true
+}
+
+clear_stale_scopes() {
   local scope_files=()
   local scope_file
   local scope_name
-  local scope_worktree
-  local project_name
+  local current_worktree
+  local cleared_count=0
+  local skipped_running_count=0
 
   if [ ! -d "$RUNTIME_SCOPE_DIR" ]; then
     echo "No scope metadata directory found: ${RUNTIME_SCOPE_DIR}"
@@ -144,38 +246,95 @@ clear_all_scopes() {
     return 0
   fi
 
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "ERROR: docker is required for --clear-all stack cleanup." >&2
+  if ! docker_available; then
+    echo "ERROR: docker is required for --clear-stale scope cleanup." >&2
     return 1
   fi
 
   for scope_file in "${scope_files[@]}"; do
     scope_name="$(basename "$scope_file")"
-    if [ -f "$scope_file" ] && runtime_scope_load_metadata "$scope_file"; then
-      project_name="${RUNTIME_SCOPE_COMPOSE_PROJECT_NAME:-}"
-      scope_worktree="${RUNTIME_SCOPE_WORKTREE_ROOT:-}"
-      if [ -n "$scope_worktree" ]; then
-        current_worktree="$(runtime_scope_current_worktree_root)"
-        if [ -n "$current_worktree" ] && [ "$scope_worktree" != "$current_worktree" ]; then
-          echo "Warning: scope '${scope_name}' is owned by a different worktree (metadata: ${scope_worktree}); attempting teardown anyway."
-        fi
-      fi
-      if [ -n "$project_name" ]; then
-        echo "Clearing scope '${scope_name}' (project=${project_name})"
-        docker compose \
-          --project-name "$project_name" \
-          down --volumes --remove-orphans || true
-      else
-        echo "Scope '${scope_name}' missing compose project metadata; skipping stack teardown."
-      fi
-    else
-      echo "Could not read metadata for '${scope_name}'; skipping stack teardown."
+    if [ ! -f "$scope_file" ]; then
+      continue
     fi
+
+    inspect_scope_file "$scope_file" || true
+    if [ "$SCOPE_INSPECT_STACK_STATE" = "running" ]; then
+      echo "Skipping running scope '${scope_name}' (project=${SCOPE_INSPECT_PROJECT_NAME}). Use --wipe for the active scope or --clear-all for every scope."
+      skipped_running_count=$((skipped_running_count + 1))
+      continue
+    fi
+
+    if [ -n "$SCOPE_INSPECT_WORKTREE" ]; then
+      current_worktree="$(runtime_scope_current_worktree_root)"
+      if [ -n "$current_worktree" ] && [ "$SCOPE_INSPECT_WORKTREE" != "$current_worktree" ]; then
+        echo "Warning: scope '${scope_name}' is owned by a different worktree (metadata: ${SCOPE_INSPECT_WORKTREE}); pruning stale metadata anyway."
+      fi
+    fi
+
+    if [ -n "$SCOPE_INSPECT_PROJECT_NAME" ]; then
+      teardown_scope_project "$scope_name" "$SCOPE_INSPECT_PROJECT_NAME" "$SCOPE_INSPECT_STACK_STATE" "Pruning stale"
+    else
+      echo "Removing stale metadata for scope '${scope_name}' (metadata_status=${SCOPE_INSPECT_METADATA_STATUS})."
+    fi
+
+    rm -f "$scope_file"
+    cleared_count=$((cleared_count + 1))
   done
 
-  echo "Removing all scope metadata files in ${RUNTIME_SCOPE_DIR}..."
-  rm -f "${RUNTIME_SCOPE_DIR}"/*
-  echo "Cleared runtime scope metadata."
+  echo "Pruned ${cleared_count} stale scope(s); skipped ${skipped_running_count} running scope(s)."
+}
+
+clear_all_scopes() {
+  local scope_files=()
+  local scope_file
+  local scope_name
+  local current_worktree
+  local cleared_count=0
+
+  if [ ! -d "$RUNTIME_SCOPE_DIR" ]; then
+    echo "No scope metadata directory found: ${RUNTIME_SCOPE_DIR}"
+    return 0
+  fi
+
+  shopt -s nullglob
+  scope_files=("${RUNTIME_SCOPE_DIR}"/*)
+  shopt -u nullglob
+
+  if [ ${#scope_files[@]} -eq 0 ]; then
+    echo "No scope metadata files found in ${RUNTIME_SCOPE_DIR}."
+    return 0
+  fi
+
+  if ! docker_available; then
+    echo "ERROR: docker is required for --clear-all scope cleanup." >&2
+    return 1
+  fi
+
+  for scope_file in "${scope_files[@]}"; do
+    scope_name="$(basename "$scope_file")"
+    if [ ! -f "$scope_file" ]; then
+      continue
+    fi
+
+    inspect_scope_file "$scope_file" || true
+    if [ -n "$SCOPE_INSPECT_WORKTREE" ]; then
+      current_worktree="$(runtime_scope_current_worktree_root)"
+      if [ -n "$current_worktree" ] && [ "$SCOPE_INSPECT_WORKTREE" != "$current_worktree" ]; then
+        echo "Warning: scope '${scope_name}' is owned by a different worktree (metadata: ${SCOPE_INSPECT_WORKTREE}); clearing it anyway."
+      fi
+    fi
+
+    if [ -n "$SCOPE_INSPECT_PROJECT_NAME" ]; then
+      teardown_scope_project "$scope_name" "$SCOPE_INSPECT_PROJECT_NAME" "$SCOPE_INSPECT_STACK_STATE" "Clearing"
+    else
+      echo "Clearing scope '${scope_name}' metadata only (metadata_status=${SCOPE_INSPECT_METADATA_STATUS})."
+    fi
+
+    rm -f "$scope_file"
+    cleared_count=$((cleared_count + 1))
+  done
+
+  echo "Cleared ${cleared_count} scope(s) and removed their metadata files."
 }
 
 show_scope_running_guidance() {
@@ -197,6 +356,7 @@ CHECK_ONLY=0
 RESET_STACK=0
 WIPE_SCOPE=0
 LIST_ALL_SCOPES=0
+CLEAR_STALE_SCOPES=0
 CLEAR_ALL_SCOPES=0
 
 show_help() {
@@ -206,8 +366,9 @@ Usage:
   ./run-compose.sh --no-app --resume   # reuse existing postgres/mailpit data
   ./run-compose.sh --no-app --reset    # replace stack and wipe volumes
   ./run-compose.sh --wipe              # wipe active scope stack and metadata
-  ./run-compose.sh --list-all          # list all scopes in metadata store and whether each stack is deployed
-  ./run-compose.sh --clear-all          # wipe all scope stacks and metadata files
+  ./run-compose.sh --list-all          # list all scopes with metadata status and running/stopped stack state
+  ./run-compose.sh --clear-stale       # remove stopped scopes and stale metadata; keep running stacks
+  ./run-compose.sh --clear-all         # remove all known scope stacks and metadata, including running ones
   ./run-compose.sh                     # full compose stack (includes app container)
   ./run-compose.sh --resume            # resume existing full stack without destructive reset
   ./run-compose.sh --reset             # replace full stack and wipe volumes
@@ -701,12 +862,12 @@ warn_local_port_overrides() {
     fi
   fi
 
-  local playwright_base_url="${PLAYWRIGHT_BASE_URL:-${BASE_URL:-}}"
-  if [[ "$playwright_base_url" =~ ^https?://(localhost|localhost\.localdomain|127\.0\.0\.1):([0-9]{1,5})(/.*)?$ ]]; then
-    local playwright_port="${BASH_REMATCH[2]}"
-    if [ "$playwright_port" != "$app_port" ]; then
+  local test_base_url="${TEST_BASE_URL:-}"
+  if [[ "$test_base_url" =~ ^https?://(localhost|localhost\.localdomain|127\.0\.0\.1):([0-9]{1,5})(/.*)?$ ]]; then
+    local test_base_port="${BASH_REMATCH[2]}"
+    if [ "$test_base_port" != "$app_port" ]; then
       warning_lines+=(
-        "PLAYWRIGHT_BASE_URL=$playwright_base_url does not match APP_PORT=$app_port."
+        "TEST_BASE_URL=$test_base_url does not match APP_PORT=$app_port."
         "  Local Playwright port is auto-synced from APP_PORT; update or unset this override to reduce confusion."
       )
     fi
@@ -726,6 +887,7 @@ run_preflight() {
   runtime_scope_load_metadata "$RUNTIME_SCOPE_FILE" || true
   validate_runtime_env || return 1
   runtime_scope_resolve_compose_project
+  export RUNTIME_SCOPE_COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
   runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
   export FMRIF_COMPOSE_WRAPPER="run-compose.sh"
   prepare_compose_config
@@ -821,6 +983,9 @@ for arg in "$@"; do
     --list-all)
       LIST_ALL_SCOPES=1
       ;;
+    --clear-stale)
+      CLEAR_STALE_SCOPES=1
+      ;;
     --clear-all)
       CLEAR_ALL_SCOPES=1
       ;;
@@ -838,8 +1003,8 @@ for arg in "$@"; do
 done
 
 if (( CHECK_ONLY )); then
-  if (( START_NO_APP )) || (( RESUME_STACK )) || (( RESET_STACK )) || (( WIPE_SCOPE )) || (( LIST_ALL_SCOPES )) || (( CLEAR_ALL_SCOPES )); then
-    echo "ERROR: --check cannot be combined with --no-app, --resume, --reset, --wipe, --list-all, or --clear-all." >&2
+  if (( START_NO_APP )) || (( RESUME_STACK )) || (( RESET_STACK )) || (( WIPE_SCOPE )) || (( LIST_ALL_SCOPES )) || (( CLEAR_STALE_SCOPES )) || (( CLEAR_ALL_SCOPES )); then
+    echo "ERROR: --check cannot be combined with --no-app, --resume, --reset, --wipe, --list-all, --clear-stale, or --clear-all." >&2
     show_help
     exit 1
   fi
@@ -859,7 +1024,7 @@ if (( RESET_STACK )) && (( CHECK_ONLY )); then
   exit 1
 fi
 
-if (( LIST_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CLEAR_ALL_SCOPES || CHECK_ONLY )); then
+if (( LIST_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CLEAR_STALE_SCOPES || CLEAR_ALL_SCOPES || CHECK_ONLY )); then
   echo "ERROR: --list-all cannot be combined with other workflow flags." >&2
   show_help
   exit 1
@@ -870,7 +1035,18 @@ if (( LIST_ALL_SCOPES )); then
   exit 0
 fi
 
-if (( CLEAR_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES )); then
+if (( CLEAR_STALE_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_ALL_SCOPES )); then
+  echo "ERROR: --clear-stale cannot be combined with other workflow flags." >&2
+  show_help
+  exit 1
+fi
+
+if (( CLEAR_STALE_SCOPES )); then
+  clear_stale_scopes
+  exit $?
+fi
+
+if (( CLEAR_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_STALE_SCOPES )); then
   echo "ERROR: --clear-all cannot be combined with other workflow flags." >&2
   show_help
   exit 1
@@ -881,8 +1057,8 @@ if (( CLEAR_ALL_SCOPES )); then
   exit $?
 fi
 
-if (( WIPE_SCOPE )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_ALL_SCOPES )); then
-  echo "ERROR: --wipe cannot be combined with --no-app, --resume, --reset, --check, --list-all, or --clear-all." >&2
+if (( WIPE_SCOPE )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_STALE_SCOPES || CLEAR_ALL_SCOPES )); then
+  echo "ERROR: --wipe cannot be combined with --no-app, --resume, --reset, --check, --list-all, --clear-stale, or --clear-all." >&2
   show_help
   exit 1
 fi
@@ -904,6 +1080,7 @@ export APP_PORT INTEGRATION_APP_PORT PGHOST PGPORT \
   PGUSER PGPASSWORD PGDATABASE SESSION__COOKIE_NAME
 
 runtime_scope_resolve_compose_project
+export RUNTIME_SCOPE_COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
 
 echo "Using environment from $ENVFILE"

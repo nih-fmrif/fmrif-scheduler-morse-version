@@ -44,6 +44,23 @@ isolated restart (`docker compose down --volumes` then `up`) so local stacks do
 not reuse stale state. Use `./run-compose.sh --no-app --resume` for
 non-destructive reuse.
 
+Host-mode `pixi run serve` uses Flask/Werkzeug for a fast edit-refresh loop.
+When you want host-side serving closer to deployment behavior without the full
+compose stack, use `pixi run serve-gunicorn`. Both startup paths now wait for
+local readiness and then run `scripts/check-edge-security-headers.py`. In
+production, that probe derives its target from `ENTRA__REDIRECT_URI` by
+removing `/auth/callback`; outside production it falls back to
+`http://localhost:${APP_PORT}`.
+
+For proxy-aware local validation, use `./run-compose.sh` so requests flow through
+nginx before reaching the app server. In that mode, `APP_PORT` is owned by nginx
+and the Gunicorn-backed app container remains internal to the compose network.
+The full compose stack defaults to `linux/amd64`, and the app container builds
+its Python environment from the shared repository `pixi.toml` after narrowing
+the copied in-image manifest to `linux-64`. That keeps host and container
+workflows on one tracked dependency manifest while still exercising the x86
+Linux solve path in Docker.
+
 `run-compose.sh` also neutralizes Docker Compose `$`-interpolation edge cases by generating a
 minimal temp env file for compose metadata (`APP_PORT`, `PGPORT`, `SERVER__SERVER_NAME`)
 while passing the full raw `.env` only as application config. If you run `docker compose` directly,
@@ -76,13 +93,13 @@ Profile behavior:
 APP_PORT=5051
 # Optional: usually leave unset in local workflows to use request-based hosts.
 # Set this when you need a fixed server name.
+# SERVER__SERVER_NAME=localhost:5051
 # Optional: isolate docker-compose resources across scopes.
 # COMPOSE_PROJECT_NAME=scheduler-scope-name
-SERVER__APPLICATION_ROOT=
 ```
 
 For local development, treat `APP_PORT` as the source of truth for app port wiring.
-`run-compose.sh --check` warns when local `SERVER__SERVER_NAME` or `PLAYWRIGHT_BASE_URL`
+`run-compose.sh --check` warns when local `SERVER__SERVER_NAME` or `TEST_BASE_URL`
 conflicts with `APP_PORT`.
 
 #### Database Settings
@@ -107,8 +124,31 @@ prefix.
 COMPOSE_PROJECT_NAME=scheduler-<scope>
 ```
 
-For Playwright integration tests, local `PLAYWRIGHT_BASE_URL` is optional.
+For Playwright integration tests, local `TEST_BASE_URL` is optional.
 If unset (recommended), local runs derive/sync the port from `APP_PORT`.
+
+Optional static asset cache-busting override:
+
+```env
+STATIC_ASSET_VERSION=<deploy-id-or-git-sha>
+```
+
+If unset, the app falls back to the current git SHA for top-level static asset
+URLs.
+
+For Entra/OIDC, root-only deployment is now the supported model. Set:
+
+```env
+ENTRA__REDIRECT_URI=https://<your-host>/auth/callback
+```
+
+Startup validation rejects prefixed callback paths such as
+`https://<your-host>/prefix/auth/callback`.
+
+Default CSP reporting uses `report-to csp-endpoint` plus
+`Reporting-Endpoints: csp-endpoint="/csp-report"`. Reports posted to
+`/csp-report` are redacted before storage, written to the database, and
+surfaced in the Admin Panel.
 
 ### Test Database Override
 
@@ -143,6 +183,9 @@ without extra developer setup:
 - `MAIL__PORT=1025`
 - `MAIL__SUPPRESS_SEND=false`
 - `MAIL__DEFAULT_SENDER=<configured sender>`
+- `APP_SERVER=gunicorn`
+- `APP_PORT` terminates at the local nginx service, which forwards the expected
+  `X-Forwarded-*` headers to the scheduler container
 
 For host-mode app runs (`run-compose.sh --no-app` + `pixi run serve`), generated
 `.env` defaults route app SMTP to host Mailpit:

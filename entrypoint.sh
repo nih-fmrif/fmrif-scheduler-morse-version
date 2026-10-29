@@ -1,9 +1,41 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 # override db host/port for containerized execution unless intentionally overridden
 export PGHOST="${DB_CONTAINER_HOST:-postgres}"
 export PGPORT="${DB_CONTAINER_PORT:-5432}"
 container_port="${CONTAINER_APP_PORT:-5051}"
+app_server="${APP_SERVER:-flask}"
+
+build_gunicorn_command() {
+  local bind_addr="0.0.0.0:${container_port}"
+  local workers="${GUNICORN_WORKERS:-2}"
+  local worker_class="${GUNICORN_WORKER_CLASS:-sync}"
+  local timeout="${GUNICORN_TIMEOUT:-120}"
+  local threads="${GUNICORN_THREADS:-}"
+
+  local -a command=(
+    gunicorn
+    --bind
+    "$bind_addr"
+    --workers
+    "$workers"
+    --worker-class
+    "$worker_class"
+    --timeout
+    "$timeout"
+    --access-logfile
+    -
+    --error-logfile
+    -
+  )
+
+  if [ -n "$threads" ]; then
+    command+=(--threads "$threads")
+  fi
+
+  command+=(scheduler.wsgi:app)
+  printf '%s\n' "${command[@]}"
+}
 
 bootstrap_if_missing() {
   if [ ! -x "/sql/000-init.sh" ]; then
@@ -49,5 +81,17 @@ bootstrap_if_missing
 # Run database migrations
 alembic upgrade head
 # Start the application
-export FLASK_APP="${FLASK_APP:-scheduler.app:create_app}"
-flask run --host 0.0.0.0 --port "$container_port"
+case "$app_server" in
+  flask)
+    export FLASK_APP="${FLASK_APP:-scheduler.app:create_app}"
+    exec flask run --host 0.0.0.0 --port "$container_port"
+    ;;
+  gunicorn)
+    mapfile -t gunicorn_command < <(build_gunicorn_command)
+    exec "${gunicorn_command[@]}"
+    ;;
+  *)
+    echo "ERROR: APP_SERVER must be one of: flask, gunicorn" >&2
+    exit 1
+    ;;
+esac

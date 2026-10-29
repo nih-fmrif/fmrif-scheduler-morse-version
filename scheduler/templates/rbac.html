@@ -340,8 +340,12 @@
   {% endfor %}
 </datalist>
 <script
+  nonce="{{ current_csp_nonce() }}"
   type="module"
-  src="{{ url_for('static', filename='js/rbac-explorer.js') }}"
+  src="{{ static_asset_url('js/rbac-explorer.js') }}"
 ></script>
-<script src="{{ url_for('static', filename='js/admin-audit.js') }}"></script>
+<script
+  nonce="{{ current_csp_nonce() }}"
+  src="{{ static_asset_url('js/admin-audit.js') }}"
+></script>
 {% endblock %}

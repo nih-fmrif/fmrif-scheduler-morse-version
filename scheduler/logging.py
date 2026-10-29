@@ -46,6 +46,41 @@ def redact_string(value: str, redaction_text: str = _DEFAULT_REDACTION_TEXT) -> 
     return out
 
 
+def redact_value(
+    value: Any,
+    *,
+    redaction_text: str = _DEFAULT_REDACTION_TEXT,
+    sensitive_keys: Iterable[str] | None = None,
+) -> Any:
+    """Recursively redact sensitive values embedded in strings and mappings."""
+
+    normalized_keys = {
+        _normalize_key(key) for key in (sensitive_keys or _DEFAULT_SENSITIVE_KEYS)
+    }
+
+    def _redact(inner: Any) -> Any:
+        if isinstance(inner, str):
+            return redact_string(inner, redaction_text)
+        if isinstance(inner, Mapping):
+            return {
+                key: (
+                    redaction_text
+                    if _normalize_key(str(key)) in normalized_keys
+                    else _redact(item)
+                )
+                for key, item in inner.items()
+            }
+        if isinstance(inner, tuple):
+            return tuple(_redact(item) for item in inner)
+        if isinstance(inner, list):
+            return [_redact(item) for item in inner]
+        if isinstance(inner, set):
+            return {_redact(item) for item in inner}
+        return inner
+
+    return _redact(value)
+
+
 class SensitiveDataFilter(logging.Filter):
     """Redact sensitive data from log records unless explicitly disabled."""
 
@@ -68,17 +103,11 @@ class SensitiveDataFilter(logging.Filter):
         return self._redact_value(value)
 
     def _redact_value(self, value: Any) -> Any:
-        if isinstance(value, str):
-            return redact_string(value, self._redaction_text)
-        if isinstance(value, Mapping):
-            return {k: self._redact_keyed_value(k, v) for k, v in value.items()}
-        if isinstance(value, tuple):
-            return tuple(self._redact_value(v) for v in value)
-        if isinstance(value, list):
-            return [self._redact_value(v) for v in value]
-        if isinstance(value, set):
-            return {self._redact_value(v) for v in value}
-        return value
+        return redact_value(
+            value,
+            redaction_text=self._redaction_text,
+            sensitive_keys=self._sensitive_keys,
+        )
 
     def filter(self, record: logging.LogRecord) -> bool:
         if self._reveal_sensitive_data:

@@ -32,7 +32,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "gunicorn>=23,<24",
     "ipython>=8.31.0",
+    "locust>=2.31,<3",
     "pdbpp>=0.10.3",
     "pytest-cov>=6.0.0",
     "pytest>=8.3.4",

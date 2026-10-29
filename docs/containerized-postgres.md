@@ -58,6 +58,14 @@ This keeps `.env` easy to manage while avoiding compose interpolation surprises.
 
 In this mode:
 
+- Host requests reach nginx on `APP_PORT`, and nginx proxies to the internal
+  scheduler container on port `5051`.
+- The scheduler container serves the Flask app through Gunicorn by default.
+- The scheduler container builds its Python environment from the shared
+  repository `pixi.toml`, narrowing the copied in-image manifest to `linux-64`
+  rather than relying on a lockfile-frozen install path.
+- Compose services default to `linux/amd64` so Apple Silicon development uses
+  the same x86 container architecture as deployment expectations.
 - Containerized Postgres listens on container port `5432`.
 - Compose publishes Postgres to host port from `PGPORT` (for example `5444`).
 - Scheduler container DB settings are overridden by compose:
@@ -68,6 +76,10 @@ In this mode:
   - `MAIL__PORT=1025`
   - `MAIL__SUPPRESS_SEND=false`
   - `MAIL__DEFAULT_SENDER=<configured sender>`
+- Scheduler container proxy settings are overridden by compose:
+  - `MMSCHED_X_FORWARDED_FOR=1`
+  - `MMSCHED_X_FORWARDED_PROTO=1`
+  - `MMSCHED_X_FORWARDED_HOST=1`
 - `sql/000-init.sh` runs inside the Postgres container and uses container-local
   connection defaults.
 - Default startup is isolated: `run-compose.sh` performs `docker compose down --volumes`
@@ -86,6 +98,8 @@ In this mode:
   - `MAIL__DEFAULT_SENDER=<configured sender>`
 - Start with local app runner, for example:
   - `pixi run serve`
+  - `pixi run serve-gunicorn` when you want host-side Gunicorn behavior without
+    the full compose proxy path
 
 ### Mode C: App runs in other container tooling
 
@@ -127,7 +141,7 @@ resolved through that container network:
 7. **Avoid duplicate local app-port declarations**
    - Keep `APP_PORT` authoritative.
    - Set `SERVER__SERVER_NAME` in `.env` (or leave blank for request-based host defaults).
-   - `PLAYWRIGHT_BASE_URL` local port is auto-synced from `APP_PORT` in test config.
+   - `TEST_BASE_URL` local port is auto-synced from `APP_PORT` in test config.
    - `run-compose.sh --check` warns if local overrides conflict with `APP_PORT`.
 
 ## Quick checks
@@ -136,5 +150,7 @@ resolved through that container network:
   - `bash run-compose.sh --check`
 - Verify a host-mode containerless run:
   - `pixi run serve`
+- Verify the host-side Gunicorn parity path:
+  - `pixi run serve-gunicorn`
 - If startup fails with missing seed or mount errors, rerun after ensuring `/app/.env`
   is mounted and contains all required `PG*`.

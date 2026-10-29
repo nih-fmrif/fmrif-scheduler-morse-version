@@ -161,6 +161,29 @@ def test_header_home_button_uses_local_mri_icon_and_accessible_label(route_clien
     assert 'class="home-link-label-compact"' in body
 
 
+def test_header_user_menu_includes_theme_controls(route_client):
+    user_id = f"home-theme-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Home Theme User")
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Theme User",
+    )
+
+    response = route_client.get("/")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "data-theme-toggle" in body
+    assert 'data-theme-value="system"' in body
+    assert 'data-theme-value="light"' in body
+    assert 'data-theme-value="dark"' in body
+    assert "data-theme-status" in body
+
+
 def test_home_shows_rbac_link_for_admin(route_client):
     ensure_admin_user()
     user_id = "test-admin"

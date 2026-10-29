@@ -41,7 +41,7 @@ Last updated: 2026-03-05
   - no off-hour expando UX
   - editable empty-slot windows (no blocking/no-editor empty-state mode)
   - modal-only save/apply path for device scheduler
-  - anchor-based multi-slot duration expansion (`+30 min` and longer) with atomic apply semantics
+  - anchor-based multi-slot duration expansion (`+1 hour` and longer) with atomic apply semantics
 - [x] Finalized duration/conflict details in spec/tasks:
   - both preset increments and end-time controls
   - no duration cap

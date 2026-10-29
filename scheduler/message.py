@@ -40,6 +40,12 @@ def _request_client_ip() -> str:
     return remote or "unknown"
 
 
+def _mail_delivery_suppressed() -> bool:
+    if not has_app_context():
+        return False
+    return bool(current_app.config.get("MAIL_SUPPRESS_SEND", False))
+
+
 def send(
     to: str,
     subj: str,
@@ -61,9 +67,12 @@ def send(
     if sender:
         m.sender = sender
     ok = False
+    delivery_suppressed = _mail_delivery_suppressed()
     try:
         mailer.send(m)
-        if current_app.debug:
+        if delivery_suppressed:
+            current_app.logger.info("suppressed email to %s: %s / %s", to, subj, msg)
+        elif current_app.debug:
             current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
         ok = True
     except (SMTPException, OSError, AssertionError):
@@ -95,14 +104,19 @@ def send(
     try:
         from scheduler import logic
 
+        status = logic.EMAIL_AUDIT_STATUS_FAILED
+        if ok:
+            status = (
+                logic.EMAIL_AUDIT_STATUS_SKIPPED
+                if delivery_suppressed
+                else logic.EMAIL_AUDIT_STATUS_SENT
+            )
         logic.log_email_audit_event(
             action=action,
             actor=actor,
             where=where,
             how=how,
-            status=(
-                logic.EMAIL_AUDIT_STATUS_SENT if ok else logic.EMAIL_AUDIT_STATUS_FAILED
-            ),
+            status=status,
             recipient=to,
             subject=subj,
             details=details,
