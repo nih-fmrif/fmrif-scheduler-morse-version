@@ -1,11 +1,30 @@
 from smtplib import SMTPException
 from typing import Mapping, Optional
 
-from flask import current_app, g, has_request_context, request
+from flask import current_app, g, has_app_context, has_request_context, request
 from flask_mail import Mail, Message
 from sqlalchemy.exc import SQLAlchemyError
 
 mailer = Mail()
+
+
+def _default_sender() -> Optional[str]:
+    try:
+        from scheduler import logic
+
+        sender = logic.get_admin_setting(logic.ADMIN_SETTING_KEY_DEFAULT_SENDER, "")
+    except Exception:
+        sender = ""
+    if _normalize_sender := str(sender).strip():
+        return _normalize_sender
+    if has_app_context():
+        configured = current_app.config.get("MAIL_DEFAULT_SENDER", "")
+        if isinstance(configured, tuple):
+            configured = configured[1] if len(configured) > 1 else configured[0]
+        normalized = str(configured).strip()
+        if normalized:
+            return normalized
+    return None
 
 
 def _request_client_ip() -> str:
@@ -36,8 +55,10 @@ def send(
     if "," in to:
         addrs = [s.strip() for s in to.split(",")]
     m.recipients = addrs
-    # we only need to change the sender for the list action form
-    if sender is not None:
+    resolved_sender = sender if sender else _default_sender()
+    if resolved_sender is not None:
+        m.sender = resolved_sender
+    if sender:
         m.sender = sender
     ok = False
     try:

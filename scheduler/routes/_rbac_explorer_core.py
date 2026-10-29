@@ -7,6 +7,7 @@ from flask import abort, url_for
 from sqlalchemy.orm import Load, load_only
 
 from scheduler import logic, model
+from scheduler.auth.test_session_state import get_auth_test_session_pi_groups
 
 _RBAC_SCOPE_LABELS: Dict[str, str] = {
     "group": "groups",
@@ -58,6 +59,7 @@ def _rbac_actor(user: Optional[model.User]) -> Dict[str, Any]:
             .filter(model.Membership.pi)
             .all()
         }
+    managed_groups.update(get_auth_test_session_pi_groups(user))
 
     is_dev_pi = "DEV" in managed_groups
 
@@ -279,7 +281,8 @@ def _rbac_entities_for_actor(
             return []
         q = model.Device.query.options(
             load_only(model.Device.id, model.Device.label, model.Device.active)
-        ).order_by(model.Device.label, model.Device.id)
+        )
+        q = q.order_by(model.Device.label, model.Device.id)
         if not include_inactive:
             q = q.filter(model.Device.active)
         devices = q.all()
@@ -342,7 +345,9 @@ def _rbac_entity_visible_for_actor(
         device = logic.get_device(entity)
         if device is None:
             return False
-        return include_inactive or bool(device.active)
+        if not include_inactive and not bool(device.active):
+            return False
+        return True
 
     return False
 
@@ -1372,16 +1377,7 @@ def _rbac_user_detail(
     memberships_by_group = {row.group: row for row in memberships}
 
     is_admin = logic.is_admin(user)
-    is_dev_pi = (
-        model.Membership.query.filter(model.Membership.user == user.id)
-        .filter(model.Membership.group == "DEV")
-        .filter(model.Membership.pi)
-        .filter(model.Membership.user_active)
-        .filter(model.Membership.approved)
-        .first()
-        is not None
-    )
-    tech_request = model.Technologist.query.get(user.id)
+    tech_request = model.get(model.Technologist, user.id)
     is_technologist = logic.is_technologist(user.id)
     tech_applied = tech_request is not None
     tech_email_status = _rbac_email_status(
@@ -1601,8 +1597,6 @@ def _rbac_user_detail(
     badges = [_rbac_state(bool(user.active))]
     if is_admin:
         badges.append("admin")
-    if is_dev_pi:
-        badges.append("DEV PI")
     if is_technologist:
         badges.append("technologist")
 
@@ -1700,14 +1694,6 @@ def _rbac_user_detail(
                     "label": "admin",
                     "kind": "checkbox",
                     "value": bool(is_admin),
-                    "editable": False,
-                },
-                {
-                    "id": f"{user.id}-dev-pi",
-                    "search": f"{user.id} dev pi {_rbac_user_label(user)}",
-                    "label": "DEV PI",
-                    "kind": "checkbox",
-                    "value": bool(is_dev_pi),
                     "editable": False,
                 },
                 {

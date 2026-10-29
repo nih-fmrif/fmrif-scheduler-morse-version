@@ -19,6 +19,7 @@ basehead %} {% block head %}
       <a
         class="menu-action home-link"
         href="{{ home_href }}"
+        aria-label="Home"
         {%
         if
         request.path
@@ -29,7 +30,11 @@ basehead %} {% block head %}
         endif
         %}
       >
-        <span>FMRIF scheduler</span>
+        <span class="home-link-icon" aria-hidden="true"
+          >{{ icons.mri_scanner() }}</span
+        >
+        <span class="menu-action-label home-link-label">FMRIF scheduler</span>
+        <span class="home-link-label-compact" aria-hidden="true">Home</span>
       </a>
       {% if user %} {% if admin_menu_links %}
       <nav class="admin-links" aria-label="admin pages">
@@ -37,6 +42,7 @@ basehead %} {% block head %}
         <a
           class="menu-action"
           href="{{ href }}"
+          aria-label="{{ label }}"
           {%
           if
           request.path
@@ -50,7 +56,7 @@ basehead %} {% block head %}
           {% if icon == "lock" %} {{ icons.lock() }} {% elif icon == "warning"
           %} {{ icons.exclaim_triangle() }} {% else %} {{ icons.gear() }} {%
           endif %}
-          <span>{{ label }}</span>
+          <span class="menu-action-label">{{ label }}</span>
         </a>
         {% endfor %}
       </nav>
@@ -59,7 +65,7 @@ basehead %} {% block head %}
     <section class="login-info" aria-label="login info">
       {% if user %}
       <details class="user-menu">
-        <summary id="user-menu-toggle">
+        <summary id="user-menu-toggle" aria-label="Account menu">
           {{ icons.person_circle("account menu") }}
           <span>{{ user.id }}</span>
           {% if not user.active %}<small>(inactive)</small>{% endif %}

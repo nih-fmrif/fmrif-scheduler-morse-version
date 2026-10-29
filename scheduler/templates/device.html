@@ -1,9 +1,9 @@
 {% extends "page.html" %} {% import "svg/icons.html" as icons %} {% import
 "macros.html" as macros %} {% block title %}{{ device.label }}{% endblock %} {%
 block head %} {{ super() }} {{ macros.swatch_styles(colors) }} {% endblock %} {%
-block body %} {% if never_entries %}
-<p class="note">{{ icons.info() }} {{ never_entries }}</p>
-{% else %}
+block body %} {% if clock_warning %}
+<p class="note">{{ icons.info() }} {{ clock_warning }}</p>
+{% endif %}
 <nav class="jump-form" aria-labelledby="jump-hdr">
   <form method="get">
     <div class="jump-controls">
@@ -18,7 +18,6 @@ block body %} {% if never_entries %}
         value="{{ start_date }}"
         required
       />
-      <span aria-hidden="true">show</span>
       <input
         name="days"
         aria-label="show number of days"
@@ -28,39 +27,57 @@ block body %} {% if never_entries %}
         min="1"
         max="31"
         required
+        hidden
       />
-      <span aria-hidden="true">days</span>
       <button
         id="jump-prev-non-empty"
         type="button"
         class="admin-show-more-button jump-arrow-button"
         aria-label="jump to previous non-empty date"
+        title="Jump to the previous non-empty scheduled date"
       >
-        <span aria-hidden="true">←</span> previous non-empty
+        <span aria-hidden="true">&laquo;</span>
       </button>
       <button
         id="jump-next-non-empty"
         type="button"
         class="admin-show-more-button jump-arrow-button"
         aria-label="jump to next non-empty date"
+        title="Jump to the next non-empty scheduled date"
       >
-        next non-empty <span aria-hidden="true">→</span>
+        <span aria-hidden="true">&raquo;</span>
       </button>
     </div>
-    <div id="caption" data-changed="false" data-error="false">
-      <span class="range"
-        >schedule for {{ device.label }} from {{ start_date }} to {{ end_date
-        }}</span
+    <div class="jump-actions">
+      <button
+        id="inspector-open"
+        type="button"
+        class="admin-show-more-button legend-toggle"
+        aria-label="open selected slot"
       >
-      {{ macros.edit_icons("schedule") }}
+        {{ icons.info("selected slot details") }}
+        <span class="legend-toggle-label"
+          >{% if perms.edit %}View/Edit{% else %}View{% endif %}</span
+        >
+      </button>
       <button
         id="legend-open"
         type="button"
         class="admin-show-more-button legend-toggle"
-        aria-label="open legend"
+        aria-label="open schedule legend"
       >
-        {{ icons.question("legend") }}
-        <span class="legend-toggle-label">legend</span>
+        {{ icons.book("legend") }}
+        <span class="legend-toggle-label">Legend</span>
+      </button>
+      <button
+        id="review-pending"
+        type="button"
+        class="admin-show-more-button legend-toggle"
+        aria-label="review pending changes"
+        disabled
+      >
+        {{ icons.pencil("pending changes") }}
+        <span class="legend-toggle-label">Review pending (0)</span>
       </button>
     </div>
   </form>
@@ -83,6 +100,9 @@ block body %} {% if never_entries %}
 <script id="schedule-load-config" type="application/json">
   {{ schedule_load_json|tojson }}
 </script>
+<script id="schedule-off-hours" type="application/json">
+  {{ off_hours|tojson }}
+</script>
 {{ macros.datalist("groups", groups, "invalid group") }} {{
 macros.datalist("tech", support.tech, "invalid technologist") }} {{
 macros.datalist("med", support.medical, "invalid medical support member") }} {{
@@ -93,99 +113,57 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
 <div class="editor-container">
   <form class="editor schedule-editor">
     {{ form.csrf_token }}
-    <div
-      class="editor-inspector"
+    <p
+      id="editor-load-status"
+      class="editor-load-status"
       aria-live="polite"
-      aria-label="selected slot details"
+      hidden
     >
-      <p class="editor-inspector-line">
-        <span class="editor-inspector-target"
-          >select a slot to inspect and edit</span
-        >
-        <span class="editor-inspector-sep" aria-hidden="true">|</span>
-        <span class="editor-inspector-summary"
-          >use arrow keys to move and press enter to edit</span
-        >
-        <span class="editor-inspector-sep" aria-hidden="true">|</span>
-        <span class="editor-inspector-mode">read only</span>
-        <span class="editor-inspector-sep" aria-hidden="true">|</span>
-        <span class="editor-inspector-pending">0 changes</span>
-        <span class="editor-inspector-sep" aria-hidden="true">|</span>
-        <span class="editor-inspector-errors">0 errors</span>
-      </p>
-      <button
-        id="inspector-open"
-        type="button"
-        class="admin-show-more-button legend-toggle"
-        aria-label="open selected slot details"
-      >
-        {{ icons.info("selected slot details") }}
-        <span class="legend-toggle-label">details</span>
-      </button>
-    </div>
-    <p id="editor-load-status" class="editor-load-status" aria-live="polite">
       preparing schedule editor...
     </p>
     <div class="editor-workspace">
-      <div id="scroll-container" aria-labelledby="caption" tabindex="0">
-        <table aria-labelledby="caption">
-          <thead>
-            <tr>
-              <td></td>
-              {% for h in top_row %}
-              <th>{{ h }}</th>
+      <div class="editor-scroll-shell">
+        <button
+          id="scroll-prev-day"
+          type="button"
+          class="scroll-edge-button scroll-edge-button-left"
+          aria-label="scroll schedule left"
+        >
+          <span aria-hidden="true">←</span>
+        </button>
+        <div id="scroll-container" aria-label="schedule" tabindex="0">
+          <table aria-label="schedule">
+            <thead>
+              <tr>
+                <td></td>
+                {% for h in top_row %}
+                <th>{{ h }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for h in range(24) %}
+              <tr id="row-{{ h }}" data-hour="{{ h }}" data-hydrated="false">
+                <th scope="row">{{ hours[h] }}</th>
+                {% for _ in top_row %}
+                <td data-placeholder="true"></td>
+                {% endfor %}
+              </tr>
               {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for h in range(24) %}
-            <tr
-              id="row-{{ h }}"
-              data-hour="{{ h }}"
-              data-hydrated="false"
-              {%
-              if
-              h
-              in
-              off_hours
-              %}hidden
-              data-off-hour{%
-              endif
-              %}
-            >
-              <th scope="row">{{ hours[h] }}</th>
-              {% for _ in top_row %}
-              <td data-placeholder="true"></td>
-              {% endfor %}
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
+        <button
+          id="scroll-next-day"
+          type="button"
+          class="scroll-edge-button scroll-edge-button-right"
+          aria-label="scroll schedule right"
+        >
+          <span aria-hidden="true">→</span>
+        </button>
       </div>
     </div>
-    {% if off_hours|length %}
-    <div class="admin-show-more-wrap editor-show-more-bottom">
-      <button
-        id="expando"
-        type="button"
-        class="admin-show-more-button"
-        hidden
-        aria-expanded="false"
-        data-more-label="show more"
-        data-less-label="show less"
-        data-expands="{{ off_hours|tojson }}"
-      >
-        <span class="icons">{{ icons.add() }}{{ icons.close() }}</span>
-        <span class="label">show more</span>
-        <span class="detail"
-          >{{ off_hours|length }} empty row{% if off_hours|length > 1 %}s{%
-          endif %}</span
-        >
-      </button>
-    </div>
-    {% endif %}
     <div id="focus-trap"></div>
-    <button id="apply" type="submit" disabled>save</button>
   </form>
   <div
     id="legend-dialog-container"
@@ -274,7 +252,7 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
     <div class="dialog-overlay" data-a11y-dialog-hide></div>
     <div class="dialog-box-container" role="document">
       <h1 id="inspector-dialog-title" class="dialog-title">
-        selected slot details
+        Selection Details
       </h1>
       <button type="button" data-a11y-dialog-hide>
         {{ icons.close() }}
@@ -303,6 +281,101 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
             <dd class="editor-inspector-detail-errors">0 errors</dd>
           </div>
         </dl>
+        <button
+          id="inspector-errors-toggle"
+          type="button"
+          class="admin-show-more-button"
+          aria-controls="inspector-error-list"
+          aria-expanded="false"
+          hidden
+        >
+          <span class="legend-toggle-label">Errors</span>
+        </button>
+        <ul id="inspector-error-list" class="inspector-error-list" hidden></ul>
+        <div
+          id="inspector-slot-editor"
+          class="inspector-slot-editor"
+          aria-live="polite"
+        ></div>
+        <section id="inspector-duration" class="inspector-duration" hidden>
+          <p class="inspector-duration-title">Duration</p>
+          <div
+            class="inspector-duration-actions"
+            role="group"
+            aria-label="duration presets"
+          >
+            <button
+              id="inspector-duration-plus-30"
+              type="button"
+              class="admin-show-more-button"
+              data-duration-minutes="30"
+            >
+              +30 min
+            </button>
+            <button
+              id="inspector-duration-plus-60"
+              type="button"
+              class="admin-show-more-button"
+              data-duration-minutes="60"
+            >
+              +60 min
+            </button>
+            <button
+              id="inspector-duration-plus-90"
+              type="button"
+              class="admin-show-more-button"
+              data-duration-minutes="90"
+            >
+              +90 min
+            </button>
+            <button
+              id="inspector-duration-plus-120"
+              type="button"
+              class="admin-show-more-button"
+              data-duration-minutes="120"
+            >
+              +120 min
+            </button>
+          </div>
+          <input-set label-above shrink>
+            <label for="inspector-end-slot">End time</label>
+            <input-widget>
+              <select id="inspector-end-slot" aria-label="end time"></select>
+            </input-widget>
+          </input-set>
+          <dl class="inspector-affected-preview">
+            <div>
+              <dt>Start</dt>
+              <dd id="inspector-preview-start">not selected</dd>
+            </div>
+            <div>
+              <dt>End</dt>
+              <dd id="inspector-preview-end">not selected</dd>
+            </div>
+            <div>
+              <dt>Impacted slots</dt>
+              <dd id="inspector-preview-count">0 slots</dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+      <div class="dialog-form inspector-dialog-form">
+        <button
+          id="inspector-save"
+          type="button"
+          class="admin-show-more-button"
+          hidden
+        >
+          Save
+        </button>
+        <button
+          id="inspector-exit"
+          type="button"
+          class="admin-show-more-button"
+          data-a11y-dialog-hide
+        >
+          Exit
+        </button>
       </div>
     </div>
   </div>
@@ -330,4 +403,4 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
     </div>
   </div>
 </div>
-{% endif %} {% endblock %}
+{% endblock %}

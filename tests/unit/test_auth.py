@@ -9,7 +9,7 @@ from scheduler.auth.session import login_test_user, require_jwt
 
 
 def test_login_test_user_admin_profile(app_context):
-    if model.Group.query.get("admin") is None:
+    if model.get(model.Group, "admin") is None:
         model.db.session.add(
             model.Group(id="admin", label="admin", description="Admin", active=True)
         )
@@ -21,10 +21,10 @@ def test_login_test_user_admin_profile(app_context):
     assert user.username == "test-admin"
     assert user.active is True
 
-    db_user = model.User.query.get("test-admin")
+    db_user = model.get(model.User, "test-admin")
     assert db_user is not None
     assert db_user.active is True
-    assert model.GroupMember.query.get(("admin", "test-admin")) is not None
+    assert model.get(model.GroupMember, ("admin", "test-admin")) is not None
 
 
 def test_login_test_user_member_profile(app_context):
@@ -33,7 +33,7 @@ def test_login_test_user_member_profile(app_context):
     assert user is not None
     assert user.username == "test-member"
     assert user.active is True
-    assert model.GroupMember.query.get(("admin", "test-member")) is None
+    assert model.get(model.GroupMember, ("admin", "test-member")) is None
 
 
 def test_login_test_user_dev_profile_has_dev_membership(app_context):
@@ -43,11 +43,11 @@ def test_login_test_user_dev_profile_has_dev_membership(app_context):
     assert user.username == "test-dev"
     assert user.active is True
 
-    membership = model.GroupMember.query.get(("DEV", "test-dev"))
+    membership = model.get(model.GroupMember, ("DEV", "test-dev"))
     assert membership is not None
     assert membership.approved is not None
-    assert model.Technologist.query.get("test-dev") is None
-    assert model.UserDevice.query.get(("test-dev", "TEST")) is None
+    assert model.get(model.Technologist, "test-dev") is None
+    assert model.get(model.UserDevice, ("test-dev", "TEST")) is None
 
 
 def test_login_test_user_tech_profile_has_tech_privileges(app_context):
@@ -57,12 +57,12 @@ def test_login_test_user_tech_profile_has_tech_privileges(app_context):
     assert user.username == "test-tech"
     assert user.active is True
 
-    membership = model.GroupMember.query.get(("DEV", "test-tech"))
+    membership = model.get(model.GroupMember, ("DEV", "test-tech"))
     assert membership is not None
     assert membership.approved is not None
-    assert model.Technologist.query.get("test-tech") is not None
+    assert model.get(model.Technologist, "test-tech") is not None
 
-    perms = model.UserDevice.query.get(("test-tech", "TEST"))
+    perms = model.get(model.UserDevice, ("test-tech", "TEST"))
     assert perms is not None
     assert perms.tech is True
     assert perms.templates is False
@@ -188,7 +188,7 @@ def test_upsert_user_reuses_existing_record_for_same_email(app_context):
 
 
 def test_upsert_user_proactively_migrates_to_requested_id(app_context):
-    if model.Group.query.get("DEV") is None:
+    if model.get(model.Group, "DEV") is None:
         model.db.session.add(
             model.Group(id="DEV", label="DEV", description="DEV", active=True)
         )
@@ -215,8 +215,8 @@ def test_upsert_user_proactively_migrates_to_requested_id(app_context):
     model.db.session.flush()
 
     assert migrated.id == target_id
-    assert model.GroupMember.query.get(("DEV", target_id)) is not None
-    assert model.GroupMember.query.get(("DEV", legacy_id)) is None
+    assert model.get(model.GroupMember, ("DEV", target_id)) is not None
+    assert model.get(model.GroupMember, ("DEV", legacy_id)) is None
 
     canonical = model.User.query.filter_by(addr=email).one_or_none()
     assert canonical is not None

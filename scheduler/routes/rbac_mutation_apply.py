@@ -260,7 +260,7 @@ def _rbac_apply_batch_operation(
             str(validated.get("email_status", logic.EMAIL_STATUS_NONE))
         )
         set_email_status = bool(validated.get("set_email_status"))
-        existing = model.Technologist.query.get(user.id)
+        existing = model.get(model.Technologist, user.id)
         before_applied = existing is not None
         before_approved = (
             bool(existing.approved_on is not None) if existing is not None else False
@@ -671,7 +671,7 @@ def _rbac_apply_batch_operation(
         group = validated["group"]
         device = validated["device"]
         linked = bool(validated["linked"])
-        existing = model.DeviceGroup.query.get((device.id, group.id))
+        existing = model.get(model.DeviceGroup, (device.id, group.id))
         before_linked = existing is not None
         if bool(validated.get("has_expected_linked")):
             expected_linked = bool(validated.get("expected_linked"))
@@ -716,7 +716,7 @@ def _rbac_apply_batch_operation(
         medical = bool(validated["medical"])
         training = bool(validated["training"])
         has_any_permission = bool(validated["has_any_permission"])
-        existing = model.UserDevice.query.get((user.id, device.id))
+        existing = model.get(model.UserDevice, (user.id, device.id))
         before = (
             (
                 bool(existing.templates),
@@ -811,7 +811,7 @@ def _rbac_apply_batch_operation(
             str(validated.get("email_status", logic.EMAIL_STATUS_NONE))
         )
         set_email_status = bool(validated.get("set_email_status"))
-        existing = model.GroupMember.query.get((group.id, user.id))
+        existing = model.get(model.GroupMember, (group.id, user.id))
         was_member = existing is not None
         was_approved = (
             bool(existing.approved is not None) if existing is not None else False
@@ -912,6 +912,15 @@ def _rbac_apply_batch_operation(
                 ),
                 source_ip=source_ip,
             )
+        pending_before = bool(before[0] and not before[1])
+        approved_after = bool(after[0] and after[1])
+        denied_after = bool(not after[0])
+        if pending_before and (approved_after or denied_after):
+            logic.notify_user_of_join_request_outcome(
+                approved_after,
+                user,
+                group.label or group.id,
+            )
         if resend_attempted:
             if resend_result == logic.EMAIL_STATUS_SENT:
                 return (
@@ -992,8 +1001,6 @@ def _rbac_authorize_batch_operation(
                 raise PermissionError("group institute edits require admin access")
             if bool(validated.get("active")) != bool(group.active):
                 raise PermissionError("group active-state edits require admin access")
-        if kind == "group.membership.set" and bool(validated.get("approved")):
-            raise PermissionError("membership approval requires admin access")
         return
 
     if kind in {"device.meta.set", "device.group.set", "user.device.set"}:

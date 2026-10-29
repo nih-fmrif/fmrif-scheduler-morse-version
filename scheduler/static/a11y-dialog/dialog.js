@@ -67,7 +67,7 @@ function s() {
     return (
       this.shown ||
         ((this._previouslyFocused = document.activeElement),
-        this.$el.removeAttribute("aria-hidden"),
+        this.$el.setAttribute("aria-hidden", "false"),
         (this.shown = !0),
         n(this.$el),
         document.body.addEventListener("focus", this._maintainFocus, !0),

@@ -149,7 +149,7 @@ def test_rbac_explorer_api_filters_inactive_entities_by_default(route_client):
     )
 
     inactive_device_id, _ = create_device()
-    device_row = model.Device.query.get(inactive_device_id)
+    device_row = model.get(model.Device, inactive_device_id)
     assert device_row is not None
     device_row.active = False
 
@@ -157,7 +157,7 @@ def test_rbac_explorer_api_filters_inactive_entities_by_default(route_client):
     ensure_active_user(
         inactive_user_id, f"{inactive_user_id}@example.com", inactive_user_id
     )
-    user_row = model.User.query.get(inactive_user_id)
+    user_row = model.get(model.User, inactive_user_id)
     assert user_row is not None
     user_row.active = False
     model.db.session.commit()
@@ -294,7 +294,7 @@ def test_rbac_mutate_batch_removes_device_group_link_for_admin(
         },
     )
     assert missing_csrf.status_code == 400
-    assert model.DeviceGroup.query.get((device_id, group_id)) is not None
+    assert model.get(model.DeviceGroup, (device_id, group_id)) is not None
 
     get_response = route_client.get("/rbac")
     csrf_token = extract_csrf_token(get_response.get_data(as_text=True))
@@ -325,7 +325,7 @@ def test_rbac_mutate_batch_removes_device_group_link_for_admin(
     assert payload is not None
     assert payload["ok"] is True
     assert payload["applied"] == 1
-    assert model.DeviceGroup.query.get((device_id, group_id)) is None
+    assert model.get(model.DeviceGroup, (device_id, group_id)) is None
     assert len(events) == 1
     action, actor, where, how, what, source_ip = events[0]
     assert action == "device.group.remove"

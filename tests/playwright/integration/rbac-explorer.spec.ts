@@ -10,20 +10,39 @@ test.describe('RBAC Explorer', () => {
     test.use({ authProfile: 'admin' });
 
     test('requests audit once during initial entities+detail bootstrap', async ({ page }) => {
+      const entitiesResponse = await page.request.get(
+        '/json/v1/rbac/explorer?scope=group&entities=1&detail=0'
+      );
+      expect(entitiesResponse.ok()).toBeTruthy();
+      const entitiesPayload = await entitiesResponse.json();
+      const firstEntity = entitiesPayload?.entities?.[0]?.id;
+      if (!firstEntity || typeof firstEntity !== 'string') {
+        test.skip(!firstEntity, 'RBAC group entities not available in current seed data');
+      }
+
       let auditRequestCount = 0;
       await page.route('**/json/v1/rbac/audit**', async (route) => {
         auditRequestCount += 1;
         await route.continue();
       });
 
-      await page.goto('/rbac?scope=group');
+      await page.goto(`/rbac?scope=group&entity=${encodeURIComponent(firstEntity)}`);
       await waitForAppShell(page);
       await expect(page.locator('#rbac-focus')).toContainText(/\S+/);
       await page.waitForLoadState('networkidle');
 
+      await expect(page.locator('#rbac-audit-filters')).toHaveCount(1);
+      await page.locator('#rbac-audit-filters').evaluate((form) => {
+        form.requestSubmit?.();
+      });
       await expect.poll(() => auditRequestCount).toBe(1);
-      await expect(page.locator('#rbac-audit-list')).toBeVisible();
-      await expect(page.locator('#rbac-audit-note')).toContainText(/RBAC|events|Showing/i);
+      await expect(page.locator('#rbac-audit-body')).toHaveCount(1);
+      await expect
+        .poll(async () =>
+          (await page.locator('#rbac-audit-empty').isVisible()) ||
+          (await page.locator('#rbac-audit-table-wrap').isVisible())
+        )
+        .toBeTruthy();
     });
 
     test('keeps inline entity picker and matrix editor usable after detail-only payloads', async ({ page }) => {
@@ -90,8 +109,13 @@ test.describe('RBAC Explorer', () => {
       await expect(page.locator('#rbac-focus')).toContainText(/\S+/);
       const matrixCount = await page.locator('#rbac-matrices .rbac-matrix').count();
       expect(matrixCount).toBeGreaterThanOrEqual(2);
-      await expect(page.locator('#rbac-audit-list')).toHaveCount(1);
-      await expect(page.locator('#rbac-audit-note')).toContainText(/RBAC|events|Showing/i);
+      await expect(page.locator('#rbac-audit-body')).toHaveCount(1);
+      await expect
+        .poll(async () =>
+          (await page.locator('#rbac-audit-empty').isVisible()) ||
+          (await page.locator('#rbac-audit-table-wrap').isVisible())
+        )
+        .toBeTruthy();
     });
 
     test('filters matrices by the scoped column with explicit placeholder text', async ({ page }) => {

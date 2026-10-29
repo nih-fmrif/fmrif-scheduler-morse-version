@@ -9,7 +9,18 @@ body %} {% if templates %}
         href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}"
         >{{ t.label }} ({{ t.id }})</a
       >
-      {% if t.description %}
+      {% if t.compatibility.blocking %}
+      <p><strong>repair required</strong></p>
+      <ul>
+        {% for summary in t.compatibility.summary %}
+        <li>{{ summary }}</li>
+        {% endfor %}
+      </ul>
+      {% elif not t.compatibility.can_apply %}
+      <p><strong>not applyable</strong></p>
+      {% else %}
+      <p><strong>ready</strong></p>
+      {% endif %} {% if t.description %}
       <p>{{ t.description }}</p>
       {% endif %}
     </li>

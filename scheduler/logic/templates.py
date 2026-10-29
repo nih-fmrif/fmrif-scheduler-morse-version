@@ -1,7 +1,8 @@
 """Template lifecycle helpers."""
 
 import datetime
-from collections import defaultdict
+from collections import Counter, defaultdict
+from types import SimpleNamespace
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, cast
 
 from flask_wtf import FlaskForm
@@ -14,24 +15,30 @@ from scheduler import model
 from .rbac_audit_support import constraint_of
 from .schedule_editor import (
     Datalist,
+    all_groups_of_device,
     all_member_datalists_by_group,
     support_request_datalists,
 )
+
+TEMPLATE_CELL_COUNT = 7 * 24
+LEGACY_NONE_GROUP = "(none)"
+LEGACY_OLD_USER_SUFFIX = "[OLD]"
+TEMPLATE_DAY_LABELS = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
 
 def get_template(
     for_device: model.Device, template_id: str
 ) -> Optional[model.Template]:
-    return model.Template.query.get((template_id, for_device.id))
+    return model.get(model.Template, (template_id, for_device.id))
 
 
 def get_template_from_templateid(templateid: str) -> Optional[model.Template]:
     if templateid == "":
         return None
-    entry = model.TemplateEntry.query.get(templateid)
+    entry = model.get(model.TemplateEntry, templateid)
     if entry is None:
         return None
-    return model.Template.query.get((entry.template, entry.device))
+    return model.get(model.Template, (entry.template, entry.device))
 
 
 def templates_of_device(
@@ -144,20 +151,27 @@ def create_template(
         return (False, "")
 
     if form.clone_from.data:
-        model.db.session.execute(
+        model.execute(
             """
             insert into tbltemplate(scannercode, templatecode, dow, hour, deptcode, researchercode, instcode)
-                select :scannercode, :templatecode, dow, hour, deptcode, researchercode, instcode
+                select :scannercode,
+                       :templatecode,
+                       dow,
+                       hour,
+                       nullif(deptcode, :legacy_none_group),
+                       researchercode,
+                       instcode
                     from tbltemplate where (scannercode, templatecode) = (:scannercode, :orig_templatecode)
             """,
             {
                 "scannercode": tmpl.device,
                 "templatecode": tmpl.id,
                 "orig_templatecode": form.clone_from.data,
+                "legacy_none_group": LEGACY_NONE_GROUP,
             },
         )
     else:
-        model.db.session.execute(
+        model.execute(
             """
             insert into tbltemplate(scannercode, templatecode, dow, hour)
                 select :scannercode, :templatecode, dow, hour
@@ -192,6 +206,30 @@ def get_template_entries(
     return query.all()
 
 
+def normalize_template_group(value: Optional[str]) -> Optional[str]:
+    if value in (None, "", LEGACY_NONE_GROUP):
+        return None
+    return value
+
+
+def display_template_entries(
+    entries: List[model.TemplateEntry],
+) -> List[SimpleNamespace]:
+    display_entries: List[SimpleNamespace] = []
+    for entry in entries:
+        display_entries.append(
+            SimpleNamespace(
+                id=entry.id,
+                hour=entry.hour,
+                dow=entry.dow,
+                group=normalize_template_group(entry.group),
+                user=entry.user or None,
+                inst=entry.inst or None,
+            )
+        )
+    return display_entries
+
+
 def get_start_day_of(device: model.Device) -> Optional[datetime.date]:
     entry_model = model.ScheduleEntry
     day = (
@@ -209,6 +247,10 @@ def next_sunday() -> datetime.date:
     weekday = day.isoweekday()
     day += datetime.timedelta(days=-weekday, weeks=1)
     return day
+
+
+def next_sunday_on_or_after(day: datetime.date) -> datetime.date:
+    return day + datetime.timedelta(days=(7 - day.isoweekday()) % 7)
 
 
 class TemplateApplyForm(FlaskForm):
@@ -238,6 +280,256 @@ def uniq(xs: str) -> List[str]:
     return acc
 
 
+def _template_validation_context(
+    device: model.Device,
+) -> Tuple[Set[Optional[str]], Dict[Optional[str], Set[Optional[str]]]]:
+    inst_model = model.Inst
+    inst_query = inst_model.query.filter(inst_model.active)
+    inst: Set[Optional[str]] = set(inst_entry.id for inst_entry in inst_query.all())
+    inst.add(None)
+
+    groups: Dict[Optional[str], Set[Optional[str]]] = {None: {None}}
+    for group_id, _label in all_groups_of_device(device):
+        groups[group_id] = {None}
+    member_datalists = all_member_datalists_by_group(device)
+    support_datalists = support_request_datalists(device)
+    for deptcode, members in member_datalists.items():
+        group_members = groups.setdefault(deptcode, {None})
+        group_members.update(member_id for (member_id, _) in members)
+    groups["training"] = set(member_id for (member_id, _) in support_datalists.training)
+    groups["training"].add(None)
+    return inst, groups
+
+
+def _template_cell_label(cell: model.TemplateEntry) -> str:
+    day = TEMPLATE_DAY_LABELS[cell.dow]
+    return f"{day} {cell.hour:02d}:00"
+
+
+def inspect_template_compatibility(
+    device: model.Device,
+    template_ids: List[str],
+    entries: Optional[List[model.TemplateEntry]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    ordered_templates: List[str] = []
+    seen: Set[str] = set()
+    for template_id in template_ids:
+        if template_id not in seen:
+            ordered_templates.append(template_id)
+            seen.add(template_id)
+
+    if not ordered_templates:
+        return {}
+
+    template_model = model.Template
+    id_col = cast(Any, template_model.id)
+    template_query = template_model.query.filter(
+        template_model.device == device.id
+    ).filter(id_col.in_(ordered_templates))
+    template_by_id = {template.id: template for template in template_query.all()}
+
+    entry_map: DefaultDict[str, List[model.TemplateEntry]] = defaultdict(list)
+    if entries is None:
+        entry_model = model.TemplateEntry
+        template_col = cast(Any, entry_model.template)
+        entry_query = entry_model.query.filter(entry_model.device == device.id).filter(
+            template_col.in_(ordered_templates)
+        )
+        selected_entries = entry_query.order_by(
+            entry_model.template, entry_model.dow, entry_model.hour
+        ).all()
+    else:
+        selected_entries = [entry for entry in entries if entry.template in seen]
+
+    for cell in selected_entries:
+        entry_map[cell.template].append(cell)
+
+    inst, groups = _template_validation_context(device)
+    reports: Dict[str, Dict[str, Any]] = {}
+
+    for template_id in ordered_templates:
+        template = template_by_id.get(template_id)
+        issue_values: DefaultDict[str, Set[str]] = defaultdict(set)
+        report: Dict[str, Any] = {
+            "id": template_id,
+            "template": template,
+            "issues": [],
+            "summary": [],
+            "entry_errors": defaultdict(list),
+            "blocking": False,
+            "can_apply": False,
+            "can_save": False,
+        }
+
+        def add_issue(
+            code: str,
+            message: str,
+            *,
+            entry: Optional[model.TemplateEntry] = None,
+            field: Optional[str] = None,
+            value: Optional[str] = None,
+            blocking: bool = True,
+        ) -> None:
+            report["issues"].append(
+                {
+                    "code": code,
+                    "message": message,
+                    "blocking": blocking,
+                    "entry_id": entry.id if entry is not None else None,
+                    "hour": entry.hour if entry is not None else None,
+                    "dow": entry.dow if entry is not None else None,
+                }
+            )
+            if blocking:
+                report["blocking"] = True
+            if value not in (None, ""):
+                issue_values[code].add(str(value))
+            if entry is not None and field is not None and value:
+                report["entry_errors"][entry.id].append(
+                    {"type": "removed", "key": field, "value": value}
+                )
+
+        if template is None:
+            add_issue(
+                "missing-template",
+                f"{template_id} does not exist on {device.label}.",
+            )
+            report["summary"].append(f"{template_id} does not exist on {device.label}.")
+            report["entry_errors"] = {}
+            reports[template_id] = report
+            continue
+
+        if template.hidden:
+            add_issue(
+                "archived-template",
+                f"{template_id} is archived and cannot be applied.",
+                blocking=False,
+            )
+
+        cells = entry_map.get(template_id, [])
+        if len(cells) != TEMPLATE_CELL_COUNT:
+            add_issue(
+                "malformed-template",
+                f"{template_id} is malformed: {len(cells)} cells instead of {TEMPLATE_CELL_COUNT}.",
+            )
+
+        for cell in cells:
+            group = normalize_template_group(cell.group)
+            user = cell.user or None
+            inst_id = cell.inst or None
+            when = _template_cell_label(cell)
+            stale_member = bool(user and user.endswith(LEGACY_OLD_USER_SUFFIX))
+
+            if inst_id not in inst:
+                add_issue(
+                    "invalid-institute",
+                    f"{template_id} has invalid institute {inst_id!r} at {when}.",
+                    entry=cell,
+                    field="institute",
+                    value=str(inst_id),
+                )
+
+            if stale_member:
+                add_issue(
+                    "legacy-member",
+                    f"{template_id} has stale member {user!r} at {when}.",
+                    entry=cell,
+                    field="member",
+                    value=user,
+                )
+
+            if group not in groups:
+                if cell.group not in (None, ""):
+                    add_issue(
+                        "invalid-group",
+                        f"{template_id} has invalid group {cell.group!r} at {when}.",
+                        entry=cell,
+                        field="group",
+                        value=str(cell.group),
+                    )
+                continue
+
+            if stale_member:
+                continue
+
+            if user not in groups[group]:
+                add_issue(
+                    "invalid-member",
+                    f"{template_id} has invalid member {user!r} at {when}.",
+                    entry=cell,
+                    field="member",
+                    value=user,
+                )
+
+        issue_counts = Counter(
+            issue["code"] for issue in report["issues"] if issue["blocking"]
+        )
+        if issue_counts["malformed-template"]:
+            report["summary"].append(
+                f"{template_id} is malformed and must be rebuilt as a full {TEMPLATE_CELL_COUNT}-cell template."
+            )
+        if issue_counts["legacy-member"]:
+            count = issue_counts["legacy-member"]
+            noun = "assignment" if count == 1 else "assignments"
+            report["summary"].append(
+                f"{template_id} has {count} stale member {noun} that must be repaired before save or apply."
+            )
+            members = sorted(issue_values["legacy-member"])
+            if members:
+                report["summary"].append(
+                    f"stale members in {template_id}: {', '.join(members)}."
+                )
+        if issue_counts["invalid-group"]:
+            count = issue_counts["invalid-group"]
+            noun = "group" if count == 1 else "groups"
+            report["summary"].append(
+                f"{template_id} has {count} invalid {noun} that must be repaired before save or apply."
+            )
+            groups_list = sorted(issue_values["invalid-group"])
+            if groups_list:
+                report["summary"].append(
+                    f"unavailable groups in {template_id}: {', '.join(groups_list)}."
+                )
+        if issue_counts["invalid-member"]:
+            count = issue_counts["invalid-member"]
+            noun = "member" if count == 1 else "members"
+            report["summary"].append(
+                f"{template_id} has {count} invalid {noun} that must be repaired before save or apply."
+            )
+            members = sorted(issue_values["invalid-member"])
+            if members:
+                report["summary"].append(
+                    f"unavailable members in {template_id}: {', '.join(members)}."
+                )
+        if issue_counts["invalid-institute"]:
+            count = issue_counts["invalid-institute"]
+            noun = "institute" if count == 1 else "institutes"
+            report["summary"].append(
+                f"{template_id} has {count} invalid {noun} that must be repaired before save or apply."
+            )
+            institutes = sorted(issue_values["invalid-institute"])
+            if institutes:
+                report["summary"].append(
+                    f"unavailable institutes in {template_id}: {', '.join(institutes)}."
+                )
+        if not report["summary"] and template.hidden:
+            report["summary"].append(
+                f"{template_id} is archived and cannot be applied."
+            )
+
+        report["entry_errors"] = {
+            entry_id: issues
+            for entry_id, issues in sorted(
+                report["entry_errors"].items(), key=lambda pair: pair[0]
+            )
+        }
+        report["can_save"] = not report["blocking"]
+        report["can_apply"] = not template.hidden and not report["blocking"]
+        reports[template_id] = report
+
+    return reports
+
+
 def validate_templates_before_application(device: model.Device, templates: str):
     ordered_templates = uniq(templates)
     errs = []
@@ -246,65 +538,23 @@ def validate_templates_before_application(device: model.Device, templates: str):
         errs.append("no templates to apply")
         return errs
 
-    template_model = model.Template
-    id_col = cast(Any, template_model.id)
-    query = (
-        template_model.query.filter(template_model.device == device.id)
-        .filter(id_col.in_(ordered_templates))
-        .filter(template_model.hidden.is_(False))
-    )
-    template_count = query.count()
-    if template_count != len(ordered_templates):
-        errs.append("invalid template codes provided")
-        if template_count == 0:
-            return errs
-
-    has_invalid: Set[str] = set()
-    cell_count: DefaultDict[str, int] = defaultdict(int)
-
-    inst_model = model.Inst
-    query = inst_model.query.filter(inst_model.active)
-    inst: Set[Optional[str]] = set(inst_entry.id for inst_entry in query.all())
-    inst.add(None)
-
-    groups: Dict[Optional[str], Set[Optional[str]]] = {None: {None}}
-    member_datalists = all_member_datalists_by_group(device)
-    support_datalists = support_request_datalists(device)
-    for deptcode, members in member_datalists.items():
-        group_members: Set[Optional[str]] = set(member_id for (member_id, _) in members)
-        group_members.add(None)
-        groups[deptcode] = group_members
-    groups["training"] = set(member_id for (member_id, _) in support_datalists.training)
-    groups["training"].add(None)
-
-    entry_model = model.TemplateEntry
-    template_col = cast(Any, entry_model.template)
-    query = entry_model.query.filter(entry_model.device == device.id).filter(
-        template_col.in_(ordered_templates)
-    )
-
-    for cell in query.all():
-        template_id = cell.template
-        cell_count[template_id] += 1
-        if cell.inst not in inst:
-            has_invalid.add(template_id)
-        elif not (cell.group in groups and cell.user in groups[cell.group]):
-            has_invalid.add(template_id)
-
-    for key, value in sorted(cell_count.items(), key=lambda pair: pair[0]):
-        if value != 7 * 24:
-            errs.append(f"{key} malformed: has {value} entries instead of {7 * 24}")
-
-    for template_id in sorted(has_invalid):
-        errs.append(f"{template_id} has invalid entries")
-
+    reports = inspect_template_compatibility(device, ordered_templates)
+    for template_id in ordered_templates:
+        report = reports.get(template_id)
+        if report is None:
+            errs.append("invalid template codes provided")
+            continue
+        if any(issue["code"] == "missing-template" for issue in report["issues"]):
+            errs.append("invalid template codes provided")
+            continue
+        errs.extend(report["summary"])
     return errs
 
 
 def process_template_apply(
     form: TemplateApplyForm, device: model.Device, start: datetime.date, chg_by: str
 ):
-    model.db.session.execute(
+    model.execute(
         """
         insert into tblsched(
             scannercode,
@@ -324,8 +574,8 @@ def process_template_apply(
             :start_date + dow::integer + dow_offset as scheddate,
             dow scheddow,
             hour schedhour,
-            deptcode,
-            deptcode orig_deptcode,
+            nullif(deptcode, :legacy_none_group),
+            nullif(deptcode, :legacy_none_group) orig_deptcode,
             researchercode,
             :chg_by as chg_by,
             instcode orig_instcode
@@ -343,6 +593,7 @@ def process_template_apply(
             "device": device.id,
             "start_date": start,
             "chg_by": chg_by,
+            "legacy_none_group": LEGACY_NONE_GROUP,
         },
     )
     model.db.session.commit()
@@ -356,9 +607,13 @@ __all__ = [
     "templates_of_device",
     "all_templates_of_device",
     "create_template",
+    "display_template_entries",
     "get_template_entries",
     "get_start_day_of",
+    "inspect_template_compatibility",
     "next_sunday",
+    "next_sunday_on_or_after",
+    "normalize_template_group",
     "uniq",
     "validate_templates_before_application",
     "process_template_apply",

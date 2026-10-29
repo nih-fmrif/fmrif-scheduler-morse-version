@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import csv
 import datetime
+import io
 from time import perf_counter
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from flask import (
+    Response,
     abort,
     current_app,
+    flash,
     g,
     has_request_context,
     jsonify,
@@ -225,6 +229,26 @@ def _app_issues_redirect(raw_query: str):
     if query != "":
         target = f"{target}?{query}"
     return redirect(target)
+
+
+def _admin_mapping_kinds() -> List[Dict[str, str]]:
+    return [
+        {
+            "id": "user-dept",
+            "label": "user-dept.csv",
+            "description": "user to department membership and PI assignment",
+        },
+        {
+            "id": "dev-dept",
+            "label": "dev-dept.csv",
+            "description": "device to department mapping",
+        },
+        {
+            "id": "devperm",
+            "label": "devperm.csv",
+            "description": "device permissions per user (templates,slot,technologist,medical,training)",
+        },
+    ]
 
 
 def _record_rbac_action(
@@ -486,6 +510,35 @@ def rbac():
     create = request.args.get("create", "").strip().lower()
     if not bool(actor.get("is_admin")) or create not in {"group", "device"}:
         create = ""
+    audit_scope = request.args.get("audit_scope", "all").strip().lower()
+    if audit_scope not in _RBAC_AUDIT_SCOPE_LABELS:
+        audit_scope = "all"
+    audit_entity = request.args.get("audit_entity", "").strip()
+    audit_search = request.args.get("audit_search", "").strip()
+    audit_search_field = _rbac_audit_search_field(
+        request.args.get("audit_search_field", "all"),
+        default="all",
+    )
+    audit_limit = _rbac_audit_limit_from_raw(
+        request.args.get("audit_limit", str(RBAC_AUDIT_DEFAULT_LIMIT)),
+        default=RBAC_AUDIT_DEFAULT_LIMIT,
+        max_limit=RBAC_AUDIT_MAX_LIMIT,
+        strict=False,
+    )
+    audit_events = []
+    if logic.rbac_audit_table_available():
+        try:
+            rows = _rbac_audit_rows(
+                audit_scope,
+                audit_entity,
+                limit=audit_limit,
+                search=audit_search,
+                search_field=audit_search_field,
+            )
+            audit_events = [_rbac_audit_payload(row) for row in rows]
+        except SQLAlchemyError:
+            model.db.session.rollback()
+            current_app.logger.exception("Failed to query RBAC audit page")
     institutes = logic.get_institutes_datalist()
 
     return {
@@ -500,29 +553,36 @@ def rbac():
         "can_create_group": bool(actor.get("is_admin")),
         "can_create_device": bool(actor.get("is_admin")),
         "can_view_audit": bool(actor.get("is_admin")),
+        "audit_scope": audit_scope,
+        "audit_entity": audit_entity,
+        "audit_search": audit_search,
+        "audit_search_field": audit_search_field,
+        "audit_limit": audit_limit,
+        "audit_events": audit_events,
+        "audit_scopes": [
+            {
+                "id": scope_id,
+                "label": scope_label,
+                "selected": audit_scope == scope_id,
+            }
+            for scope_id, scope_label in _RBAC_AUDIT_SCOPE_LABELS.items()
+        ],
+        "rbac_audit_search_field_options": [
+            {
+                "id": option_id,
+                "label": option_label,
+                "selected": audit_search_field == option_id,
+            }
+            for option_id, option_label in _RBAC_AUDIT_SEARCH_FIELD_LABELS.items()
+        ],
+        "audit_show_more_increment": RBAC_AUDIT_SHOW_MORE_INCREMENT,
+        "audit_max_limit": RBAC_AUDIT_MAX_LIMIT,
         "csrf_form": logic.CsrfOnlyForm(),
         **breadcrumb("RBAC"),
     }
 
 
 def app_issues():
-    scope = request.args.get("scope", "all").strip().lower()
-    if scope not in _RBAC_AUDIT_SCOPE_LABELS:
-        scope = "all"
-    entity = request.args.get("entity", "").strip()
-    search = request.args.get("search", "").strip()
-    search_field = _rbac_audit_search_field(
-        request.args.get("search_field", "all"),
-        default="all",
-    )
-
-    limit = _rbac_audit_limit_from_raw(
-        request.args.get("limit", str(RBAC_AUDIT_DEFAULT_LIMIT)),
-        default=RBAC_AUDIT_DEFAULT_LIMIT,
-        max_limit=RBAC_AUDIT_MAX_LIMIT,
-        strict=False,
-    )
-
     email_scope = request.args.get("email_scope", "all").strip().lower()
     if email_scope not in _RBAC_AUDIT_SCOPE_LABELS:
         email_scope = "all"
@@ -580,21 +640,6 @@ def app_issues():
     ):
         notification_category = "all"
 
-    events: List[Dict[str, Any]] = []
-    if logic.rbac_audit_table_available():
-        try:
-            rows = _rbac_audit_rows(
-                scope,
-                entity,
-                limit=limit,
-                search=search,
-                search_field=search_field,
-            )
-            events = [_rbac_audit_payload(row) for row in rows]
-        except SQLAlchemyError:
-            model.db.session.rollback()
-            current_app.logger.exception("Failed to query RBAC audit page")
-
     email_events: List[Dict[str, Any]] = []
     if logic.email_audit_table_available():
         try:
@@ -632,12 +677,6 @@ def app_issues():
 
     return {
         "title": "Admin Panel",
-        "scope": scope,
-        "entity": entity,
-        "search": search,
-        "search_field": search_field,
-        "limit": limit,
-        "events": events,
         "email_scope": email_scope,
         "email_entity": email_entity,
         "email_limit": email_limit,
@@ -661,10 +700,6 @@ def app_issues():
         "notification_scan_form": logic.CsrfOnlyForm(),
         "notification_state_form": logic.CsrfOnlyForm(),
         "potential_issue_sections": potential_issue_sections,
-        "audit_scopes": [
-            {"id": scope_id, "label": scope_label, "selected": scope == scope_id}
-            for scope_id, scope_label in _RBAC_AUDIT_SCOPE_LABELS.items()
-        ],
         "notification_category_options": [
             {
                 "id": "all",
@@ -687,14 +722,6 @@ def app_issues():
                 "selected": notification_search_field == option_id,
             }
             for option_id, option_label in NOTIFICATION_INCIDENT_SEARCH_FIELD_LABELS.items()
-        ],
-        "audit_search_field_options": [
-            {
-                "id": option_id,
-                "label": option_label,
-                "selected": search_field == option_id,
-            }
-            for option_id, option_label in _RBAC_AUDIT_SEARCH_FIELD_LABELS.items()
         ],
         "email_audit_scopes": [
             {
@@ -728,8 +755,119 @@ def app_issues():
             }
             for option_id, option_label in _EMAIL_AUDIT_SEARCH_FIELD_LABELS.items()
         ],
+        "admin_config_form": logic.CsrfOnlyForm(),
+        "admin_mapping_form": logic.CsrfOnlyForm(),
+        "admin_listserv": logic.get_admin_listserv(),
+        "admin_default_sender": logic.get_admin_default_sender(),
+        "admin_mailing_lists": logic.format_admin_mailing_lists_for_form(),
+        "admin_settings_available": logic.admin_settings_available(),
+        "admin_mapping_kinds": _admin_mapping_kinds(),
         **breadcrumb(("RBAC", url_for("rbac")), "Admin Panel"),
     }
+
+
+def app_issues_config():
+    form = logic.CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400, "invalid form submission")
+
+    if not logic.admin_settings_available():
+        flash(
+            "Admin configuration storage is unavailable. Run database migrations.",
+            "error",
+        )
+        return _app_issues_redirect(request.form.get("return_query", ""))
+
+    listserv = (request.form.get("admin_listserv", "") or "").strip()
+    default_sender = (request.form.get("admin_default_sender", "") or "").strip()
+    mailing_lists_raw = request.form.get("admin_mailing_lists", "")
+
+    try:
+        mailing_lists = logic.parse_admin_mailing_lists(mailing_lists_raw)
+    except ValueError as ex:
+        flash(str(ex), "error")
+        return _app_issues_redirect(request.form.get("return_query", ""))
+
+    if listserv == "":
+        flash("listserv is required", "error")
+        return _app_issues_redirect(request.form.get("return_query", ""))
+    if default_sender != "" and "@" not in default_sender:
+        flash("default sender must be an email address", "error")
+        return _app_issues_redirect(request.form.get("return_query", ""))
+
+    actor_id = g.user.id if g.user is not None else "unknown"
+    try:
+        logic.set_admin_listserv(listserv, updated_by=actor_id)
+        logic.set_admin_default_sender(default_sender, updated_by=actor_id)
+        logic.set_admin_mailing_lists(mailing_lists, updated_by=actor_id)
+        model.db.session.commit()
+        flash("admin configuration updated", "message")
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception("Failed to persist admin config update")
+        flash("failed to save admin configuration", "error")
+    return _app_issues_redirect(request.form.get("return_query", ""))
+
+
+def app_issues_import_mapping():
+    form = logic.CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400, "invalid form submission")
+
+    mapping_kind = (request.form.get("mapping_kind", "") or "").strip()
+    if mapping_kind not in {"user-dept", "dev-dept", "devperm"}:
+        flash("invalid mapping kind", "error")
+        return _app_issues_redirect(request.form.get("return_query", ""))
+
+    file = request.files.get("mapping_file")
+    if file is None:
+        flash("CSV file is required", "error")
+        return _app_issues_redirect(request.form.get("return_query", ""))
+
+    try:
+        raw_rows = logic.parse_admin_mapping_file(mapping_kind, file)
+        rows = logic.validate_import_rows(mapping_kind, raw_rows)
+        applied_count = logic.apply_import_rows(mapping_kind, rows)
+        model.db.session.commit()
+    except ValueError as ex:
+        model.db.session.rollback()
+        flash(str(ex), "error")
+        return _app_issues_redirect(request.form.get("return_query", ""))
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception("Failed to persist admin mapping import")
+        flash("failed to import mapping data", "error")
+        return _app_issues_redirect(request.form.get("return_query", ""))
+
+    _record_rbac_action(
+        action="admin.mapping.import",
+        where="/app/issues",
+        how="admin-panel",
+        what=f"kind={mapping_kind}, rows={applied_count}",
+    )
+    flash(f"imported {applied_count} rows into {mapping_kind}", "message")
+    return _app_issues_redirect(request.form.get("return_query", ""))
+
+
+def app_issues_export_mapping(mapping_kind):
+    if mapping_kind not in {"user-dept", "dev-dept", "devperm"}:
+        abort(400, "invalid mapping kind")
+
+    try:
+        header, rows = logic.export_mapping_rows(mapping_kind)
+    except ValueError as ex:
+        abort(400, str(ex))
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(list(header))
+    writer.writerows(rows)
+    response = Response(output.getvalue(), mimetype="text/csv")
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="{mapping_kind}.csv"'
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def app_issues_scan():
@@ -882,4 +1020,21 @@ def register_rbac_blueprint(
     app.add_url_rule(
         "/app/issues",
         view_func=admin_only(render_to("rbac_audit")(app_issues)),
+    )
+
+    app.add_url_rule(
+        "/app/issues/config",
+        methods=["POST"],
+        view_func=admin_only(app_issues_config),
+    )
+
+    app.add_url_rule(
+        "/app/issues/mapping/import",
+        methods=["POST"],
+        view_func=admin_only(app_issues_import_mapping),
+    )
+
+    app.add_url_rule(
+        "/app/issues/mapping/export/<mapping_kind>",
+        view_func=admin_only(app_issues_export_mapping),
     )

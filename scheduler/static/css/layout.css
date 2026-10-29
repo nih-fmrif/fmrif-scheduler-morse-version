@@ -127,7 +127,7 @@ body {
 .body:is(.device, .device_tmpl_schedule_edit) {
   padding: 0 1rem;
   margin: 0 auto;
-  width: max-content;
+  width: 100%;
   max-width: 100%;
 }
 
@@ -230,7 +230,7 @@ input[list]::-webkit-list-button {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 3;
+  z-index: 5000;
 }
 
 .dialog-container[aria-hidden="true"] {

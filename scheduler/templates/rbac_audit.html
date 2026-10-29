@@ -4,7 +4,6 @@ body %}
   class="rbac-audit-page"
   data-audit-max-limit="{{ audit_max_limit }}"
   data-audit-show-more-increment="{{ audit_show_more_increment }}"
-  data-rbac-audit-default-limit="{{ limit }}"
   data-email-audit-default-limit="{{ email_limit }}"
 >
   <header class="rbac-audit-page-header">
@@ -45,11 +44,6 @@ body %}
       method="get"
       id="notification-issues-filters"
     >
-      <input type="hidden" name="scope" value="{{ scope }}" />
-      <input type="hidden" name="entity" value="{{ entity }}" />
-      <input type="hidden" name="search" value="{{ search }}" />
-      <input type="hidden" name="search_field" value="{{ search_field }}" />
-      <input type="hidden" name="limit" value="{{ limit }}" />
       <input type="hidden" name="email_scope" value="{{ email_scope }}" />
       <input type="hidden" name="email_entity" value="{{ email_entity }}" />
       <input type="hidden" name="email_limit" value="{{ email_limit }}" />
@@ -197,12 +191,6 @@ body %}
       {% for section in potential_issue_sections %}
       <details
         class="potential-issue-card{% if section.urgent %} urgent{% endif %}"
-        {%
-        if
-        section.urgent
-        %}open{%
-        endif
-        %}
       >
         <summary class="potential-issue-card-summary">
           <span class="potential-issue-card-category"
@@ -318,205 +306,6 @@ body %}
     {% endif %}
   </section>
 
-  <section class="rbac-audit-log-panel" aria-labelledby="rbac-audit-log-title">
-    <h2 id="rbac-audit-log-title">RBAC audit log</h2>
-    <p>Global RBAC change history across groups, devices, and users.</p>
-    <form
-      class="rbac-audit-filters"
-      action="{{ url_for('app_issues') }}"
-      method="get"
-      id="rbac-audit-filters"
-      data-audit-kind="rbac"
-      data-audit-endpoint="{{ url_for('rbac_explorer_audit') }}"
-    >
-      <div class="admin-filter-field">
-        <label for="rbac-audit-scope">scope</label>
-        <select id="rbac-audit-scope" name="scope">
-          {% for option in audit_scopes %}
-          <option
-            value="{{ option.id }}"
-            {%
-            if
-            option.selected
-            %}selected{%
-            endif
-            %}
-          >
-            {{ option.label }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <input type="hidden" name="entity" value="{{ entity }}" />
-
-      <div
-        class="admin-filter-field-pair admin-filter-last-row admin-filter-field-pair-narrow"
-      >
-        <div class="admin-filter-field">
-          <label for="rbac-audit-search">search</label>
-          <input
-            id="rbac-audit-search"
-            type="text"
-            name="search"
-            value="{{ search }}"
-            placeholder="action, actor, details, where, how, ip, entity ids"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </div>
-
-        <div class="admin-filter-field admin-filter-field-compact">
-          <label for="rbac-audit-search-field">in</label>
-          <select id="rbac-audit-search-field" name="search_field">
-            {% for option in audit_search_field_options %}
-            <option
-              value="{{ option.id }}"
-              {%
-              if
-              option.selected
-              %}selected{%
-              endif
-              %}
-            >
-              {{ option.label }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <input
-        id="rbac-audit-limit"
-        type="hidden"
-        name="limit"
-        value="{{ limit }}"
-      />
-
-      <input type="hidden" name="email_scope" value="{{ email_scope }}" />
-      <input type="hidden" name="email_entity" value="{{ email_entity }}" />
-      <input type="hidden" name="email_limit" value="{{ email_limit }}" />
-      <input type="hidden" name="email_status" value="{{ email_status }}" />
-      <input
-        type="hidden"
-        name="email_issue_state"
-        value="{{ email_issue_state }}"
-      />
-      <input type="hidden" name="email_search" value="{{ email_search }}" />
-      <input
-        type="hidden"
-        name="email_search_field"
-        value="{{ email_search_field }}"
-      />
-      <input type="hidden" name="notification_state_filter" value="1" />
-      <input
-        type="hidden"
-        name="notification_include_open"
-        value="{% if notification_include_open %}1{% endif %}"
-      />
-      <input
-        type="hidden"
-        name="notification_include_resolved"
-        value="{% if notification_include_resolved %}1{% endif %}"
-      />
-      <input
-        type="hidden"
-        name="notification_include_ignored"
-        value="{% if notification_include_ignored %}1{% endif %}"
-      />
-      <input
-        type="hidden"
-        name="notification_category"
-        value="{{ notification_category }}"
-      />
-      <input
-        type="hidden"
-        name="notification_search"
-        value="{{ notification_search }}"
-      />
-      <input
-        type="hidden"
-        name="notification_search_field"
-        value="{{ notification_search_field }}"
-      />
-    </form>
-
-    {% set has_rbac_events = events|length != 0 %}
-    <p
-      class="none"
-      id="rbac-audit-empty"
-      {%
-      if
-      has_rbac_events
-      %}hidden{%
-      endif
-      %}
-    >
-      No RBAC audit events found.
-    </p>
-    <div
-      class="rbac-audit-table-wrap"
-      id="rbac-audit-table-wrap"
-      {%
-      if
-      not
-      has_rbac_events
-      %}hidden{%
-      endif
-      %}
-    >
-      <table class="rbac-audit-table">
-        <thead>
-          <tr>
-            <th>when</th>
-            <th>action</th>
-            <th>actor</th>
-            <th>ip</th>
-            <th>where</th>
-            <th>how</th>
-            <th>what</th>
-          </tr>
-        </thead>
-        <tbody id="rbac-audit-body">
-          {% for event in events %}
-          <tr>
-            <td>{{ event.when or "-" }}</td>
-            <td>{{ event.action }}</td>
-            <td>{{ event.actor }}</td>
-            <td>{{ event.ip or "-" }}</td>
-            <td>{{ event.where }}</td>
-            <td>{{ event.how }}</td>
-            <td>{{ event.what }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% set rbac_show_more_hidden = not (events|length == limit and limit <
-    audit_max_limit) %}
-    <div
-      class="admin-show-more-wrap"
-      id="rbac-audit-show-more-wrap"
-      {%
-      if
-      rbac_show_more_hidden
-      %}hidden{%
-      endif
-      %}
-    >
-      <button
-        type="button"
-        class="admin-show-more-button"
-        data-form="rbac-audit-filters"
-        data-limit-input="rbac-audit-limit"
-        data-limit-step="{{ audit_show_more_increment }}"
-        data-limit-max="{{ audit_max_limit }}"
-      >
-        show more
-      </button>
-    </div>
-  </section>
-
   <section
     class="email-audit-log-panel"
     aria-labelledby="email-audit-log-title"
@@ -534,10 +323,6 @@ body %}
       data-audit-kind="email"
       data-audit-endpoint="{{ url_for('email_audit_feed') }}"
     >
-      <input type="hidden" name="scope" value="{{ scope }}" />
-      <input type="hidden" name="entity" value="{{ entity }}" />
-      <input type="hidden" name="search" value="{{ search }}" />
-      <input type="hidden" name="search_field" value="{{ search_field }}" />
       <input
         type="hidden"
         name="notification_category"
@@ -753,6 +538,116 @@ body %}
       >
         show more
       </button>
+    </div>
+  </section>
+
+  <section class="admin-config-panel" aria-labelledby="admin-config-title">
+    <h2 id="admin-config-title">Admin configuration</h2>
+    <p>Settings from <code>.env</code> that are safe to adjust at runtime.</p>
+
+    {% if admin_settings_available %}
+    <form
+      class="admin-config-form"
+      action="{{ url_for('app_issues_config') }}"
+      method="post"
+    >
+      {{ admin_config_form.csrf_token }}
+      <input
+        type="hidden"
+        name="return_query"
+        value="{{ request.query_string.decode('utf-8', errors='ignore') }}"
+      />
+      <div class="admin-config-grid">
+        <label class="admin-config-field" for="admin-listserv">
+          listserv
+          <input
+            id="admin-listserv"
+            name="admin_listserv"
+            type="text"
+            value="{{ admin_listserv }}"
+            placeholder="listserv email"
+            autocomplete="off"
+            required
+          />
+        </label>
+        <label class="admin-config-field" for="admin-default-sender">
+          default sender
+          <input
+            id="admin-default-sender"
+            name="admin_default_sender"
+            type="email"
+            value="{{ admin_default_sender }}"
+            placeholder="optional sender override"
+            autocomplete="off"
+          />
+        </label>
+      </div>
+      <label for="admin-mailing-lists" class="admin-config-field">
+        mailing lists (JSON)
+        <textarea
+          id="admin-mailing-lists"
+          name="admin_mailing_lists"
+          class="admin-config-textarea"
+          rows="8"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder='{"list 1": "Description of list 1"}'
+        >
+{{- admin_mailing_lists -}}
+</textarea
+        >
+      </label>
+      <button type="submit">save admin configuration</button>
+    </form>
+    {% else %}
+    <p class="admin-config-disabled">
+      Admin settings table is unavailable. Run database migrations to edit these
+      values.
+    </p>
+    {% endif %}
+  </section>
+
+  <section class="admin-config-panel" aria-labelledby="admin-mapping-title">
+    <h2 id="admin-mapping-title">RBAC mapping files</h2>
+    <p>
+      Import a CSV to replace each mapping dataset, then export to review
+      current effective values.
+    </p>
+    <div class="admin-mapping-grid">
+      {% for mapping in admin_mapping_kinds %}
+      <article class="admin-mapping-card">
+        <h3>{{ mapping.label }}</h3>
+        <p>{{ mapping.description }}</p>
+        <div class="admin-mapping-actions">
+          <a
+            href="{{ url_for('app_issues_export_mapping', mapping_kind=mapping.id) }}"
+            class="admin-mapping-link"
+            >export {{ mapping.label }}</a
+          >
+          <form
+            class="admin-mapping-import-form"
+            action="{{ url_for('app_issues_import_mapping') }}"
+            method="post"
+            enctype="multipart/form-data"
+          >
+            {{ admin_mapping_form.csrf_token }}
+            <input
+              type="hidden"
+              name="return_query"
+              value="{{ request.query_string.decode('utf-8', errors='ignore') }}"
+            />
+            <input type="hidden" name="mapping_kind" value="{{ mapping.id }}" />
+            <input
+              type="file"
+              name="mapping_file"
+              accept=".csv,text/csv,text/plain"
+              required
+            />
+            <button type="submit">import</button>
+          </form>
+        </div>
+      </article>
+      {% endfor %}
     </div>
   </section>
 </article>

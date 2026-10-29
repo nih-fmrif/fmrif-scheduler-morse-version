@@ -3,15 +3,34 @@
 body %}
 <p class="note">
   {% if warn %}{{ icons.info() }}{{ warn }}{% else %}template application begins
-  on {{ start }}{% endif %}
+  on Sunday {{ start }}{% endif %}
 </p>
 {% if templates %}
 <div class="apply-helper">
+  {% if templates | selectattr("compatibility.blocking") | list %}
+  <p class="note">
+    {{ icons.info() }} templates marked below as repair required remain visible
+    for review, but they cannot be applied until their stale or unavailable
+    values are repaired.
+  </p>
+  {% endif %}
   <div class="apply-helper-no-js">
     <span>available templates</span>
     <ul>
       {% for t in templates %}
-      <li><strong>{{ t.id }}</strong>: {{ t.label}}</li>
+      <li>
+        <strong>{{ t.id }}</strong>: {{ t.label }} {% if
+        t.compatibility.blocking %}
+        <strong>(repair required)</strong>
+        <ul>
+          {% for summary in t.compatibility.summary %}
+          <li>{{ summary }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <span>(ready)</span>
+        {% endif %}
+      </li>
       {% endfor %}
     </ul>
   </div>
@@ -19,7 +38,19 @@ body %}
     <span>click buttons below to add to list of templates to apply</span>
     <div>
       {% for t in templates %}
-      <button type="button" data-tc="{{ t.id }}">
+      <button
+        type="button"
+        data-tc="{{ t.id }}"
+        {%
+        if
+        t.compatibility.blocking
+        %}disabled
+        aria-disabled="true"
+        {%
+        endif
+        %}
+        title="{% if t.compatibility.summary %}{{ t.compatibility.summary | join('; ') }}{% else %}ready{% endif %}"
+      >
         <sr-only>add </sr-only><strong>{{ t.id }}</strong>: {{ t.label}}
       </button>
       {% endfor %}

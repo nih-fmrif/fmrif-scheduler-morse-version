@@ -1,6 +1,7 @@
 """Session helpers for OAuth and test-only authentication flows."""
 
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Dict, List, Optional
@@ -15,6 +16,27 @@ from scheduler.logic import upsert_user
 
 from .jwt_utils import extract_bearer_token, user_from_claims, verify_jwt
 from .models import SessionUser
+from .test_session_state import (
+    clear_auth_test_session_pi_groups,
+    merge_auth_test_session_pi_groups,
+    set_auth_test_session_pi_groups,
+)
+
+_AUTH_TEST_SESSION_KEY = re.compile(r"^[a-z0-9]{1,6}$")
+_AUTH_TEST_USER_ID_MAX = 20
+
+
+@dataclass(frozen=True)
+class ResolvedAuthTestProfile:
+    username: str
+    email: str
+    display_name: str
+    active: bool
+    admin: bool
+    groups: List[str]
+    pi_groups: List[str]
+    technologist: bool
+    test_scanner_tech: bool
 
 
 def _persist_user(user: SessionUser) -> SessionUser:
@@ -185,6 +207,7 @@ def logout_user() -> None:
     session.pop("display_name", None)
     session.pop("email", None)
     session.pop("groups", None)
+    clear_auth_test_session_pi_groups()
     if hasattr(g, "user"):
         delattr(g, "user")
 
@@ -201,7 +224,7 @@ def get_user_from_session() -> Optional[SessionUser]:
 
     active = True
     try:
-        db_user = model.User.query.get(username)
+        db_user = model.get(model.User, username)
         if db_user is not None:
             active = bool(db_user.active)
     except (SQLAlchemyError, RuntimeError):
@@ -223,7 +246,7 @@ def get_user_from_session() -> Optional[SessionUser]:
 
 def _set_admin_membership(user_id: str, enabled: bool) -> None:
     """Set or remove admin membership for a user."""
-    admin_group = model.Group.query.get("admin")
+    admin_group = model.get(model.Group, "admin")
     if enabled and admin_group is None:
         admin_group = model.Group(
             id="admin",
@@ -236,7 +259,7 @@ def _set_admin_membership(user_id: str, enabled: bool) -> None:
     if admin_group is None:
         return
 
-    membership = model.GroupMember.query.get(("admin", user_id))
+    membership = model.get(model.GroupMember, ("admin", user_id))
 
     if enabled:
         approved_at = datetime.now(timezone.utc)
@@ -268,6 +291,54 @@ def _normalize_profile_groups(groups: List[str]) -> List[str]:
     return normalized
 
 
+def normalize_auth_test_session_key(raw: Optional[object]) -> str:
+    value = str(raw or "").strip().lower()
+    if value == "":
+        return ""
+    if not _AUTH_TEST_SESSION_KEY.fullmatch(value):
+        raise ValueError("session_key must be 1-6 lowercase letters or digits")
+    return value
+
+
+def _scope_auth_test_username(username: str, session_key: str) -> str:
+    base = username.strip().lower()
+    if session_key == "":
+        return base
+    suffix = f"-{session_key}"
+    if len(base) + len(suffix) > _AUTH_TEST_USER_ID_MAX:
+        base = base[: _AUTH_TEST_USER_ID_MAX - len(suffix)].rstrip("-")
+    return f"{base}{suffix}"
+
+
+def _scope_auth_test_email(email: str, session_key: str) -> str:
+    base = str(email).strip().lower()
+    if session_key == "" or "@" not in base:
+        return base
+    local_part, domain = base.split("@", 1)
+    return f"{local_part}+{session_key}@{domain}"
+
+
+def resolve_auth_test_profile(
+    profile_name: str, *, session_key: str = ""
+) -> Optional[ResolvedAuthTestProfile]:
+    profile = settings.auth_test.profiles.get(profile_name)
+    if profile is None:
+        return None
+    username = _scope_auth_test_username(profile.username, session_key)
+    display_name = profile.display_name.strip() or username
+    return ResolvedAuthTestProfile(
+        username=username,
+        email=_scope_auth_test_email(profile.email, session_key),
+        display_name=display_name,
+        active=bool(profile.active),
+        admin=bool(profile.admin),
+        groups=_normalize_profile_groups(list(profile.groups)),
+        pi_groups=_normalize_profile_groups(list(profile.pi_groups)),
+        technologist=bool(profile.technologist),
+        test_scanner_tech=bool(profile.test_scanner_tech),
+    )
+
+
 def _parse_auth_test_seed_groups(raw: str) -> List[str]:
     """Parse comma-separated auth-test seed group ids from environment settings."""
     groups: List[str] = []
@@ -290,7 +361,7 @@ def _parse_auth_test_seed_groups(raw: str) -> List[str]:
 
 
 def _ensure_auth_test_group(group_id: str) -> None:
-    group = model.Group.query.get(group_id)
+    group = model.get(model.Group, group_id)
     if group is None:
         group = model.Group(id=group_id)
 
@@ -306,12 +377,14 @@ def _ensure_auth_test_group(group_id: str) -> None:
     model.db.session.add(group)
 
 
-def _set_profile_group_membership(user_id: str, group_id: str, enabled: bool) -> None:
+def _set_profile_group_membership(
+    user_id: str, group_id: str, enabled: bool, *, pi: bool = False
+) -> None:
     if enabled:
         _ensure_auth_test_group(group_id)
 
-    membership = model.GroupMember.query.get((group_id, user_id))
-    primary = model.PrimaryGroupMember.query.get((group_id, user_id))
+    membership = model.get(model.GroupMember, (group_id, user_id))
+    primary = model.get(model.PrimaryGroupMember, (group_id, user_id))
 
     if enabled:
         approved_at = datetime.now(timezone.utc)
@@ -325,6 +398,22 @@ def _set_profile_group_membership(user_id: str, group_id: str, enabled: bool) ->
         elif membership.approved is None:
             membership.approved = approved_at
             model.db.session.add(membership)
+        if pi:
+            current_primary = model.PrimaryGroupMember.query.filter_by(
+                group=group_id
+            ).first()
+            if current_primary is not None and current_primary.user != user_id:
+                model.execute(
+                    "delete from primarygroupmember where deptcode = :group_id",
+                    {"group_id": group_id},
+                )
+                model.db.session.flush()
+            if primary is None:
+                model.db.session.add(
+                    model.PrimaryGroupMember(group=group_id, user=user_id)
+                )
+        elif primary is not None:
+            model.db.session.delete(primary)
         return
 
     if membership is not None:
@@ -334,7 +423,7 @@ def _set_profile_group_membership(user_id: str, group_id: str, enabled: bool) ->
 
 
 def _set_technologist_status(user_id: str, enabled: bool) -> None:
-    record = model.Technologist.query.get(user_id)
+    record = model.get(model.Technologist, user_id)
     if enabled:
         if record is None:
             model.db.session.add(
@@ -359,7 +448,7 @@ def _set_technologist_status(user_id: str, enabled: bool) -> None:
 
 
 def _ensure_auth_test_device(device_id: str) -> None:
-    device = model.Device.query.get(device_id)
+    device = model.get(model.Device, device_id)
     if device is None:
         device = model.Device(id=device_id)
 
@@ -376,7 +465,7 @@ def _ensure_auth_test_device(device_id: str) -> None:
 
 def _set_test_scanner_tech_permission(user_id: str, enabled: bool) -> None:
     scanner_id = "TEST"
-    permission = model.UserDevice.query.get((user_id, scanner_id))
+    permission = model.get(model.UserDevice, (user_id, scanner_id))
 
     if enabled:
         _ensure_auth_test_device(scanner_id)
@@ -413,27 +502,45 @@ def _ensure_joinable_seed_group_for_user(
     # Keep existing membership rows intact across profile switches.
 
 
-def login_test_user(profile_name: str) -> Optional[SessionUser]:
+def login_test_user(
+    profile_name: str, *, session_key: str = ""
+) -> Optional[SessionUser]:
     """Create a mock authenticated session for integration tests."""
-    profile = settings.auth_test.profiles.get(profile_name)
+    profile = resolve_auth_test_profile(profile_name, session_key=session_key)
     if profile is None:
         return None
 
-    username = profile.username.strip().lower()
-    email = str(profile.email).strip().lower()
-    display_name = profile.display_name.strip() or username
-    profile_groups = _normalize_profile_groups(list(profile.groups))
+    username = profile.username
+    email = profile.email
+    display_name = profile.display_name
+    profile_groups = profile.groups
+    profile_pi_groups = profile.pi_groups
+    persist_primary_memberships = session_key == ""
 
     db_user = upsert_user(username, email, display_name)
-    db_user.active = bool(profile.active)
+    db_user.active = profile.active
     model.db.session.add(db_user)
     for group_id in profile_groups:
         if group_id.lower() == "admin":
             continue
-        _set_profile_group_membership(username, group_id, True)
-    _set_admin_membership(username, bool(profile.admin))
-    _set_technologist_status(username, bool(profile.technologist))
-    _set_test_scanner_tech_permission(username, bool(profile.test_scanner_tech))
+        _set_profile_group_membership(
+            username,
+            group_id,
+            True,
+            pi=persist_primary_memberships and group_id in profile_pi_groups,
+        )
+    for group_id in profile_pi_groups:
+        if group_id.lower() == "admin" or group_id in profile_groups:
+            continue
+        _set_profile_group_membership(
+            username,
+            group_id,
+            True,
+            pi=persist_primary_memberships,
+        )
+    _set_admin_membership(username, profile.admin)
+    _set_technologist_status(username, profile.technologist)
+    _set_test_scanner_tech_permission(username, profile.test_scanner_tech)
     _ensure_joinable_seed_group_for_user(username, profile_groups)
     model.db.session.commit()
 
@@ -445,8 +552,54 @@ def login_test_user(profile_name: str) -> Optional[SessionUser]:
         active=bool(db_user.active),
     )
     _store_session(user)
+    set_auth_test_session_pi_groups(username, profile_pi_groups)
     g.user = user
     return user
+
+
+def apply_test_group_pi_memberships(
+    user_id: str,
+    group_ids: List[str],
+    *,
+    persist_primary_memberships: bool = True,
+) -> None:
+    normalized_groups = _normalize_profile_groups(list(group_ids))
+    for group_id in normalized_groups:
+        if group_id.lower() == "admin":
+            continue
+        _set_profile_group_membership(
+            user_id,
+            group_id,
+            True,
+            pi=persist_primary_memberships,
+        )
+    model.db.session.commit()
+    merge_auth_test_session_pi_groups(user_id, normalized_groups)
+
+
+def reset_test_auth_profile_state(user_id: str) -> None:
+    (
+        model.PrimaryGroupMember.query.filter(
+            model.PrimaryGroupMember.user == user_id
+        ).delete(synchronize_session=False)
+    )
+    (
+        model.GroupMember.query.filter(model.GroupMember.user == user_id).delete(
+            synchronize_session=False
+        )
+    )
+    (
+        model.Technologist.query.filter(model.Technologist.user == user_id).delete(
+            synchronize_session=False
+        )
+    )
+    (
+        model.UserDevice.query.filter(model.UserDevice.user == user_id).delete(
+            synchronize_session=False
+        )
+    )
+    model.db.session.commit()
+    set_auth_test_session_pi_groups(user_id, [])
 
 
 def require_jwt(fn):

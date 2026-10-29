@@ -11,6 +11,8 @@ import {
   parse_schedule_cell_markup,
 } from "./formatters.js";
 
+const serverErrorState = new Map();
+
 function announce(txt) {
   document.querySelector("#announce").innerText = txt;
 }
@@ -76,83 +78,119 @@ function get_datalists() {
   return out;
 }
 
-function enforce_datalists() {
-  const inputs = [...document.querySelectorAll("input[list]")];
+const datalist_validation_bound_inputs = new WeakSet();
+const datalist_validation_bound_forms = new WeakSet();
+let datalist_validation_observer = null;
 
-  if (inputs.length == 0) {
-    return;
+function validate_and_normalize_datalist_input(input) {
+  if (!(input instanceof HTMLInputElement) || !input.hasAttribute("list")) {
+    return true;
   }
-  const forms = new Set(inputs.map((elm) => elm.form));
 
   const datalists = get_datalists();
   if (datalists.size == 0) {
     console.warn("there are inputs with the list attribute but no datalists");
+    return true;
+  }
+
+  const listId = input.getAttribute("list") || "";
+  const dl = datalists.get(listId);
+  if (!dl) {
+    // result of programming error, let it be handled server side
+    // as there is nothing sensible that we can do here
+    console.warn(`unknown list id ${listId}`);
+    return true;
+  }
+  if (!input.value) {
+    // consider blank valid, let built in required attr handle this case
+    input.setCustomValidity("");
+    return true;
+  }
+  const canon = dl.canonical.get(input.value);
+  if (!canon) {
+    input.setCustomValidity(dl.errorMessage);
+    return false;
+  }
+  input.value = canon;
+  input.setCustomValidity("");
+  return true;
+}
+
+function bind_datalist_validation(input) {
+  if (
+    !(input instanceof HTMLInputElement) ||
+    !input.hasAttribute("list") ||
+    datalist_validation_bound_inputs.has(input)
+  ) {
     return;
   }
 
-  const validate_and_normalize = (input) => {
-    const dl = datalists.get(input.list.id);
-    if (!dl) {
-      // result of programming error, let it be handled server side
-      // as there is nothing sensible that we can do here
-      console.warn(`unknown list id ${input.list.id}`);
-      return true;
-    }
-    if (!input.value) {
-      // consider blank valid, let built in required attr handle this case
-      return true;
-    }
-    const canon = dl.canonical.get(input.value);
-    if (!canon) {
-      input.setCustomValidity(dl.errorMessage);
-      return false;
-    }
-    input.value = canon;
-    return true;
-  };
+  datalist_validation_bound_inputs.add(input);
+  validate_and_normalize_datalist_input(input);
 
-  for (const form of forms) {
+  input.addEventListener("input", (evt) => {
+    const t = evt.target;
+    if (!(t instanceof HTMLInputElement)) {
+      return;
+    }
+    // clear invalid flag whenever input is changed.
+    t.setCustomValidity("");
+    // run validation
+    validate_and_normalize_datalist_input(t);
+  });
+
+  const form = input.form;
+  if (form && !datalist_validation_bound_forms.has(form)) {
+    datalist_validation_bound_forms.add(form);
     form.addEventListener("submit", (evt) => {
-      for (const input of inputs) {
-        if (input.form != form) {
-          continue;
-        }
-
-        if (!validate_and_normalize(input)) {
-          input.reportValidity();
+      for (const field of form.querySelectorAll("input[list]")) {
+        if (
+          field instanceof HTMLInputElement &&
+          !validate_and_normalize_datalist_input(field)
+        ) {
+          field.reportValidity();
           evt.preventDefault();
         }
       }
     });
   }
 
-  // re-validate inputs if the list changes
-  const mo = new MutationObserver((ms) => {
-    for (const m of ms) {
-      const t = m.target;
-      if (t.list != null) {
+  if (datalist_validation_observer == null) {
+    datalist_validation_observer = new MutationObserver((ms) => {
+      for (const m of ms) {
+        const t = m.target;
+        if (!(t instanceof HTMLInputElement) || t.list == null) {
+          continue;
+        }
         // can be null when between lists
         t.setCustomValidity("");
-        validate_and_normalize(t);
+        validate_and_normalize_datalist_input(t);
         t.dispatchEvent(new CustomEvent("list-change"));
       }
-    }
-  });
-
-  for (const input of inputs) {
-    validate_and_normalize(input);
-    input.addEventListener("input", (evt) => {
-      const t = evt.target;
-      // clear invalid flag whenever input is changed.
-      t.setCustomValidity("");
-      // run validation
-      validate_and_normalize(t);
-    });
-    mo.observe(input, {
-      attributes: true,
-      attributeFilter: ["list"],
     });
   }
+
+  datalist_validation_observer.observe(input, {
+    attributes: true,
+    attributeFilter: ["list"],
+  });
+}
+
+function bind_datalist_validations(root = document) {
+  if (root instanceof HTMLInputElement) {
+    bind_datalist_validation(root);
+    return;
+  }
+  if (!(root instanceof Document || root instanceof Element)) {
+    return;
+  }
+  root.querySelectorAll("input[list]").forEach((input) => {
+    bind_datalist_validation(input);
+  });
+}
+
+function enforce_datalists() {
+  bind_datalist_validations(document);
 }
 
 function clear_server_errors_on_input() {
@@ -184,6 +222,71 @@ function clear_server_errors_on_input() {
   });
 }
 
+async function parse_server_failure(resp) {
+  const status = `${resp.status}${
+    resp.statusText ? ` ${resp.statusText}` : ""
+  }`;
+
+  let json = null;
+  try {
+    json = await resp.clone().json();
+  } catch (_err) {
+    json = null;
+  }
+
+  if (json && typeof json == "object") {
+    if (
+      json.errors &&
+      typeof json.errors == "object" &&
+      !Array.isArray(json.errors)
+    ) {
+      return { data: json };
+    }
+    const errorList = Array.isArray(json.errors)
+      ? json.errors
+          .map((entry) => {
+            if (typeof entry == "string") {
+              return entry;
+            }
+            if (entry && typeof entry == "object") {
+              if (typeof entry.message == "string") {
+                return entry.message;
+              }
+              if (typeof entry.error == "string") {
+                return entry.error;
+              }
+              return JSON.stringify(entry);
+            }
+            return "";
+          })
+          .filter((entry) => entry != "")
+      : [];
+    const message =
+      typeof json.message == "string"
+        ? json.message
+        : typeof json.error == "string"
+        ? json.error
+        : errorList.join("; ");
+    if (message) {
+      return { message: `error: ${status}: ${message}` };
+    }
+  }
+
+  let text = "";
+  try {
+    text = String(await resp.text()).trim();
+  } catch (_err) {
+    text = "";
+  }
+  const firstLine =
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line != "") ?? "";
+  const detail = firstLine ? `: ${firstLine.slice(0, 220)}` : "";
+  return { message: `error: ${status}${detail}` };
+}
+
 async function confirmDialog(titleText, message, opts = {}) {
   return new Promise((resolve) => {
     const con = document.getElementById("confirm-dialog-container");
@@ -200,18 +303,26 @@ async function confirmDialog(titleText, message, opts = {}) {
     if (opts.confirm) {
       confirm.innerText = opts.confirm;
     }
+    let confirmed = false;
+    const onConfirm = () => {
+      confirmed = true;
+    };
+    const onCancel = () => {
+      confirmed = false;
+    };
+    confirm.addEventListener("click", onConfirm);
+    cancel.addEventListener("click", onCancel);
     const dialog = new A11yDialog(con);
     dialog.on("show", () => {
       // scroll lock and focus cancel button
       disableBodyScroll(modal);
       cancel.focus();
     });
-    dialog.on("hide", (evt) => {
+    dialog.on("hide", () => {
       enableBodyScroll(modal);
-      // only true if confirm button was used
-      resolve(
-        Boolean(evt.target && evt.target.name && evt.target.name == "confirm"),
-      );
+      confirm.removeEventListener("click", onConfirm);
+      cancel.removeEventListener("click", onCancel);
+      resolve(confirmed);
       // reset template
       title.innerText = "";
       body.textContent = "";
@@ -351,10 +462,22 @@ function replaceNodeContent(container, content) {
 
 const JUMP_TO_NEXT_NON_EMPTY_DAY_EVENT =
   "fmrif:schedule-editor-next-non-empty-day";
+const SHIFT_WINDOW_BY_EDGE_ARROW_EVENT =
+  "fmrif:schedule-editor-shift-window-by-edge-arrow";
+const JUMP_TO_WINDOW_EVENT = "fmrif:schedule-editor-jump-to-window";
 
 function emit_jump_fallback(direction, row, col, source = "grid") {
   document.dispatchEvent(
     new CustomEvent(JUMP_TO_NEXT_NON_EMPTY_DAY_EVENT, {
+      detail: { direction, row, col, source },
+      bubbles: true,
+    }),
+  );
+}
+
+function emit_window_edge_shift(direction, row, col, source = "grid") {
+  document.dispatchEvent(
+    new CustomEvent(SHIFT_WINDOW_BY_EDGE_ARROW_EVENT, {
       detail: { direction, row, col, source },
       bubbles: true,
     }),
@@ -425,7 +548,20 @@ function wire_jump_form() {
       return;
     }
     const url = buildJumpUrl();
-    window.location.assign(url);
+    const handledInPlace = !document.dispatchEvent(
+      new CustomEvent(JUMP_TO_WINDOW_EVENT, {
+        detail: {
+          start: startInput.value,
+          days: daysInput.value,
+          url,
+        },
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    if (!handledInPlace) {
+      window.location.assign(url);
+    }
   };
 
   let debounceTimer = null;
@@ -553,10 +689,448 @@ function wire_inspector_modal() {
     return;
   }
   const dialog = new A11yDialog(container);
-  trigger.addEventListener("click", (evt) => {
-    evt.preventDefault();
-    dialog.show();
-  });
+  container.__schedulerInspectorDialog = dialog;
+}
+
+function format_inspector_error_rows(errors) {
+  if (!Array.isArray(errors)) {
+    return [];
+  }
+  return errors
+    .map((err) => {
+      if (!err) {
+        return null;
+      }
+      if (
+        typeof err.source == "string" &&
+        err.source.length > 0 &&
+        typeof err.message == "string" &&
+        err.message.length > 0
+      ) {
+        return {
+          source: err.source,
+          message: err.message,
+        };
+      }
+      const key = String(err.key || "");
+      const src = key || "slot";
+      let msg = "";
+      switch (err.type) {
+        case "revocation":
+          msg = "you no longer have access to edit this device";
+          break;
+        case "expired":
+          msg = "you missed the submission deadline";
+          break;
+        case "user-removed":
+          msg = `you are no longer in ${key} ${err.value ?? ""}`;
+          break;
+        case "removed":
+          msg = `${err.value ?? "entry value"} is no longer a valid ${key}`;
+          break;
+        case "overwrote":
+          if (err.expected || err.expected === "") {
+            const expected = err.expected
+              ? String(err.expected)
+              : "blank entry";
+            const got = err.got ? String(err.got) : "blank entry";
+            msg = `${key} overwritten by another user: expected ${expected} got ${got}`;
+          } else {
+            msg = `${key} was overwritten by another user`;
+          }
+          break;
+        case "invalid":
+          msg = err.value ? String(err.value) : "validation error";
+          break;
+        default:
+          msg = err.msg ? String(err.msg) : "validation error";
+      }
+      return { source: src, message: msg };
+    })
+    .filter(Boolean);
+}
+
+function read_slot_validation_errors(entry) {
+  if (!entry) {
+    return [];
+  }
+  const out = [];
+  const serverErrorRecord = serverErrorState.get(
+    String(entry.dataset.id ?? ""),
+  );
+  const serverErrors =
+    entry.dataset.serverErrors ??
+    JSON.stringify(serverErrorRecord?.errors ?? null);
+  if (serverErrors && serverErrors != "null") {
+    try {
+      const parsed = JSON.parse(serverErrors);
+      const rows = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.errors)
+        ? parsed.errors
+        : [];
+      out.push(...format_inspector_error_rows(rows));
+    } catch (_err) {
+      out.push({
+        source: "slot",
+        message: "invalid server error payload",
+      });
+    }
+  }
+  const detail = entry.querySelector("entry-detail");
+  if (!detail) {
+    return out;
+  }
+
+  const controls = detail.querySelectorAll("input,select,textarea");
+  for (const control of controls) {
+    if (!(control instanceof HTMLElement)) {
+      continue;
+    }
+
+    const controlId = control.getAttribute("id");
+    const described = control.getAttribute("aria-describedby") ?? "";
+    const errorTargets = described
+      .split(" ")
+      .map((s) => s.trim())
+      .filter((s) => s.endsWith("-err"));
+
+    let messages = [];
+    for (const id of errorTargets) {
+      const list = document.getElementById(id);
+      if (!list) {
+        continue;
+      }
+      for (const row of list.querySelectorAll("input-error")) {
+        const txt = row.innerText?.trim();
+        if (!txt) {
+          continue;
+        }
+        messages.push(txt.replace(/^\W+/, ""));
+      }
+    }
+
+    if (messages.length > 0 && controlId) {
+      let source = "";
+      const set = control.closest("input-set");
+      if (set) {
+        const label = set.querySelector("label");
+        if (label) {
+          source = label.innerText.trim();
+        }
+      }
+      if (!source && controlId.includes("-")) {
+        const chunks = controlId.split("-");
+        source = chunks[0];
+      }
+      for (const message of messages) {
+        out.push({ source: source || "slot", message });
+      }
+      messages = [];
+    }
+
+    if (control.matches("input[aria-invalid='true'],input:invalid")) {
+      const message = control.validationMessage;
+      if (message) {
+        out.push({
+          source: (() => {
+            const set = control.closest("input-set");
+            const label = set?.querySelector("label");
+            if (label) {
+              return label.innerText.trim();
+            }
+            return "slot";
+          })(),
+          message,
+        });
+      }
+    }
+  }
+
+  if (entry.dataset.error == "true" && out.length == 0) {
+    out.push({
+      source: "slot",
+      message: "entry is marked as erroring",
+    });
+  }
+  const deduped = [];
+  const seen = new Set();
+  for (const row of out) {
+    const source = String(row.source ?? "slot");
+    const message = String(row.message ?? "validation error");
+    const key = `${source}\u0000${message}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push({ source, message });
+  }
+  return deduped;
+}
+
+function sanitize_and_bind_inspector_editor(source, target, editable, onSync) {
+  if (!source || !target || !(source instanceof HTMLElement)) {
+    return;
+  }
+  target.replaceChildren(source.cloneNode(true));
+  const cloned = target.firstElementChild;
+  if (!cloned) {
+    return;
+  }
+  const controls = cloned.querySelectorAll(
+    "input,select,textarea,button,fieldset",
+  );
+  const sourceControls = source.querySelectorAll(
+    "input,select,textarea,button,fieldset",
+  );
+  const sourceLabels = source.querySelectorAll("label[for]");
+  const idMap = new Map();
+  const source_control_for = (cloneControl) => {
+    const sourceId = cloneControl.dataset.sourceId;
+    if (!sourceId) {
+      return null;
+    }
+    const sourceControl = source.querySelector(`#${sourceId}`);
+    if (!(sourceControl instanceof HTMLElement)) {
+      return null;
+    }
+    return sourceControl;
+  };
+  const sync_mirrored_state = () => {
+    for (const cloneControl of controls) {
+      if (!(cloneControl instanceof HTMLElement)) {
+        continue;
+      }
+      const sourceControl = source_control_for(cloneControl);
+      if (!(sourceControl instanceof HTMLElement)) {
+        continue;
+      }
+
+      if (cloneControl.disabled != sourceControl.disabled) {
+        cloneControl.disabled = sourceControl.disabled;
+      }
+
+      if (
+        cloneControl instanceof HTMLInputElement &&
+        sourceControl instanceof HTMLInputElement
+      ) {
+        if (
+          (cloneControl.type == "checkbox" || cloneControl.type == "radio") &&
+          cloneControl.checked != sourceControl.checked
+        ) {
+          cloneControl.checked = sourceControl.checked;
+        } else if (
+          cloneControl.type != "checkbox" &&
+          cloneControl.type != "radio" &&
+          cloneControl.value != sourceControl.value &&
+          document.activeElement !== cloneControl
+        ) {
+          cloneControl.value = sourceControl.value;
+        }
+
+        if (!sourceControl.hasAttribute("list")) {
+          cloneControl.removeAttribute("list");
+        } else {
+          const sourceList = sourceControl.getAttribute("list") || "";
+          if (sourceList == "") {
+            cloneControl.removeAttribute("list");
+          } else if (cloneControl.getAttribute("list") != sourceList) {
+            cloneControl.setAttribute("list", sourceList);
+          }
+        }
+        cloneControl.setCustomValidity(sourceControl.validationMessage || "");
+        continue;
+      }
+
+      if (
+        cloneControl instanceof HTMLSelectElement &&
+        sourceControl instanceof HTMLSelectElement &&
+        cloneControl.value != sourceControl.value &&
+        document.activeElement !== cloneControl
+      ) {
+        cloneControl.value = sourceControl.value;
+      }
+      if (
+        cloneControl instanceof HTMLTextAreaElement &&
+        sourceControl instanceof HTMLTextAreaElement &&
+        cloneControl.value != sourceControl.value &&
+        document.activeElement !== cloneControl
+      ) {
+        cloneControl.value = sourceControl.value;
+      }
+
+      if (
+        (cloneControl instanceof HTMLInputElement ||
+          cloneControl instanceof HTMLSelectElement ||
+          cloneControl instanceof HTMLTextAreaElement) &&
+        (sourceControl instanceof HTMLInputElement ||
+          sourceControl instanceof HTMLSelectElement ||
+          sourceControl instanceof HTMLTextAreaElement)
+      ) {
+        cloneControl.setCustomValidity(sourceControl.validationMessage || "");
+      }
+    }
+  };
+  for (const sourceControl of sourceControls) {
+    if (sourceControl.id) {
+      idMap.set(sourceControl.id, `${sourceControl.id}-inspector`);
+    }
+  }
+  for (const c of controls) {
+    if (!(c instanceof HTMLElement)) {
+      continue;
+    }
+    if (c.id) {
+      c.dataset.sourceId = c.id;
+      c.id = `${c.id}-inspector`;
+    }
+    if (c.matches("button")) {
+      c.setAttribute("type", "button");
+      if (!editable) {
+        c.disabled = true;
+      }
+    }
+    if (c.matches("fieldset")) {
+      const id = c.getAttribute("id");
+      if (id) {
+        c.id = `${id}-inspector`;
+      }
+      if (!editable) {
+        c.disabled = true;
+      }
+      continue;
+    }
+    if (c.matches("input") || c.matches("select") || c.matches("textarea")) {
+      c.disabled = c.disabled || !editable;
+      if (editable && c.type == "radio") {
+        if (c.name) {
+          c.name = `${c.name}-inspector`;
+        }
+      }
+      if (!editable) {
+        c.setAttribute("tabindex", "-1");
+      }
+      if (!editable) {
+        continue;
+      }
+      c.addEventListener("input", () => {
+        const sourceId = c.dataset.sourceId;
+        if (!sourceId) {
+          return;
+        }
+        const targetInput = source.querySelector(`#${sourceId}`);
+        if (!targetInput || targetInput.disabled) {
+          return;
+        }
+        const value = c.value;
+        if (targetInput.type == "radio") {
+          if (c.checked) {
+            targetInput.checked = true;
+          }
+        } else if (targetInput.type == "checkbox") {
+          targetInput.checked = c.checked;
+        } else if (targetInput.value != value) {
+          targetInput.value = value;
+        }
+        onSync?.(targetInput, c);
+        targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+        sync_mirrored_state();
+      });
+      c.addEventListener("change", () => {
+        const sourceId = c.dataset.sourceId;
+        if (!sourceId) {
+          return;
+        }
+        const targetInput = source.querySelector(`#${sourceId}`);
+        if (!targetInput || targetInput.disabled) {
+          return;
+        }
+        if (targetInput.type == "radio" && c.type == "radio") {
+          targetInput.checked = c.checked;
+          if (c.name) {
+            const groupName = c.name.replace(/-inspector$/, "");
+            source
+              .querySelectorAll(`input[name="${groupName}"][type="radio"]`)
+              .forEach((r) => {
+                r.dispatchEvent(new Event("change", { bubbles: true }));
+              });
+          } else {
+            targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        } else if (targetInput.type == "checkbox") {
+          targetInput.checked = c.checked;
+        } else {
+          targetInput.value = c.value;
+        }
+        targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+        sync_mirrored_state();
+      });
+      c.addEventListener("list-change", () => {
+        const sourceId = c.dataset.sourceId;
+        if (!sourceId) {
+          return;
+        }
+        const targetInput = source.querySelector(`#${sourceId}`);
+        if (!targetInput) {
+          return;
+        }
+        targetInput.setAttribute("list", c.getAttribute("list") || "none");
+        targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+        sync_mirrored_state();
+      });
+    }
+  }
+
+  for (const sourceLabel of sourceLabels) {
+    const forId = sourceLabel.getAttribute("for");
+    if (!forId) {
+      continue;
+    }
+    const targetLabel = cloned.querySelector(`label[for="${forId}"]`);
+    if (!targetLabel) {
+      continue;
+    }
+    const mappedId = idMap.get(forId);
+    if (mappedId) {
+      targetLabel.setAttribute("for", mappedId);
+    }
+  }
+
+  if (editable) {
+    const reset = cloned.querySelector("button[data-reset]");
+    if (reset && reset.dataset.sourceId == null) {
+      const sourceReset = source.querySelector("button[data-reset]");
+      if (sourceReset) {
+        reset.dataset.sourceId = sourceReset.getAttribute("id") ?? "";
+        reset.addEventListener("click", (evt) => {
+          evt.preventDefault();
+          sourceReset.click();
+          window.setTimeout(() => {
+            sanitize_and_bind_inspector_editor(
+              source,
+              target,
+              editable,
+              onSync,
+            );
+          }, 0);
+        });
+      }
+    }
+    const logBtn = cloned.querySelector("button[data-for][data-from-template]");
+    if (logBtn) {
+      const sourceId = logBtn.getAttribute("data-for");
+      const sourceFor = source
+        .closest("entry-cell")
+        ?.querySelector(`button[data-for="${sourceId}"]`);
+      if (sourceFor) {
+        logBtn.addEventListener("click", () => {
+          sourceFor.click();
+        });
+      }
+    }
+  }
+
+  sync_mirrored_state();
 }
 
 function wire_home_readonly_toggle() {
@@ -592,6 +1166,168 @@ function wire_home_readonly_toggle() {
   };
   sync();
   toggle.addEventListener("change", () => sync(true));
+}
+
+function wire_home_search_and_show_more() {
+  const panels = document.querySelector(".home-panels");
+  if (!panels) {
+    return;
+  }
+  const readonlyToggle = document.querySelector("#home-show-readonly");
+  const parseIntOr = (value, fallback) => {
+    const num = Number.parseInt(value, 10);
+    if (Number.isNaN(num) || num < 0) {
+      return fallback;
+    }
+    return num;
+  };
+  const normalize = (text) =>
+    String(text ?? "")
+      .trim()
+      .toLowerCase();
+  const cfg = {
+    debounceMs: parseIntOr(panels.dataset.homeFilterDebounceMs, 200),
+    defaultVisible: parseIntOr(panels.dataset.homeDefaultVisible, 5),
+    showMoreIncrement: parseIntOr(panels.dataset.homeShowMoreIncrement, 10),
+    showMoreDelayMs: parseIntOr(panels.dataset.homeShowMoreDelayMs, 2000),
+  };
+
+  const stateForSection = (section) => {
+    const sectionName = section.dataset.homeSection;
+    const list = section.querySelector("ul[data-home-list]");
+    if (!list) {
+      return null;
+    }
+    const searchInput = document.querySelector(
+      sectionName == "devices" ? "#home-device-search" : "#home-group-search",
+    );
+    const showMoreButton = document.querySelector(
+      sectionName == "devices"
+        ? "#home-devices-show-more"
+        : "#home-groups-show-more",
+    );
+    return {
+      section,
+      list,
+      sectionName,
+      searchInput,
+      showMoreButton,
+      items: [...list.querySelectorAll("li[data-home-item]")],
+      visibleCount: cfg.defaultVisible,
+      filteredItems: [],
+      filterTimer: null,
+      showMoreTimer: null,
+    };
+  };
+
+  const canShowReadonly = () => {
+    return !readonlyToggle || Boolean(readonlyToggle.checked);
+  };
+  const sectionStates = [...document.querySelectorAll("[data-home-section]")]
+    .map(stateForSection)
+    .filter(Boolean);
+  if (sectionStates.length == 0) {
+    return;
+  }
+
+  const filterSection = (state) => {
+    const query = normalize(state.searchInput?.value);
+    const hasQuery = query.length >= 1;
+    const showReadonly = canShowReadonly();
+
+    state.filteredItems = [];
+    for (const item of state.items) {
+      if (
+        state.sectionName == "devices" &&
+        item.dataset.homeReadonlyDevice == "true"
+      ) {
+        if (!showReadonly) {
+          continue;
+        }
+      }
+      const name = normalize(item.dataset.homeItemName);
+      if (hasQuery && !name.includes(query)) {
+        continue;
+      }
+      state.filteredItems.push(item);
+    }
+    state.items.forEach((item) => {
+      item.hidden = true;
+    });
+    const max = Math.max(0, state.visibleCount);
+    state.filteredItems.slice(0, max).forEach((item) => {
+      item.hidden = false;
+    });
+  };
+
+  const applySection = (state, delayShowMore = false) => {
+    filterSection(state);
+
+    const showMore = state.filteredItems.length > state.visibleCount;
+    if (!state.showMoreButton) {
+      return;
+    }
+    state.showMoreButton.hidden = true;
+    if (state.showMoreTimer) {
+      clearTimeout(state.showMoreTimer);
+      state.showMoreTimer = null;
+    }
+    if (delayShowMore) {
+      state.showMoreTimer = window.setTimeout(() => {
+        state.showMoreButton.hidden = !showMore;
+        state.showMoreTimer = null;
+      }, cfg.showMoreDelayMs);
+    } else {
+      state.showMoreButton.hidden = !showMore;
+    }
+  };
+
+  const scheduleFilter = (state) => {
+    state.visibleCount = cfg.defaultVisible;
+    if (state.showMoreButton) {
+      state.showMoreButton.hidden = true;
+    }
+    if (state.showMoreTimer) {
+      clearTimeout(state.showMoreTimer);
+      state.showMoreTimer = null;
+    }
+    if (state.filterTimer) {
+      clearTimeout(state.filterTimer);
+    }
+    state.filterTimer = window.setTimeout(() => {
+      state.filterTimer = null;
+      applySection(state, true);
+    }, cfg.debounceMs);
+  };
+
+  for (const state of sectionStates) {
+    if (state.searchInput) {
+      state.searchInput.addEventListener("input", () => {
+        scheduleFilter(state);
+      });
+    }
+
+    if (state.showMoreButton) {
+      state.showMoreButton.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        state.visibleCount += cfg.showMoreIncrement;
+        applySection(state);
+      });
+    }
+    applySection(state);
+  }
+
+  if (!readonlyToggle) {
+    return;
+  }
+  readonlyToggle.addEventListener("change", () => {
+    for (const state of sectionStates) {
+      if (state.sectionName != "devices") {
+        continue;
+      }
+      scheduleFilter(state);
+    }
+  });
 }
 
 class Grid {
@@ -699,7 +1435,13 @@ class Grid {
     if (row < 0 || row > this.maxRow()) {
       return -1;
     }
-    return this.cells[row].length - 1;
+    for (let n = this.cells[row].length - 1; n >= 0; n -= 1) {
+      const cell = this.cells[row][n];
+      if (cell && !cell.hidden) {
+        return n;
+      }
+    }
+    return -1;
   }
   firstVisibleRow() {
     for (let n = 0; n <= this.maxRow(); n++) {
@@ -722,6 +1464,16 @@ class Grid {
   }
   rowEnd() {
     return this.focus(this.row(), this.maxCol());
+  }
+  moveCol(delta, { scroll = true } = {}) {
+    const row = this.row();
+    const nextCol = this.col() + delta;
+    if (Number.isNaN(nextCol)) {
+      return false;
+    }
+    return this.focus(row, Math.max(0, Math.min(this.maxCol(row), nextCol)), {
+      scroll,
+    });
   }
   colStart() {
     const row = this.firstVisibleRow();
@@ -752,22 +1504,10 @@ class Grid {
     return this.focus(row, this.maxCol(row));
   }
   left() {
-    const row = this.row();
-    const nextCol = this.findNextNonEmptyCol(-1, row);
-    if (nextCol !== null) {
-      return this.focus(row, nextCol);
-    }
-    emit_jump_fallback(-1, row, this.col());
-    return true;
+    return this.moveCol(-1, { scroll: false });
   }
   right() {
-    const row = this.row();
-    const nextCol = this.findNextNonEmptyCol(1, row);
-    if (nextCol !== null) {
-      return this.focus(row, nextCol);
-    }
-    emit_jump_fallback(1, row, this.col());
-    return true;
+    return this.moveCol(1, { scroll: false });
   }
   up() {
     let [row, col] = this.pos();
@@ -781,7 +1521,7 @@ class Grid {
         return false;
       }
     }
-    return this.focus(row, col);
+    return this.focus(row, col, { scroll: false });
   }
   down() {
     let [row, col] = this.pos();
@@ -796,7 +1536,7 @@ class Grid {
         return false;
       }
     }
-    return this.focus(row, col);
+    return this.focus(row, col, { scroll: false });
   }
   select(row, col) {
     row = parseInt(row, 10);
@@ -832,7 +1572,7 @@ class Grid {
     }
     return true;
   }
-  focus(row, col, force = false) {
+  focus(row, col, { force = false, scroll = true } = {}) {
     if (!this.select(row, col)) {
       return false;
     }
@@ -851,7 +1591,9 @@ class Grid {
     cell.focus({
       preventScroll: true,
     });
-    this.scrollIntoView(row, col);
+    if (scroll) {
+      this.scrollIntoView(row, col);
+    }
     return true;
   }
   scrollIntoView(row, col) {
@@ -863,23 +1605,9 @@ class Grid {
       return;
     }
     cell.scrollIntoView({
-      block: "center",
-      inline: "center",
+      block: "nearest",
+      inline: "nearest",
     });
-    // the first row and/or col does not take the table headings into account
-    // so we detect these cases and issue a correction
-    const firstCol = col == 0;
-    const firstRow = row == this.firstVisibleRow();
-    if (firstCol || firstRow) {
-      const opts = {};
-      if (firstCol) {
-        opts.left = 0;
-      }
-      if (firstRow) {
-        opts.top = 0;
-      }
-      this.container.scroll(opts);
-    }
   }
 }
 
@@ -890,6 +1618,12 @@ function focusables_around(elm) {
   // and we know that there is always at least one focusable before and after elm
   let before = null;
   for (const f of document.querySelectorAll("a,button,input")) {
+    if (f.matches(":disabled,[hidden]")) {
+      continue;
+    }
+    if (f.closest('[aria-hidden="true"]')) {
+      continue;
+    }
     switch (elm.compareDocumentPosition(f)) {
       case Node.DOCUMENT_POSITION_PRECEDING:
         // the last time we set this will be the focusable directly before elm
@@ -899,6 +1633,7 @@ function focusables_around(elm) {
         return [before, f];
     }
   }
+  return [before, before];
 }
 
 // edge_focusables returns the first and last focusable elements of a gridcell.
@@ -953,13 +1688,20 @@ function editor_grid() {
     );
   });
   editor.scheduleGrid = grid;
+  const openInspectorFromGrid = () => {
+    const inspectorOpen = document.querySelector("#inspector-open");
+    if (inspectorOpen instanceof HTMLElement) {
+      inspectorOpen.click();
+      return true;
+    }
+    return false;
+  };
 
   // we use these when handling tab from within the grid
   const [focusableBefore, focusableAfter] = focusables_around(container);
 
   // move focus to selected item in grid in the next microtask
   const focusContainer = () => {
-    container.scrollIntoView();
     setTimeout(() => {
       grid.focus(...grid.pos());
     }, 0);
@@ -995,6 +1737,17 @@ function editor_grid() {
     grid.scrollIntoView(ds.row, ds.col);
   });
 
+  editor.querySelector("tbody").addEventListener("dblclick", (evt) => {
+    const cell = evt.target.closest("td");
+    if (!cell) {
+      return;
+    }
+    grid.select(cell.dataset.row, cell.dataset.col);
+    if (openInspectorFromGrid()) {
+      evt.preventDefault();
+    }
+  });
+
   // if we click inside the grid without changing focus,
   // focus the correct cell
   editor.addEventListener("click", (evt) => {
@@ -1005,56 +1758,33 @@ function editor_grid() {
     }
   });
 
-  container.addEventListener("keydown", (evt) => {
+  const handleGridKeydown = (evt) => {
     if (evt.isComposing || evt.keyCode == 229) {
-      return;
-    }
-
-    // we only want to intercept esc and tab when we're in a cell
-    if (grid.isOpen()) {
-      switch (evt.key) {
-        case "Esc":
-        case "Escape":
-          grid.focus(...grid.pos(), true);
-          break;
-
-        case "Tab": {
-          // if we're in a cell, only need to worry about focus exiting the cell
-          const t = evt.target;
-          const selected = grid.selectedCell();
-          if (selected == null) {
-            return;
-          }
-          const [first, last] = edge_focusables(selected);
-          let leaving = false;
-          if (evt.shiftKey) {
-            // shift+tab on first element
-            leaving = first == t;
-          } else {
-            // tab on last element
-            leaving = last == t;
-          }
-          if (leaving) {
-            grid.focus(...grid.pos(), true);
-            evt.preventDefault();
-          }
-          break;
-        }
-      }
-
       return;
     }
 
     // if we're not in cell, we need to intercept all grid keys
     switch (evt.key) {
+      case "Esc":
+      case "Escape":
+        if (grid.isOpen()) {
+          grid.focus(...grid.pos(), true);
+          break;
+        }
+        return;
+
       case "Left":
       case "ArrowLeft":
-        grid.left();
+        if (!grid.left()) {
+          emit_window_edge_shift(-1, grid.row(), grid.col(), "keyboard");
+        }
         break;
 
       case "Right":
       case "ArrowRight":
-        grid.right();
+        if (!grid.right()) {
+          emit_window_edge_shift(1, grid.row(), grid.col(), "keyboard");
+        }
         break;
 
       case "Up":
@@ -1092,26 +1822,38 @@ function editor_grid() {
         break;
 
       case "Enter":
-        grid.setOpen(true);
-        // focus first focusable in cell (always at least one)
-        {
-          const selected = grid.selectedCell();
-          if (selected == null) {
-            break;
-          }
-          const first = selected.querySelector(
-            ":is(input, button):not(:disabled)",
-          );
-          if (first != null) {
-            first.focus();
-          }
-        }
+        openInspectorFromGrid();
         break;
 
       case "Tab":
+        if (grid.isOpen()) {
+          // if we're in a cell, only need to worry about focus exiting the cell
+          const t = evt.target;
+          const selected = grid.selectedCell();
+          if (selected == null) {
+            return;
+          }
+          const [first, last] = edge_focusables(selected);
+          let leaving = false;
+          if (evt.shiftKey) {
+            // shift+tab on first element
+            leaving = first == t;
+          } else {
+            // tab on last element
+            leaving = last == t;
+          }
+          if (leaving) {
+            grid.focus(...grid.pos(), true);
+          } else {
+            return;
+          }
+          break;
+        }
         if (evt.shiftKey) {
-          focusableBefore.focus();
-        } else {
+          if (focusableBefore) {
+            focusableBefore.focus();
+          }
+        } else if (focusableAfter) {
           focusableAfter.focus();
         }
         break;
@@ -1120,7 +1862,35 @@ function editor_grid() {
         return;
     }
     evt.preventDefault();
-  });
+  };
+
+  container.addEventListener("keydown", handleGridKeydown);
+  document.addEventListener(
+    "keydown",
+    (evt) => {
+      if (evt.target instanceof HTMLElement) {
+        const insideEditor = editor.contains(evt.target);
+        if (insideEditor) {
+          // grid-local handler already processes keys inside the editor.
+          return;
+        }
+        const inGridCell = evt.target.closest("td");
+        const outsideGridInput = evt.target.matches(
+          "input, select, textarea, button, [contenteditable]",
+        );
+        const inJump = evt.target.closest("nav.jump-form");
+        if (
+          evt.target.closest(".dialog-container[aria-hidden='false']") ||
+          inJump ||
+          (outsideGridInput && !inGridCell)
+        ) {
+          return;
+        }
+      }
+      handleGridKeydown(evt);
+    },
+    true,
+  );
   grid.select(...grid.pos());
   editor.setAttribute("role", "grid");
   container.classList.add("js-grid");
@@ -1132,8 +1902,10 @@ function editor_dialog(save, showNotifications, titleText, content, then) {
   const title = con.querySelector("#save-dialog-title");
   const body = con.querySelector(".dialog-content-inner");
   const cancel = con.querySelector("button[name=cancel]");
+  const confirm = con.querySelector("button[name=confirm]");
   const notificationsCon = con.querySelector(".dialog-form input-set");
   const notifications = notificationsCon.querySelector("#send-notifications");
+  let confirmed = false;
   title.innerText = titleText;
   replaceNodeContent(body, content);
   if (save) {
@@ -1141,17 +1913,28 @@ function editor_dialog(save, showNotifications, titleText, content, then) {
   }
   if (showNotifications) {
     notificationsCon.hidden = false;
+    notifications.checked = true;
   }
   const dialog = new A11yDialog(con);
   dialog.on("show", () => {
     // scroll lock and focus cancel button
     disableBodyScroll(modal);
+    confirmed = false;
     cancel.focus();
   });
-  dialog.on("hide", (evt) => {
+  const markConfirmed = () => {
+    confirmed = true;
+  };
+  const clearConfirmed = () => {
+    confirmed = false;
+  };
+  confirm.onpointerdown = markConfirmed;
+  confirm.onclick = markConfirmed;
+  cancel.onpointerdown = clearConfirmed;
+  cancel.onclick = clearConfirmed;
+  dialog.on("hide", () => {
     enableBodyScroll(modal);
-    // only follow continuation if confirm button was used
-    if (evt.target && evt.target.name && evt.target.name == "confirm" && then) {
+    if (confirmed && then) {
       then(notifications.checked);
     }
     // reset template
@@ -1159,21 +1942,27 @@ function editor_dialog(save, showNotifications, titleText, content, then) {
     body.replaceChildren();
     cancel.hidden = true;
     notificationsCon.hidden = true;
+    notifications.checked = true;
   });
   dialog.show();
 }
 
-function result_dialog(proc) {
+function result_dialog(proc, options = {}) {
   const con = document.getElementById("result-dialog-container");
   const modal = con.querySelector(".dialog-box-container");
   const body = con.querySelector(".dialog-content-inner");
   const dialog = new A11yDialog(con);
   const abort = new AbortController();
   let changesSaved = false;
+  let payload = null;
+  let payloadMeta = {};
+  const shouldReload = options.reload !== false;
+  const onResolved = options.onResolved ?? null;
+  const onSuccess = options.onSuccess ?? null;
   dialog.on("show", async () => {
     disableBodyScroll(modal);
 
-    const [data, err] = await proc(abort.signal);
+    const [data, err, meta] = await proc(abort.signal);
     con.classList.add("dialog-loaded");
     announce("results available");
     if (err != null) {
@@ -1181,7 +1970,16 @@ function result_dialog(proc) {
       return;
     }
     replaceNodeContent(body, data);
-    changesSaved = true;
+    payload = data;
+    payloadMeta = meta ?? {};
+    if (meta && meta.saved !== undefined) {
+      changesSaved = Boolean(meta.saved);
+    } else {
+      changesSaved = true;
+    }
+    if (changesSaved && typeof onResolved === "function") {
+      onResolved(payload, payloadMeta);
+    }
   });
   dialog.on("hide", () => {
     enableBodyScroll(modal);
@@ -1189,6 +1987,12 @@ function result_dialog(proc) {
     body.replaceChildren();
     abort.abort();
     if (changesSaved) {
+      if (typeof onSuccess === "function") {
+        onSuccess(payload, payloadMeta);
+      }
+      if (!shouldReload) {
+        return;
+      }
       // updates made, reload the page to refresh state
       // but first we need to disable our beforeunload handler
       // then scroll to the top of the page in case the browser saves
@@ -1203,7 +2007,25 @@ function result_dialog(proc) {
 
 // force elm to reprocess and report its validity to the css
 function resetList(elm) {
-  elm.setAttribute("list", elm.list.id);
+  if (!elm) {
+    return;
+  }
+  const listId = elm.list?.id || elm.getAttribute("list");
+  if (!listId) {
+    return;
+  }
+  elm.setAttribute("list", listId);
+  const dl = get_datalists().get(listId);
+  elm.setCustomValidity("");
+  if (dl && elm.value) {
+    const canon = dl.canonical.get(elm.value);
+    if (!canon) {
+      elm.setCustomValidity(dl.errorMessage);
+    } else {
+      elm.value = canon;
+    }
+  }
+  elm.dispatchEvent(new CustomEvent("list-change"));
 }
 
 class SupportRequestSubForm {
@@ -1220,9 +2042,10 @@ class SupportRequestSubForm {
     this.requested = elm.querySelector(".requested");
     this.handler = elm.querySelector(".handler");
 
+    const requestedOrig = to_bool(this.requested.dataset.orig);
     this.orig = {
-      requested: to_bool(this.requested.dataset.orig),
-      handler: this.handler.dataset.orig,
+      requested: requestedOrig,
+      handler: requestedOrig ? this.handler.dataset.orig : "",
       subkind: "",
     };
 
@@ -1235,12 +2058,7 @@ class SupportRequestSubForm {
 
       this.orig.subkind = this.subkind_fieldset.dataset.orig;
     }
-
-    if (!this.editable) {
-      return;
-    }
-
-    this.elm.disabled = false;
+    this.sync_controls();
   }
   get changed() {
     if (this.requested.checked != this.orig.requested) {
@@ -1254,14 +2072,18 @@ class SupportRequestSubForm {
     ) {
       return true;
     }
-    return this.handler.value != this.orig.handler;
+    return this.effective_handler != this.orig.handler;
   }
   get invalid() {
     // the handler is the only element that can be in an invalid state
     // but we only report it if it's something the user can fix
-    return this.handler_editable && !this.handler.validity.valid;
+    return (
+      this.requested.checked &&
+      this.handler_editable &&
+      !this.handler.validity.valid
+    );
   }
-  get editable() {
+  get request_editable() {
     if (this.parent.locked) {
       return false;
     }
@@ -1269,19 +2091,58 @@ class SupportRequestSubForm {
     if (this.parent.past) {
       return false;
     }
-    // editable if part of an editable cell and there exists someone to fulfill the request
-    if (this.members.size > 0 && this.parent.editable) {
-      return true;
+    // filing requests is controlled by the slot editability.
+    return this.parent.editable;
+  }
+  get editable() {
+    return this.request_editable;
+  }
+  get handler_permission_key() {
+    switch (this.kind) {
+      case "med":
+        return "medical";
+      case "train":
+        return "training";
+      default:
+        return this.kind;
     }
-    // if nothing else hit, the request editable if the current user
-    // can field this kind of request.
-    return this.perms[this.kind];
   }
   get handler_editable() {
-    // each kind has the same name as the corresponding perm.
-    // NB. while this is sometimes redundant this.editable short-circuits
-    // and is not redundant in those cases.
-    return this.editable && this.perms[this.kind];
+    // assignment is constrained by role-specific permission and roster.
+    return (
+      this.request_editable &&
+      this.perms[this.handler_permission_key] &&
+      this.members.size > 0
+    );
+  }
+  get effective_handler() {
+    if (!this.handler) {
+      return "";
+    }
+    return this.requested?.checked ? this.handler.value : "";
+  }
+  get subkind_editable() {
+    return this.request_editable;
+  }
+  sync_controls() {
+    if (this.requested) {
+      this.requested.disabled = !this.request_editable;
+    }
+    this.elm.disabled = !this.request_editable;
+    const requestActive = Boolean(this.requested?.checked);
+    if (this.handler) {
+      if (!requestActive && this.handler.value != "") {
+        this.handler.value = "";
+        resetList(this.handler);
+      }
+      this.handler.disabled = !requestActive || !this.handler_editable;
+    }
+    if (this.subkind_fieldset) {
+      this.subkind_fieldset.disabled = !requestActive || !this.subkind_editable;
+    }
+    if (this.subkind) {
+      this.subkind.disabled = !requestActive || !this.subkind_editable;
+    }
   }
   diff() {
     if (!this.changed) {
@@ -1292,8 +2153,9 @@ class SupportRequestSubForm {
       // only one other option so no need to store both values
       changes.requested = this.requested.checked;
     }
-    if (this.handler.value != this.orig.handler) {
-      changes.handler = [this.orig.handler, this.handler.value];
+    const handlerValue = this.effective_handler;
+    if (handlerValue != this.orig.handler) {
+      changes.handler = [this.orig.handler, handlerValue];
     }
     if (this.subkind != null) {
       if (this.isNew) {
@@ -1314,6 +2176,7 @@ class SupportRequestSubForm {
     if (this.subkind != null) {
       this.subkind.value = this.orig.subkind;
     }
+    this.sync_controls();
   }
 }
 
@@ -1355,6 +2218,8 @@ class Cell {
       member: this.member.dataset.orig,
     };
 
+    bind_datalist_validations(elm);
+
     // gather any support requests
     const subforms = [...elm.querySelectorAll("fieldset[data-sr]")];
     const kv = subforms.map((sr) => [
@@ -1366,6 +2231,7 @@ class Cell {
 
     // nothing further to do unless this is an editable cell
     if (!this.editable) {
+      this.sync_state_flags();
       return;
     }
 
@@ -1375,6 +2241,10 @@ class Cell {
     this.group.disabled = false;
     this.member.disabled = false;
     this.update_list();
+
+    for (const sr of Object.values(this.sr)) {
+      sr.sync_controls();
+    }
 
     this.elm.dataset.canEdit = this.editable;
     this.resetBtn.disabled = !this.editable;
@@ -1390,6 +2260,7 @@ class Cell {
     this.member.addEventListener("list-change", () => {
       this.update();
     });
+    this.sync_state_flags();
   }
   get changed() {
     if (this.institute && this.orig.institute != this.institute.value) {
@@ -1409,6 +2280,12 @@ class Cell {
     if (!this.editable) {
       // cell state may be incorrect but the user can do nothing about it.
       return false;
+    }
+    if (
+      "serverErrors" in this.elm.dataset ||
+      serverErrorState.has(String(this.id))
+    ) {
+      return true;
     }
     if (this.institute && !this.institute.validity.valid) {
       return true;
@@ -1501,9 +2378,13 @@ class Cell {
     // to avoid unnecessary revalidation
     if (this.member.list.id != list) {
       this.member.setAttribute("list", list);
+      resetList(this.member);
     }
   }
   update_swatch() {
+    if (!this.legend) {
+      return;
+    }
     const classPrefix = "swatch-group-";
     for (const cls of [...this.legend.classList]) {
       if (cls.startsWith(classPrefix)) {
@@ -1571,12 +2452,18 @@ class Cell {
       }),
     );
   }
+  sync_state_flags() {
+    this.elm.dataset.changed = from_bool(this.changed);
+    this.elm.dataset.error = from_bool(this.invalid);
+  }
   update() {
     this.update_list();
     this.update_swatch();
+    for (const sr of Object.values(this.sr)) {
+      sr.sync_controls();
+    }
     this.update_summary();
-    this.elm.dataset.changed = this.changed;
-    this.elm.dataset.error = this.changed && this.invalid;
+    this.sync_state_flags();
     this.fire_change();
   }
   resetAndLock() {
@@ -1635,35 +2522,48 @@ function wire_cell_editors() {
     scheduleLoad != null &&
     typeof scheduleLoad.endpoint == "string" &&
     typeof scheduleLoad.start == "string";
+  const initialWindowDays = Number.parseInt(scheduleLoad?.days, 10) || 7;
   const scheduleWindow = remoteScheduleRows
     ? {
         start: parse_ymd(scheduleLoad.start),
-        chunkDays: Number.parseInt(scheduleLoad.days, 10) || 7,
-        totalDays: Number.parseInt(scheduleLoad.days, 10) || 7,
+        requestedDays: initialWindowDays,
+        chunkDays: initialWindowDays,
+        totalDays: initialWindowDays,
         endpoint: scheduleLoad.endpoint,
+        slotMinutes: Number.parseInt(scheduleLoad.slotMinutes, 10) || 60,
       }
     : {
         start: null,
+        requestedDays: 0,
         chunkDays: 7,
         totalDays: 0,
         endpoint: "",
+        slotMinutes: 60,
       };
-  if (Number.isNaN(scheduleWindow.totalDays) || scheduleWindow.totalDays < 1) {
-    scheduleWindow.totalDays = 7;
+  if (
+    Number.isNaN(scheduleWindow.requestedDays) ||
+    scheduleWindow.requestedDays < 1
+  ) {
+    scheduleWindow.requestedDays = 7;
   }
-  if (scheduleWindow.chunkDays < 1 || scheduleWindow.chunkDays > 31) {
-    scheduleWindow.chunkDays = 7;
-  }
-  scheduleWindow.chunkDays = Math.min(
+  scheduleWindow.requestedDays = Math.min(
     31,
-    Math.max(1, scheduleWindow.chunkDays),
+    Math.max(1, scheduleWindow.requestedDays),
   );
+  scheduleWindow.totalDays = scheduleWindow.requestedDays;
+  scheduleWindow.chunkDays = scheduleWindow.requestedDays;
 
   const nextDayEndpoint = scheduleWindow.endpoint
     ? scheduleWindow.endpoint.replace("/schedule-rows", "/schedule-next-day")
     : "";
   const jumpPrevDayBtn = document.querySelector("#jump-prev-non-empty");
   const jumpNextDayBtn = document.querySelector("#jump-next-non-empty");
+  const scrollPrevDayBtn = form.querySelector("#scroll-prev-day");
+  const scrollNextDayBtn = form.querySelector("#scroll-next-day");
+  const jumpNav = document.querySelector("nav.jump-form");
+  const inspectorBar = form.querySelector(".editor-inspector");
+  const topNav = document.querySelector(".top");
+  const subpageNav = document.querySelector(".subpage-nav");
 
   // if this is missing, we're on a template page so everything is true
   const perms = json_from_script_or("user-perms", {
@@ -1681,6 +2581,9 @@ function wire_cell_editors() {
   const device_groups = new Set(json_from_script_or("device-groups", []));
   const colors = json_from_script_or("group-colors", {});
   const human_hours = json_from_script_or("human-hours", null);
+  const offHours = new Set(
+    json_from_script_or("schedule-off-hours", []).map((hour) => String(hour)),
+  );
 
   const tech_members = new Set(datalist_ids_or("tech", []));
   const train_members = new Set(datalist_ids_or("train", []));
@@ -1708,62 +2611,464 @@ function wire_cell_editors() {
 
   // keep track of changed and invalid cells
   const cells = new Map();
-  const gridCells = [];
   const changed = new Set();
   const any_changed = () => Boolean(changed.size);
   const invalid = new Set();
   const any_invalid = () => Boolean(invalid.size);
   const changedInvalid = new Set();
+  serverErrorState.clear();
 
   // keep caption in sync with cell updates
   const caption = document.querySelector("#caption");
   const update_caption = (which, bool) => {
+    if (!caption) {
+      return;
+    }
     caption.dataset[which] = from_bool(bool);
   };
+  const inspectorState = {
+    target: "Select a time slot",
+    summary: "no slot selected",
+    mode: "read only",
+    pending: "0 changes",
+    errors: "0 errors",
+  };
+  const inspectorField = (detailClass, fallbackClass = detailClass) =>
+    document.querySelector(`.${detailClass}, .${fallbackClass}`);
   const inspector = {
-    target: document.querySelector(".editor-inspector-target"),
-    summary: document.querySelector(".editor-inspector-summary"),
-    mode: document.querySelector(".editor-inspector-mode"),
-    pending: document.querySelector(".editor-inspector-pending"),
-    errors: document.querySelector(".editor-inspector-errors"),
-    detailTarget: document.querySelector(".editor-inspector-detail-target"),
-    detailSummary: document.querySelector(".editor-inspector-detail-summary"),
-    detailMode: document.querySelector(".editor-inspector-detail-mode"),
-    detailPending: document.querySelector(".editor-inspector-detail-pending"),
-    detailErrors: document.querySelector(".editor-inspector-detail-errors"),
+    detailTarget: inspectorField(
+      "editor-inspector-detail-target",
+      "editor-inspector-target",
+    ),
+    detailSummary: inspectorField(
+      "editor-inspector-detail-summary",
+      "editor-inspector-summary",
+    ),
+    detailMode: inspectorField(
+      "editor-inspector-detail-mode",
+      "editor-inspector-mode",
+    ),
+    detailPending: inspectorField(
+      "editor-inspector-detail-pending",
+      "editor-inspector-pending",
+    ),
+    detailErrors: inspectorField(
+      "editor-inspector-detail-errors",
+      "editor-inspector-errors",
+    ),
+    open: document.querySelector("#inspector-open"),
+    review: document.querySelector("#review-pending"),
+    save: document.querySelector("#inspector-save"),
+    errorsToggle: document.querySelector("#inspector-errors-toggle"),
+    errorList: document.querySelector("#inspector-error-list"),
+    slotEditor: document.querySelector("#inspector-slot-editor"),
+    durationRoot: document.querySelector("#inspector-duration"),
+    durationButtons: [
+      ...document.querySelectorAll(
+        "#inspector-duration [data-duration-minutes]",
+      ),
+    ],
+    endTimeSelect: document.querySelector("#inspector-end-slot"),
+    previewStart: document.querySelector("#inspector-preview-start"),
+    previewEnd: document.querySelector("#inspector-preview-end"),
+    previewCount: document.querySelector("#inspector-preview-count"),
+  };
+  const inspectorContainer = document.querySelector(
+    "#inspector-dialog-container",
+  );
+  const inspectorDialog =
+    document.querySelector("#inspector-dialog-container")
+      ?.__schedulerInspectorDialog ?? null;
+  const inspectorDialogOpen = () =>
+    Boolean(
+      activeEntry &&
+        inspectorContainer &&
+        inspector.slotEditor &&
+        inspector.slotEditor.hidden === false,
+    );
+  const set_inspector_action_label = (editable) => {
+    if (!inspector.open) {
+      return;
+    }
+    const label = inspector.open.querySelector(".legend-toggle-label");
+    if (!label) {
+      return;
+    }
+    label.innerText = editable ? "View/Edit" : "View";
+    inspector.open.dataset.editMode = editable ? "editable" : "readonly";
+  };
+  const render_slot_errors = (rows) => {
+    if (!inspector.errorList || !inspector.errorsToggle) {
+      inspectorState.errors = `${rows.length} error${
+        rows.length == 1 ? "" : "s"
+      }`;
+      sync_inspector_modal();
+      return;
+    }
+    inspector.errorList.replaceChildren();
+    inspectorState.errors = `${rows.length} error${
+      rows.length == 1 ? "" : "s"
+    }`;
+    if (rows.length == 0) {
+      inspector.errorsToggle.hidden = true;
+      inspector.errorList.hidden = true;
+      inspector.errorsToggle.setAttribute("aria-expanded", "false");
+      sync_inspector_modal();
+      return;
+    }
+    for (const { source, message } of rows) {
+      const item = document.createElement("li");
+      const sourceNode = document.createElement("strong");
+      sourceNode.textContent = `${source}: `;
+      item.append(sourceNode, String(message));
+      inspector.errorList.append(item);
+    }
+    const errorsLabel = inspector.errorsToggle.querySelector(
+      ".legend-toggle-label",
+    );
+    if (errorsLabel) {
+      errorsLabel.innerText = `Errors (${rows.length})`;
+    }
+    inspector.errorsToggle.setAttribute("aria-expanded", "false");
+    inspector.errorsToggle.hidden = false;
+    inspector.errorList.hidden = !(
+      inspector.errorsToggle.getAttribute("aria-expanded") == "true"
+    );
+    inspector.errorsToggle.disabled = false;
+    sync_inspector_modal();
   };
   const sync_inspector_modal = () => {
-    if (inspector.detailTarget && inspector.target) {
-      inspector.detailTarget.innerText = inspector.target.innerText;
+    if (inspector.detailTarget) {
+      inspector.detailTarget.innerText = inspectorState.target;
     }
-    if (inspector.detailSummary && inspector.summary) {
-      inspector.detailSummary.innerText = inspector.summary.innerText;
+    if (inspector.detailSummary) {
+      inspector.detailSummary.innerText = inspectorState.summary;
     }
-    if (inspector.detailMode && inspector.mode) {
-      inspector.detailMode.innerText = inspector.mode.innerText;
+    if (inspector.detailMode) {
+      inspector.detailMode.innerText = inspectorState.mode;
     }
-    if (inspector.detailPending && inspector.pending) {
-      inspector.detailPending.innerText = inspector.pending.innerText;
+    if (inspector.detailPending) {
+      inspector.detailPending.innerText = inspectorState.pending;
     }
-    if (inspector.detailErrors && inspector.errors) {
-      inspector.detailErrors.innerText = inspector.errors.innerText;
+    if (inspector.detailErrors) {
+      inspector.detailErrors.innerText = inspectorState.errors;
     }
   };
   const loadStatus = document.querySelector("#editor-load-status");
   const rows = [...container.querySelectorAll("tr[data-hour]")];
   const rowsByHour = new Map(rows.map((row) => [row.dataset.hour, row]));
+  for (const row of rows) {
+    row.dataset.offHour = offHours.has(String(row.dataset.hour))
+      ? "true"
+      : "false";
+  }
+  let queue_floating_header_sync = () => {};
+  let queue_placeholder_shadow_sync = () => {};
   let loadErrorMessage = "";
+  const is_slot_visibly_empty = (entry, cell) => {
+    if (!entry) {
+      return false;
+    }
+    if (
+      entry.dataset.changed == "true" ||
+      entry.dataset.error == "true" ||
+      "serverErrors" in entry.dataset
+    ) {
+      return false;
+    }
+    const entryId = String(entry.dataset.id ?? "");
+    const resolvedCell =
+      cell ?? (entryId != "" ? cells.get(entryId) ?? null : null);
+    if (resolvedCell) {
+      if (resolvedCell.changed || resolvedCell.invalid || resolvedCell.locked) {
+        return false;
+      }
+      const hasGroup = String(resolvedCell.group?.value ?? "").trim() != "";
+      const hasMember = String(resolvedCell.member?.value ?? "").trim() != "";
+      const hasSupport = Object.values(resolvedCell.sr ?? {}).some((sr) =>
+        Boolean(sr.requested?.checked),
+      );
+      return !hasGroup && !hasMember && !hasSupport;
+    }
+
+    const group = String(
+      entry.querySelector("input[id^=grp-]")?.value ?? "",
+    ).trim();
+    const member = String(
+      entry.querySelector("input[id^=mem-]")?.value ?? "",
+    ).trim();
+    const hasSupport = [
+      ...entry.querySelectorAll("fieldset[data-sr] .requested"),
+    ]
+      .filter((elm) => elm instanceof HTMLInputElement)
+      .some((elm) => elm.checked);
+    return group == "" && member == "" && !hasSupport;
+  };
+  const sync_slot_empty_state = (entry, cell = null) => {
+    if (!(entry instanceof HTMLElement)) {
+      return false;
+    }
+    const empty = is_slot_visibly_empty(entry, cell);
+    entry.dataset.empty = from_bool(empty);
+    const hostCell = entry.closest("td");
+    if (hostCell instanceof HTMLTableCellElement) {
+      hostCell.dataset.empty = from_bool(empty);
+    }
+    return empty;
+  };
+  const sync_row_visibility = () => {
+    for (const row of rows) {
+      const slots = [...row.querySelectorAll("td")].slice(
+        0,
+        scheduleWindow.totalDays,
+      );
+      for (const td of slots) {
+        const entry = td.querySelector("entry-cell");
+        if (!entry) {
+          delete td.dataset.empty;
+          continue;
+        }
+        sync_slot_empty_state(entry);
+      }
+    }
+    queue_floating_header_sync();
+    queue_placeholder_shadow_sync();
+  };
+  const tableHeadRow = scrollContainer.querySelector("thead tr");
+  const HEADER_PREVIEW_OVERSCAN_COLS = remoteScheduleRows ? 2 : 0;
+  const append_header_preview_columns = (count = 0) => {
+    if (!(tableHeadRow instanceof HTMLTableRowElement)) {
+      return;
+    }
+    const safeCount = Math.max(0, Number.parseInt(String(count ?? 0), 10) || 0);
+    if (safeCount == 0) {
+      return;
+    }
+    for (let i = 0; i < safeCount; i += 1) {
+      const th = document.createElement("th");
+      th.hidden = true;
+      th.dataset.bufferCol = "true";
+      tableHeadRow.append(th);
+      for (const row of rows) {
+        const td = document.createElement("td");
+        td.hidden = true;
+        td.dataset.bufferCol = "true";
+        row.append(td);
+      }
+    }
+  };
+  const baseRenderedDayColumns =
+    tableHeadRow instanceof HTMLTableRowElement
+      ? Math.max(1, tableHeadRow.querySelectorAll("th").length)
+      : 1;
+  append_header_preview_columns(HEADER_PREVIEW_OVERSCAN_COLS);
   const headerCells = [
     ...scrollContainer.querySelectorAll("thead th:not(:first-child)"),
+  ];
+  const scrollShell = scrollContainer.closest(".editor-scroll-shell");
+  const MAX_RENDERED_DAY_COLUMNS = Math.max(1, headerCells.length);
+  const MAX_REQUESTED_DAY_COLUMNS = Math.max(1, baseRenderedDayColumns);
+  const MIN_VISIBLE_DAY_COLUMN_PX = 144;
+  const MIN_LEADING_COLUMN_PX = 56;
+  const MAX_LEADING_COLUMN_PX = 96;
+  const DEFAULT_LEADING_COLUMN_PX = 72;
+  let lockedLeadingColumnWidthPx = 0;
+  let headerTranslatePx = 0;
+  let headerPreviewOffsetPx = 0;
+  let headerSettleTimer = 0;
+  let headerSettleInFlight = false;
+  let movementSkeletonActive = false;
+  let floatingHeader = null;
+  let floatingHeaderTable = null;
+  let floatingHeaderCells = [];
+  if (
+    scrollShell instanceof HTMLElement &&
+    tableHeadRow instanceof HTMLTableRowElement
+  ) {
+    floatingHeader = document.createElement("div");
+    floatingHeader.className = "editor-floating-header";
+    floatingHeader.hidden = true;
+    floatingHeader.setAttribute("aria-hidden", "true");
+
+    floatingHeaderTable = document.createElement("table");
+    floatingHeaderTable.className = "editor-floating-header-table";
+    const floatingHead = document.createElement("thead");
+    floatingHead.append(tableHeadRow.cloneNode(true));
+    floatingHeaderTable.append(floatingHead);
+    floatingHeader.append(floatingHeaderTable);
+    scrollShell.append(floatingHeader);
+    floatingHeaderCells = [
+      ...floatingHeader.querySelectorAll("thead th:not(:first-child)"),
+    ];
+  }
+  const clamp_requested_days = (days) => {
+    const parsed = Number.parseInt(days, 10);
+    if (Number.isNaN(parsed)) {
+      return 1;
+    }
+    return Math.min(MAX_REQUESTED_DAY_COLUMNS, Math.max(1, parsed));
+  };
+  if (!remoteScheduleRows) {
+    scheduleWindow.requestedDays = MAX_RENDERED_DAY_COLUMNS;
+    scheduleWindow.totalDays = MAX_RENDERED_DAY_COLUMNS;
+  }
+  scheduleWindow.requestedDays = clamp_requested_days(
+    scheduleWindow.requestedDays,
+  );
+  const clamp_leading_width_px = (value) => {
+    if (!Number.isFinite(value) || value <= 0) {
+      return DEFAULT_LEADING_COLUMN_PX;
+    }
+    return Math.min(
+      MAX_LEADING_COLUMN_PX,
+      Math.max(MIN_LEADING_COLUMN_PX, Math.round(value)),
+    );
+  };
+  const measured_leading_width_px = () => {
+    const firstRowLead = rows[0]?.querySelector("th");
+    const sources = [firstRowLead, tableHeadRow?.children?.[0]];
+    for (const source of sources) {
+      if (!(source instanceof HTMLElement)) {
+        continue;
+      }
+      const width = source.getBoundingClientRect().width;
+      if (Number.isFinite(width) && width > 0) {
+        return width;
+      }
+    }
+    return DEFAULT_LEADING_COLUMN_PX;
+  };
+  const leading_column_width_px = ({ refresh = false } = {}) => {
+    if (refresh || lockedLeadingColumnWidthPx <= 0) {
+      lockedLeadingColumnWidthPx = clamp_leading_width_px(
+        measured_leading_width_px(),
+      );
+    }
+    return lockedLeadingColumnWidthPx;
+  };
+  const compute_visible_day_count = (
+    requestedDays = scheduleWindow.requestedDays,
+  ) => {
+    const requested = clamp_requested_days(requestedDays);
+    if (!remoteScheduleRows) {
+      return MAX_RENDERED_DAY_COLUMNS;
+    }
+    if (scrollContainer.clientWidth <= 0) {
+      return requested;
+    }
+    const available = Math.max(
+      0,
+      scrollContainer.clientWidth - leading_column_width_px() - 2,
+    );
+    const fit = Math.max(1, Math.floor(available / MIN_VISIBLE_DAY_COLUMN_PX));
+    return Math.max(1, Math.min(requested, fit));
+  };
+  const apply_visible_day_layout = ({
+    requestedDays = scheduleWindow.requestedDays,
+  } = {}) => {
+    const previousDays = Math.max(1, scheduleWindow.totalDays || 1);
+    scheduleWindow.requestedDays = clamp_requested_days(requestedDays);
+    const nextDays = compute_visible_day_count(scheduleWindow.requestedDays);
+    scheduleWindow.totalDays = nextDays;
+    scheduleWindow.chunkDays = Math.min(31, Math.max(1, nextDays));
+    const leadingWidthPx = Math.max(
+      MIN_LEADING_COLUMN_PX,
+      Math.round(leading_column_width_px()),
+    );
+    const leadingWidthText = `${leadingWidthPx}px`;
+    if (tableHeadRow instanceof HTMLTableRowElement) {
+      const leadingCell = tableHeadRow.children[0];
+      if (leadingCell instanceof HTMLElement) {
+        leadingCell.style.width = leadingWidthText;
+        leadingCell.style.minWidth = leadingWidthText;
+        leadingCell.style.maxWidth = leadingWidthText;
+      }
+    }
+    for (const row of rows) {
+      const leadingCell = row.querySelector("th");
+      if (!(leadingCell instanceof HTMLElement)) {
+        continue;
+      }
+      leadingCell.style.width = leadingWidthText;
+      leadingCell.style.minWidth = leadingWidthText;
+      leadingCell.style.maxWidth = leadingWidthText;
+    }
+
+    const available = Math.max(
+      1,
+      scrollContainer.clientWidth - leadingWidthPx - 2,
+    );
+    const dayWidthPx = Math.max(
+      96,
+      Math.floor(available / scheduleWindow.totalDays),
+    );
+    const widthText = `${dayWidthPx}px`;
+
+    const sync_day_cell = (cell, visible) => {
+      if (!(cell instanceof HTMLElement)) {
+        return;
+      }
+      cell.hidden = !visible;
+      if (!visible) {
+        cell.style.width = "";
+        cell.style.minWidth = "";
+        cell.style.maxWidth = "";
+        return;
+      }
+      cell.style.width = widthText;
+      cell.style.minWidth = widthText;
+      cell.style.maxWidth = widthText;
+    };
+
+    for (let col = 0; col < MAX_RENDERED_DAY_COLUMNS; col += 1) {
+      const visible = col < scheduleWindow.totalDays;
+      sync_day_cell(headerCells[col], visible);
+      sync_day_cell(floatingHeaderCells[col], visible);
+      for (const row of rows) {
+        const td = row.querySelectorAll("td")[col];
+        sync_day_cell(td, visible);
+      }
+    }
+    scrollContainer.scrollLeft = 0;
+
+    const grid = editor.scheduleGrid;
+    if (grid) {
+      const maxVisibleCol = Math.max(0, scheduleWindow.totalDays - 1);
+      if (Number.isInteger(grid.col()) && grid.col() > maxVisibleCol) {
+        grid.select(grid.row(), maxVisibleCol);
+      }
+    }
+
+    return {
+      changed: nextDays != previousDays,
+      grew: nextDays > previousDays,
+      previousDays,
+      nextDays,
+    };
+  };
+  const HEADER_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const HEADER_MONTHS = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
   ];
   const formatHeaderLabel = (date) => {
     if (!(date instanceof Date)) {
       return "";
     }
-    return `${ymd(date)} ${date.toLocaleDateString("en-US", {
-      weekday: "short",
-      timeZone: "UTC",
-    })}`;
+    const weekday = HEADER_WEEKDAYS[date.getUTCDay()] ?? "";
+    const month = HEADER_MONTHS[date.getUTCMonth()] ?? "";
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${weekday} (${month}-${day})`;
   };
   const startDate = () => {
     if (scheduleWindow.start == null) {
@@ -1790,23 +3095,310 @@ function wire_cell_editors() {
     return add_days(first, parsed);
   };
 
-  const syncHeaderDates = () => {
+  const syncHeaderDates = ({
+    dayOffset = 0,
+    translatePx = 0,
+    leadingOverscanCols = 0,
+    trailingOverscanCols = 0,
+    columnWidthPx = 0,
+  } = {}) => {
     const first = startDate();
+    if (tableHeadRow instanceof HTMLTableRowElement) {
+      tableHeadRow.style.transform =
+        translatePx == 0 ? "" : `translateX(${Math.round(translatePx)}px)`;
+    }
+    headerTranslatePx = translatePx;
     if (first == null) {
       return;
     }
-    for (let i = 0; i < headerCells.length; i += 1) {
-      const date = add_days(first, i);
-      const th = headerCells[i];
-      if (!th) {
-        continue;
+    const availableOverscan = Math.max(
+      0,
+      MAX_RENDERED_DAY_COLUMNS - scheduleWindow.totalDays,
+    );
+    const safeLeadingOverscan = Math.max(
+      0,
+      Math.min(
+        availableOverscan,
+        Number.parseInt(String(leadingOverscanCols ?? 0), 10) || 0,
+      ),
+    );
+    const safeTrailingOverscan = Math.max(
+      0,
+      Math.min(
+        availableOverscan - safeLeadingOverscan,
+        Number.parseInt(String(trailingOverscanCols ?? 0), 10) || 0,
+      ),
+    );
+    const visibleHeaders = Math.max(
+      1,
+      Math.min(
+        MAX_RENDERED_DAY_COLUMNS,
+        scheduleWindow.totalDays + safeLeadingOverscan + safeTrailingOverscan,
+      ),
+    );
+    for (const cellSet of [headerCells, floatingHeaderCells]) {
+      for (let i = 0; i < cellSet.length; i += 1) {
+        const visible = i < visibleHeaders;
+        const th = cellSet[i];
+        if (!th) {
+          continue;
+        }
+        th.hidden = !visible;
+        if (!visible) {
+          th.removeAttribute("data-date");
+          th.innerText = "";
+          if (th.dataset.bufferCol == "true") {
+            th.style.width = "";
+            th.style.minWidth = "";
+            th.style.maxWidth = "";
+          }
+          continue;
+        }
+        const date = add_days(first, i + dayOffset - safeLeadingOverscan);
+        th.innerText = formatHeaderLabel(date);
+        th.dataset.date = ymd(date);
+        if (i >= scheduleWindow.totalDays && columnWidthPx > 0) {
+          const px = `${Math.round(columnWidthPx)}px`;
+          th.style.width = px;
+          th.style.minWidth = px;
+          th.style.maxWidth = px;
+        }
       }
-      th.innerText = formatHeaderLabel(date);
-      th.dataset.date = ymd(date);
     }
+    queue_floating_header_sync();
   };
 
+  apply_visible_day_layout();
   syncHeaderDates();
+  const parse_root_px_var = (name) => {
+    const value = window
+      .getComputedStyle(document.documentElement)
+      .getPropertyValue(name);
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return parsed;
+  };
+  const sticky_header_top_px = () => {
+    return (
+      parse_root_px_var("--scheduler-sticky-top") +
+      parse_root_px_var("--scheduler-jump-height") +
+      parse_root_px_var("--scheduler-inspector-height") +
+      8
+    );
+  };
+  let floatingHeaderSyncHandle = 0;
+  const sync_floating_header = () => {
+    const set_header_reserve = (height) => {
+      if (!(scrollShell instanceof HTMLElement)) {
+        return;
+      }
+      scrollShell.style.setProperty(
+        "--floating-header-reserve",
+        `${Math.max(0, Math.round(height))}px`,
+      );
+    };
+    const set_edge_button_layout = (
+      visible,
+      { top = 0, shellRect = null } = {},
+    ) => {
+      const buttons = [scrollPrevDayBtn, scrollNextDayBtn].filter(
+        (button) => button instanceof HTMLButtonElement,
+      );
+      if (buttons.length == 0) {
+        return;
+      }
+      for (const button of buttons) {
+        button.style.position = "fixed";
+      }
+      if (!visible || !(shellRect instanceof DOMRect)) {
+        for (const button of buttons) {
+          button.style.opacity = "0";
+          button.style.pointerEvents = "none";
+        }
+        return;
+      }
+      const topPx = Math.max(0, Math.round(top));
+      const leftPx = Math.max(6, Math.round(shellRect.left + 6));
+      const rightPx = Math.max(
+        6,
+        Math.round(window.innerWidth - shellRect.right + 6),
+      );
+      if (scrollPrevDayBtn instanceof HTMLButtonElement) {
+        scrollPrevDayBtn.style.top = `${topPx}px`;
+        scrollPrevDayBtn.style.left = `${leftPx}px`;
+        scrollPrevDayBtn.style.right = "auto";
+        scrollPrevDayBtn.style.opacity = "1";
+        scrollPrevDayBtn.style.pointerEvents = "";
+      }
+      if (scrollNextDayBtn instanceof HTMLButtonElement) {
+        scrollNextDayBtn.style.top = `${topPx}px`;
+        scrollNextDayBtn.style.right = `${rightPx}px`;
+        scrollNextDayBtn.style.left = "auto";
+        scrollNextDayBtn.style.opacity = "1";
+        scrollNextDayBtn.style.pointerEvents = "";
+      }
+    };
+    if (
+      !(floatingHeader instanceof HTMLElement) ||
+      !(floatingHeaderTable instanceof HTMLTableElement) ||
+      !(tableHeadRow instanceof HTMLTableRowElement)
+    ) {
+      set_header_reserve(0);
+      set_edge_button_layout(false);
+      return;
+    }
+    const sourceCells = [...tableHeadRow.children];
+    const targetCells = [
+      ...floatingHeaderTable.querySelectorAll("thead tr > :is(th, td)"),
+    ];
+    if (sourceCells.length == 0 || sourceCells.length != targetCells.length) {
+      floatingHeader.hidden = true;
+      set_header_reserve(0);
+      set_edge_button_layout(false);
+      return;
+    }
+    const stickyTop = sticky_header_top_px();
+    const shellRect = scrollContainer.getBoundingClientRect();
+    const tableRect = editor.getBoundingClientRect();
+    const headerRect = tableHeadRow.getBoundingClientRect();
+    const visible =
+      shellRect.top <= stickyTop &&
+      tableRect.bottom > stickyTop + Math.max(1, headerRect.height);
+    const controlsVisible =
+      tableRect.bottom > 0 &&
+      shellRect.top < window.innerHeight &&
+      shellRect.width > 0;
+    const controlsTop = visible
+      ? stickyTop + headerRect.height + 6
+      : shellRect.top + headerRect.height + 6;
+    set_edge_button_layout(controlsVisible, {
+      top: controlsTop,
+      shellRect,
+    });
+    floatingHeader.hidden = !visible;
+    if (!visible) {
+      set_header_reserve(0);
+      return;
+    }
+    set_header_reserve(headerRect.height);
+
+    floatingHeader.style.top = `${Math.round(stickyTop)}px`;
+    floatingHeader.style.left = `${Math.round(shellRect.left)}px`;
+    floatingHeader.style.width = `${Math.round(shellRect.width)}px`;
+    floatingHeader.style.height = `${Math.ceil(headerRect.height)}px`;
+
+    const tableWidth = Math.max(editor.scrollWidth, shellRect.width);
+    floatingHeaderTable.style.width = `${Math.round(tableWidth)}px`;
+    floatingHeaderTable.style.transform = `translateX(${Math.round(
+      -scrollContainer.scrollLeft + headerTranslatePx,
+    )}px)`;
+
+    for (let i = 0; i < sourceCells.length; i += 1) {
+      const sourceCell = sourceCells[i];
+      const targetCell = targetCells[i];
+      if (!sourceCell || !targetCell) {
+        continue;
+      }
+      targetCell.hidden = sourceCell.hidden;
+      if (sourceCell.hidden) {
+        continue;
+      }
+      const width = sourceCell.getBoundingClientRect().width;
+      if (!Number.isFinite(width) || width <= 0) {
+        continue;
+      }
+      const px = `${Math.round(width)}px`;
+      targetCell.style.width = px;
+      targetCell.style.minWidth = px;
+      targetCell.style.maxWidth = px;
+      targetCell.textContent = sourceCell.textContent;
+    }
+  };
+  queue_floating_header_sync = () => {
+    if (floatingHeaderSyncHandle != 0) {
+      return;
+    }
+    floatingHeaderSyncHandle = window.requestAnimationFrame(() => {
+      floatingHeaderSyncHandle = 0;
+      sync_floating_header();
+    });
+  };
+  const update_sticky_offsets = () => {
+    let topOffset = 8;
+    if (
+      topNav instanceof HTMLElement &&
+      window.getComputedStyle(topNav).position == "sticky"
+    ) {
+      topOffset += Math.round(topNav.getBoundingClientRect().height);
+    }
+    if (
+      subpageNav instanceof HTMLElement &&
+      window.getComputedStyle(subpageNav).position == "sticky"
+    ) {
+      topOffset += Math.round(subpageNav.getBoundingClientRect().height);
+    }
+    document.documentElement.style.setProperty(
+      "--scheduler-sticky-top",
+      `${Math.max(0, topOffset)}px`,
+    );
+    const jumpHeight =
+      jumpNav instanceof HTMLElement &&
+      window.getComputedStyle(jumpNav).position == "sticky"
+        ? Math.round(jumpNav.getBoundingClientRect().height)
+        : 0;
+    document.documentElement.style.setProperty(
+      "--scheduler-jump-height",
+      `${Math.max(0, jumpHeight)}px`,
+    );
+    const inspectorHeight =
+      inspectorBar instanceof HTMLElement &&
+      window.getComputedStyle(inspectorBar).position == "sticky"
+        ? Math.round(inspectorBar.getBoundingClientRect().height)
+        : 0;
+    document.documentElement.style.setProperty(
+      "--scheduler-inspector-height",
+      `${Math.max(0, inspectorHeight)}px`,
+    );
+    queue_floating_header_sync();
+  };
+  update_sticky_offsets();
+  window.addEventListener("resize", update_sticky_offsets, { passive: true });
+  window.addEventListener("resize", queue_placeholder_shadow_sync, {
+    passive: true,
+  });
+  window.addEventListener("scroll", queue_floating_header_sync, {
+    passive: true,
+  });
+  window.addEventListener("scroll", queue_placeholder_shadow_sync, {
+    passive: true,
+  });
+  scrollContainer.addEventListener("scroll", queue_floating_header_sync, {
+    passive: true,
+  });
+  if ("ResizeObserver" in window) {
+    const stickyObserver = new ResizeObserver(() => {
+      window.requestAnimationFrame(() => {
+        update_sticky_offsets();
+        queue_floating_header_sync();
+      });
+    });
+    if (topNav instanceof HTMLElement) {
+      stickyObserver.observe(topNav);
+    }
+    if (subpageNav instanceof HTMLElement) {
+      stickyObserver.observe(subpageNav);
+    }
+    if (jumpNav instanceof HTMLElement) {
+      stickyObserver.observe(jumpNav);
+    }
+    if (inspectorBar instanceof HTMLElement) {
+      stickyObserver.observe(inspectorBar);
+    }
+    stickyObserver.observe(scrollContainer);
+    stickyObserver.observe(editor);
+  }
 
   const dayLabelForCol = (col) => {
     const date = dateForCol(col);
@@ -1815,79 +3407,647 @@ function wire_cell_editors() {
     }
     return formatHeaderLabel(date);
   };
-  let activeEntry = null;
-
-  const rebuildCells = () => {
-    gridCells.length = 0;
-    for (const row of rows) {
-      const rowIndex = gridCells.push([]) - 1;
-      row.querySelectorAll("td").forEach((col) => {
-        const colIndex = gridCells[rowIndex].push(col) - 1;
-        col.setAttribute("tabindex", "-1");
-        col.setAttribute("role", "gridcell");
-        col.dataset.row = rowIndex;
-        col.dataset.col = colIndex;
-      });
+  const hasHorizontalOverflow = () => {
+    return scrollContainer.scrollWidth > scrollContainer.clientWidth + 1;
+  };
+  const atLeftEdge = () => {
+    return scrollContainer.scrollLeft <= 1;
+  };
+  const atRightEdge = () => {
+    return (
+      scrollContainer.scrollLeft + scrollContainer.clientWidth >=
+      scrollContainer.scrollWidth - 1
+    );
+  };
+  const oneDayScrollAmount = () => {
+    const firstCell = scrollContainer.querySelector("tbody td:not([hidden])");
+    const fallback = Math.max(
+      160,
+      Math.round(scrollContainer.clientWidth * 0.25),
+    );
+    if (!firstCell) {
+      return fallback;
     }
-    if (editor?.scheduleGrid != null) {
-      editor.scheduleGrid.cells = gridCells;
+    const width = firstCell.getBoundingClientRect().width;
+    if (!Number.isFinite(width) || width <= 0) {
+      return fallback;
+    }
+    return Math.max(120, Math.round(width + 4));
+  };
+  const visible_day_column_width_px = () => {
+    for (const header of headerCells) {
+      if (!(header instanceof HTMLElement) || header.hidden) {
+        continue;
+      }
+      const width = header.getBoundingClientRect().width;
+      if (Number.isFinite(width) && width > 0) {
+        return width;
+      }
+    }
+    return Math.max(1, oneDayScrollAmount());
+  };
+  const compute_header_preview_overscan = () => {
+    const available = Math.max(
+      0,
+      MAX_RENDERED_DAY_COLUMNS - scheduleWindow.totalDays,
+    );
+    if (available <= 0) {
+      return { leading: 0, trailing: 0 };
+    }
+    if (available == 1) {
+      if (headerPreviewOffsetPx > 0) {
+        return { leading: 0, trailing: 1 };
+      }
+      return { leading: 1, trailing: 0 };
+    }
+    return { leading: 1, trailing: 1 };
+  };
+  const sync_preview_body_columns = ({
+    visibleCols = scheduleWindow.totalDays,
+    columnWidthPx = 0,
+  } = {}) => {
+    if (!remoteScheduleRows) {
+      return;
+    }
+    const safeVisibleCols = Math.max(
+      1,
+      Math.min(
+        MAX_RENDERED_DAY_COLUMNS,
+        Number.parseInt(String(visibleCols ?? scheduleWindow.totalDays), 10) ||
+          scheduleWindow.totalDays,
+      ),
+    );
+    const widthText =
+      columnWidthPx > 0 ? `${Math.max(1, Math.round(columnWidthPx))}px` : "";
+    for (let col = 0; col < MAX_RENDERED_DAY_COLUMNS; col += 1) {
+      const visible = col < safeVisibleCols;
+      for (const row of rows) {
+        const td = row.querySelectorAll("td")[col];
+        if (!(td instanceof HTMLElement)) {
+          continue;
+        }
+        td.hidden = !visible;
+        if (!visible) {
+          td.style.width = "";
+          td.style.minWidth = "";
+          td.style.maxWidth = "";
+          continue;
+        }
+        if (widthText == "") {
+          continue;
+        }
+        td.style.width = widthText;
+        td.style.minWidth = widthText;
+        td.style.maxWidth = widthText;
+      }
     }
   };
+  const apply_header_preview = () => {
+    if (!remoteScheduleRows) {
+      return;
+    }
+    const colWidth = Math.max(1, visible_day_column_width_px());
+    const dayOffset = Math.trunc(headerPreviewOffsetPx / colWidth);
+    const remainderPx = headerPreviewOffsetPx - dayOffset * colWidth;
+    const overscan = compute_header_preview_overscan();
+    syncHeaderDates({
+      dayOffset,
+      translatePx: -remainderPx - overscan.leading * colWidth,
+      leadingOverscanCols: overscan.leading,
+      trailingOverscanCols: overscan.trailing,
+      columnWidthPx: colWidth,
+    });
+    sync_preview_body_columns({
+      visibleCols:
+        scheduleWindow.totalDays + overscan.leading + overscan.trailing,
+      columnWidthPx: colWidth,
+    });
+  };
+  const clear_header_preview = () => {
+    headerPreviewOffsetPx = 0;
+    sync_preview_body_columns({
+      visibleCols: scheduleWindow.totalDays,
+    });
+    syncHeaderDates();
+  };
+  const clear_header_settle_timer = () => {
+    if (headerSettleTimer == 0) {
+      return;
+    }
+    window.clearTimeout(headerSettleTimer);
+    headerSettleTimer = 0;
+  };
+  const updateEdgeScrollButtons = () => {
+    if (remoteScheduleRows) {
+      if (scrollPrevDayBtn) {
+        scrollPrevDayBtn.disabled = false;
+      }
+      if (scrollNextDayBtn) {
+        scrollNextDayBtn.disabled = false;
+      }
+      return;
+    }
+    const overflow = hasHorizontalOverflow();
+    if (scrollPrevDayBtn) {
+      scrollPrevDayBtn.disabled = !overflow || atLeftEdge();
+    }
+    if (scrollNextDayBtn) {
+      scrollNextDayBtn.disabled = !overflow || atRightEdge();
+    }
+  };
+  const row_is_in_viewport = (row, margin = 48) => {
+    if (!(row instanceof HTMLTableRowElement)) {
+      return false;
+    }
+    const rect = row.getBoundingClientRect();
+    return rect.bottom >= -margin && rect.top <= window.innerHeight + margin;
+  };
+  const build_slot_placeholder = ({ shadow = false } = {}) => {
+    const placeholder = document.createElement("div");
+    placeholder.className = shadow
+      ? "slot-placeholder slot-skeleton"
+      : "slot-placeholder";
+    placeholder.setAttribute("aria-hidden", "true");
+    return placeholder;
+  };
+  const reset_row_placeholders = (row, { shadow = false } = {}) => {
+    row.querySelectorAll("td:not([data-buffer-col='true'])").forEach((cell) => {
+      cell.dataset.placeholder = "true";
+      cell.replaceChildren(build_slot_placeholder({ shadow }));
+    });
+  };
+  const reset_window_placeholders = () => {
+    for (const row of rows) {
+      reset_row_placeholders(row, { shadow: row_is_in_viewport(row) });
+    }
+  };
+  const sync_placeholder_shadow = () => {
+    for (const row of rows) {
+      const shadow = row_is_in_viewport(row);
+      row
+        .querySelectorAll("td[data-placeholder='true'] > .slot-placeholder")
+        .forEach((elm) => {
+          elm.classList.toggle("slot-skeleton", shadow);
+        });
+    }
+  };
+  let placeholderShadowSyncHandle = 0;
+  queue_placeholder_shadow_sync = () => {
+    if (placeholderShadowSyncHandle != 0) {
+      return;
+    }
+    placeholderShadowSyncHandle = window.requestAnimationFrame(() => {
+      placeholderShadowSyncHandle = 0;
+      sync_placeholder_shadow();
+    });
+  };
+  const displayed_rows_for_hydration = () => {
+    const visibleRows = rows.filter((row) => row_is_in_viewport(row));
+    if (visibleRows.length > 0) {
+      return visibleRows;
+    }
+    return rows.slice(0, 6);
+  };
+  const is_entry_editable = (entry) =>
+    Boolean(
+      entry &&
+        entry.dataset.canEdit == "true" &&
+        entry.dataset.locked != "true",
+    );
+  let activeEntry = null;
+  let selectionVersion = 0;
+  let modalDurationSlots = 1;
+  let modalTargetEntries = [];
+  let modalDurationAnchorKey = null;
+  const durationDraftSnapshots = new Map();
 
   for (const row of rows) {
     if (!remoteScheduleRows || row.querySelector("entry-cell")) {
       row.dataset.loaded = "true";
     } else {
       row.dataset.loaded = "false";
+      reset_row_placeholders(row, { shadow: row_is_in_viewport(row) });
     }
   }
 
-  const update_inspector_counts = () => {
-    if (inspector.pending) {
-      const suffix = changed.size == 1 ? "" : "s";
-      inspector.pending.innerText = `${changed.size} change${suffix}`;
+  const readSelectedErrors = (entry) =>
+    entry ? read_slot_validation_errors(entry) : [];
+  const duration_anchor_key = (entry) =>
+    entry ? `${entry.dataset.date ?? ""}:${entry.dataset.hour ?? ""}` : null;
+  const compareCellsChronologically = (a, b) => {
+    if (a.date < b.date) {
+      return -1;
     }
-    if (inspector.errors) {
-      const suffix = changedInvalid.size == 1 ? "" : "s";
-      inspector.errors.innerText = `${changedInvalid.size} error${suffix}`;
+    if (a.date > b.date) {
+      return 1;
     }
-    sync_inspector_modal();
+    const hourA = Number.parseInt(String(a.hour), 10);
+    const hourB = Number.parseInt(String(b.hour), 10);
+    if (hourA < hourB) {
+      return -1;
+    }
+    if (hourA > hourB) {
+      return 1;
+    }
+    return 0;
   };
-
-  const update_inspector_selection = (entry) => {
-    if (!entry) {
+  const sorted_changed_cells = () =>
+    [...changed].sort(compareCellsChronologically);
+  const update_pending_review_control = () => {
+    if (!inspector.review) {
       return;
     }
-    if (inspector.target) {
-      const date = humanize_date_if_needed(entry.dataset.date ?? "");
-      const hour =
-        human_hours?.[entry.dataset.hour] ?? entry.dataset.hour ?? "";
-      inspector.target.innerText = `${date}, ${hour}`;
+    const total = changed.size;
+    const invalidCount = changedInvalid.size;
+    inspector.review.disabled = total == 0;
+    inspector.review.dataset.pendingCount = String(total);
+    inspector.review.dataset.invalidCount = String(invalidCount);
+    const label = inspector.review.querySelector(".legend-toggle-label");
+    if (label) {
+      label.innerText =
+        invalidCount > 0
+          ? `Review pending (${total}, ${invalidCount} error${
+              invalidCount == 1 ? "" : "s"
+            })`
+          : `Review pending (${total})`;
     }
-    if (inspector.summary) {
-      const primary =
-        entry.querySelector(".entry-summary-primary")?.innerText ?? "open";
-      const secondary =
-        entry.querySelector(".entry-summary-secondary")?.innerText ??
-        "unassigned";
-      const tertiary = entry.querySelector(
-        ".entry-summary-tertiary",
-      )?.innerText;
-      const pieces = [primary, secondary];
-      if (tertiary) {
-        pieces.push(tertiary);
+    inspector.review.setAttribute(
+      "aria-label",
+      invalidCount > 0
+        ? `review ${total} pending change${
+            total == 1 ? "" : "s"
+          }, ${invalidCount} with errors`
+        : `review ${total} pending change${total == 1 ? "" : "s"}`,
+    );
+  };
+  const inspector_target_entries = (entry) => {
+    if (!entry) {
+      return [];
+    }
+    if (entry == activeEntry && modalTargetEntries.length > 0) {
+      return modalTargetEntries;
+    }
+    return [entry];
+  };
+  const inspector_target_cells = (entry, fallbackCell = null) => {
+    const targets = inspector_target_entries(entry)
+      .map((target) => ensure_cell(target))
+      .filter((targetCell) => targetCell);
+    if (targets.length > 0) {
+      return targets;
+    }
+    return fallbackCell ? [fallbackCell] : [];
+  };
+  const readInspectorErrors = (entry) =>
+    inspector_target_entries(entry).flatMap((target) =>
+      readSelectedErrors(target),
+    );
+  const update_inspector_counts = (entry, cell, slotErrors = null) => {
+    const changes = inspector_target_cells(entry, cell).filter(
+      (targetCell) => targetCell.changed,
+    ).length;
+    inspectorState.pending = `${changes} change${changes == 1 ? "" : "s"}`;
+    const errors = Array.isArray(slotErrors)
+      ? slotErrors
+      : readInspectorErrors(entry);
+    render_slot_errors(errors);
+    sync_inspector_modal();
+    return { changes, slotErrors: errors };
+  };
+  const slot_minutes = Math.max(1, scheduleWindow.slotMinutes || 60);
+  const slot_label = (entry) => {
+    if (!entry) {
+      return "not selected";
+    }
+    const date = humanize_date_if_needed(entry.dataset.date ?? "");
+    const hour = human_hours?.[entry.dataset.hour] ?? entry.dataset.hour ?? "";
+    return `${date}, ${hour}`.replace(/^,\s*/, "");
+  };
+  const collect_chronological_entries = () => {
+    const ordered = [];
+    for (let col = 0; col < scheduleWindow.totalDays; col += 1) {
+      for (const row of rows) {
+        const td = row.querySelectorAll("td")[col];
+        if (!td) {
+          continue;
+        }
+        const entry = td.querySelector("entry-cell");
+        if (entry) {
+          ordered.push(entry);
+        }
       }
-      inspector.summary.innerText = pieces.join(" | ");
     }
-    if (inspector.mode) {
-      if (entry.dataset.locked == "true") {
-        inspector.mode.innerText = "locked";
-      } else if (entry.dataset.canEdit == "true") {
-        inspector.mode.innerText = "editable";
+    return ordered;
+  };
+  const resolve_duration_targets = (anchorEntry, count = 1) => {
+    if (!anchorEntry) {
+      return [];
+    }
+    const ordered = collect_chronological_entries();
+    const anchorIndex = ordered.findIndex(
+      (candidate) => candidate == anchorEntry,
+    );
+    if (anchorIndex < 0) {
+      return [];
+    }
+    const maxCount = Math.max(1, ordered.length - anchorIndex);
+    const safeCount = Math.max(1, Math.min(maxCount, Number(count) || 1));
+    return ordered.slice(anchorIndex, anchorIndex + safeCount);
+  };
+  const sync_duration_preview = (targets) => {
+    const list = Array.isArray(targets) ? targets : [];
+    const anchor = list[0] ?? null;
+    const tail = list[list.length - 1] ?? null;
+    if (inspector.previewStart) {
+      inspector.previewStart.innerText = slot_label(anchor);
+    }
+    if (inspector.previewEnd) {
+      inspector.previewEnd.innerText = slot_label(tail ?? anchor);
+    }
+    if (inspector.previewCount) {
+      inspector.previewCount.innerText = `${list.length} slot${
+        list.length == 1 ? "" : "s"
+      }`;
+    }
+  };
+  function snapshotCellValues(cell) {
+    const out = {
+      institute: cell.institute?.value ?? "",
+      group: cell.group?.value ?? "",
+      member: cell.member?.value ?? "",
+      sr: {},
+    };
+    for (const [kind, sr] of Object.entries(cell.sr)) {
+      const requested = Boolean(sr.requested?.checked);
+      out.sr[kind] = {
+        requested,
+        handler: requested ? sr.handler?.value ?? "" : "",
+        subkind: sr.subkind ? sr.subkind.value : "",
+      };
+    }
+    return out;
+  }
+  function sameCellValues(left, right) {
+    if (!left || !right) {
+      return false;
+    }
+    if ((left.institute ?? "") != (right.institute ?? "")) {
+      return false;
+    }
+    if ((left.group ?? "") != (right.group ?? "")) {
+      return false;
+    }
+    if ((left.member ?? "") != (right.member ?? "")) {
+      return false;
+    }
+    const kinds = new Set([
+      ...Object.keys(left.sr ?? {}),
+      ...Object.keys(right.sr ?? {}),
+    ]);
+    for (const kind of kinds) {
+      const lhs = left.sr?.[kind] ?? {};
+      const rhs = right.sr?.[kind] ?? {};
+      if (Boolean(lhs.requested) != Boolean(rhs.requested)) {
+        return false;
+      }
+      if ((lhs.handler ?? "") != (rhs.handler ?? "")) {
+        return false;
+      }
+      if ((lhs.subkind ?? "") != (rhs.subkind ?? "")) {
+        return false;
+      }
+    }
+    return true;
+  }
+  function syncCellValues(cell, values) {
+    if (!cell || !values) {
+      return;
+    }
+    const preserveServerErrors =
+      "serverErrors" in cell.elm.dataset &&
+      sameCellValues(snapshotCellValues(cell), values);
+    if (preserveServerErrors) {
+      cell.preserveServerErrors = true;
+    }
+    try {
+      applyValuesToCell(cell, values);
+    } finally {
+      delete cell.preserveServerErrors;
+    }
+  }
+  function restoreDurationDraftSnapshots(nextIds = new Set()) {
+    for (const [cellId, values] of [...durationDraftSnapshots.entries()]) {
+      if (nextIds.has(cellId)) {
+        continue;
+      }
+      const cell = cells.get(String(cellId));
+      durationDraftSnapshots.delete(cellId);
+      if (!cell) {
+        continue;
+      }
+      syncCellValues(cell, values);
+    }
+  }
+  function syncDurationDraftTargets({ finalize = false } = {}) {
+    if (templateEditor || !activeEntry) {
+      if (finalize) {
+        durationDraftSnapshots.clear();
       } else {
-        inspector.mode.innerText = "read only";
+        restoreDurationDraftSnapshots();
+      }
+      return;
+    }
+    const anchorCell = ensure_cell(activeEntry);
+    if (!anchorCell) {
+      if (finalize) {
+        durationDraftSnapshots.clear();
+      } else {
+        restoreDurationDraftSnapshots();
+      }
+      return;
+    }
+    const targets = resolve_duration_targets(activeEntry, modalDurationSlots)
+      .map((entry) => ensure_cell(entry))
+      .filter((cell) => cell && cell.id != anchorCell.id);
+    const nextIds = new Set(targets.map((cell) => String(cell.id)));
+    if (!finalize) {
+      restoreDurationDraftSnapshots(nextIds);
+    }
+    const anchorValues = snapshotCellValues(anchorCell);
+    for (const cell of targets) {
+      if (!durationDraftSnapshots.has(cell.id)) {
+        durationDraftSnapshots.set(cell.id, snapshotCellValues(cell));
+      }
+      syncCellValues(cell, anchorValues);
+    }
+    if (activeEntry == anchorCell.elm) {
+      update_inspector_counts(activeEntry, anchorCell);
+    }
+    if (finalize) {
+      durationDraftSnapshots.clear();
+    }
+  }
+  const sync_duration_controls = (entry, editable) => {
+    if (!inspector.durationRoot) {
+      return;
+    }
+    const target = entry ?? activeEntry;
+    if (!target) {
+      modalDurationSlots = 1;
+      modalTargetEntries = [];
+      modalDurationAnchorKey = null;
+      inspector.durationRoot.hidden = true;
+      sync_duration_preview([]);
+      return;
+    }
+    inspector.durationRoot.hidden = false;
+    const nextAnchorKey = duration_anchor_key(target);
+    if (nextAnchorKey !== modalDurationAnchorKey) {
+      modalDurationSlots = 1;
+      modalDurationAnchorKey = nextAnchorKey;
+    }
+    const ordered = collect_chronological_entries();
+    const anchorIndex = ordered.findIndex((candidate) => candidate == target);
+    const maxSlots =
+      anchorIndex < 0 ? 1 : Math.max(1, ordered.length - anchorIndex);
+    modalDurationSlots = Math.max(1, Math.min(maxSlots, modalDurationSlots));
+    modalTargetEntries = resolve_duration_targets(target, modalDurationSlots);
+    if (inspector.endTimeSelect) {
+      inspector.endTimeSelect.replaceChildren();
+      for (let count = 1; count <= maxSlots; count += 1) {
+        const option = document.createElement("option");
+        const targets = resolve_duration_targets(target, count);
+        const tail = targets[targets.length - 1] ?? target;
+        option.value = String(count);
+        option.textContent = `${slot_label(tail)} (${count} slot${
+          count == 1 ? "" : "s"
+        })`;
+        if (count == modalDurationSlots) {
+          option.selected = true;
+        }
+        inspector.endTimeSelect.append(option);
+      }
+      inspector.endTimeSelect.disabled = !editable;
+    }
+    if (Array.isArray(inspector.durationButtons)) {
+      inspector.durationButtons.forEach((button) => {
+        if (!(button instanceof HTMLButtonElement)) {
+          return;
+        }
+        button.disabled = !editable;
+      });
+    }
+    sync_duration_preview(modalTargetEntries);
+    if (inspectorDialogOpen()) {
+      syncDurationDraftTargets();
+      update_inspector_counts(target, ensure_cell(target));
+      window.requestAnimationFrame(() => {
+        if (target != activeEntry) {
+          return;
+        }
+        update_inspector_counts(target, ensure_cell(target));
+      });
+    }
+  };
+  const pick_inspector_editor_source = (entry) => {
+    if (entry) {
+      const fromEntry = entry.querySelector("entry-detail");
+      if (fromEntry) {
+        return fromEntry;
       }
     }
+    for (const row of rows) {
+      const fallback = row.querySelector("entry-cell entry-detail");
+      if (fallback) {
+        return fallback;
+      }
+    }
+    return null;
+  };
+  const mount_inspector_entry_editor = (entry, forceReadonly = false) => {
+    if (!inspector.slotEditor) {
+      return;
+    }
+    const source = pick_inspector_editor_source(entry);
+    if (!source) {
+      inspector.slotEditor.replaceChildren();
+      inspector.slotEditor.hidden = true;
+      return;
+    }
+    const editable = !forceReadonly && is_entry_editable(entry);
+    sanitize_and_bind_inspector_editor(
+      source,
+      inspector.slotEditor,
+      Boolean(editable),
+      () => {
+        if (!entry) {
+          return;
+        }
+        update_inspector_counts(entry, ensure_cell(entry));
+        if (inspectorDialogOpen()) {
+          syncDurationDraftTargets();
+        }
+      },
+    );
+    inspector.slotEditor.hidden = false;
+  };
+  const set_inspector_default_state = () => {
+    inspectorState.target = "Select a time slot";
+    inspectorState.summary = "no slot selected";
+    inspectorState.mode = "read only";
+    inspectorState.pending = "0 changes";
+    inspectorState.errors = "0 errors";
+    render_slot_errors([]);
+    if (inspector.save) {
+      inspector.save.hidden = true;
+    }
+    modalDurationSlots = 1;
+    modalTargetEntries = [];
+    set_inspector_action_label(false);
+    mount_inspector_entry_editor(null, true);
+    sync_duration_controls(null, false);
+    sync_inspector_modal();
+  };
+  const update_inspector_selection = (entry, options = {}) => {
+    const refreshEditor = options.refreshEditor !== false;
+    if (!entry) {
+      set_inspector_default_state();
+      return;
+    }
+    const editable = is_entry_editable(entry);
+    const cell = ensure_cell(entry);
+    const date = humanize_date_if_needed(entry.dataset.date ?? "");
+    const hour = human_hours?.[entry.dataset.hour] ?? entry.dataset.hour ?? "";
+    inspectorState.target = `${date}, ${hour}`;
+    const primary =
+      entry.querySelector(".entry-summary-primary")?.innerText ?? "open";
+    const secondary =
+      entry.querySelector(".entry-summary-secondary")?.innerText ??
+      "unassigned";
+    const tertiary = entry.querySelector(".entry-summary-tertiary")?.innerText;
+    const pieces = [primary, secondary];
+    if (tertiary) {
+      pieces.push(tertiary);
+    }
+    inspectorState.summary = pieces.join(" | ");
+    if (entry.dataset.locked == "true") {
+      inspectorState.mode = "locked";
+    } else if (editable) {
+      inspectorState.mode = "editable";
+    } else {
+      inspectorState.mode = "read only";
+    }
+    if (inspector.open) {
+      set_inspector_action_label(editable);
+    }
+    if (inspector.save) {
+      inspector.save.hidden = !editable;
+    }
+    if (inspector.slotEditor && refreshEditor) {
+      mount_inspector_entry_editor(entry);
+    }
+    sync_duration_controls(entry, editable);
+    update_inspector_counts(entry, cell);
     sync_inspector_modal();
   };
 
@@ -1895,19 +4055,61 @@ function wire_cell_editors() {
     if (!row) {
       return;
     }
-    if (inspector.target) {
-      const hour = human_hours?.[row.dataset.hour] ?? row.dataset.hour ?? "";
-      const day = dayLabelForCol(col);
-      inspector.target.innerText = `${day}, ${hour}`.replace(/^,\s*/, "");
+    const hour = human_hours?.[row.dataset.hour] ?? row.dataset.hour ?? "";
+    const day = dayLabelForCol(col);
+    inspectorState.target = `${day}, ${hour}`.replace(/^,\s*/, "");
+    inspectorState.summary = "open | unassigned | no support requests";
+    inspectorState.mode = "read only";
+    update_inspector_counts(null, null);
+    mount_inspector_entry_editor(null, true);
+    if (inspector.save) {
+      inspector.save.hidden = true;
     }
-    if (inspector.summary) {
-      inspector.summary.innerText = "no sched entry for this slot";
-    }
-    if (inspector.mode) {
-      inspector.mode.innerText = "read only";
-    }
+    sync_duration_controls(null, false);
+    set_inspector_action_label(false);
     sync_inspector_modal();
   };
+
+  if (inspector.errorsToggle && inspector.errorList) {
+    inspector.errorsToggle.hidden = true;
+    inspector.errorsToggle.addEventListener("click", () => {
+      const expanded =
+        inspector.errorsToggle.getAttribute("aria-expanded") == "true";
+      inspector.errorsToggle.setAttribute("aria-expanded", String(!expanded));
+      inspector.errorList.hidden = expanded;
+    });
+  }
+  set_inspector_default_state();
+  sync_row_visibility();
+  if (inspector.endTimeSelect) {
+    inspector.endTimeSelect.addEventListener("change", () => {
+      const parsed = Number.parseInt(inspector.endTimeSelect.value, 10);
+      if (Number.isNaN(parsed)) {
+        return;
+      }
+      modalDurationSlots = Math.max(1, parsed);
+      sync_duration_controls(activeEntry, is_entry_editable(activeEntry));
+    });
+  }
+  if (Array.isArray(inspector.durationButtons)) {
+    inspector.durationButtons.forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        const minutes = Number.parseInt(
+          button.dataset.durationMinutes ?? "",
+          10,
+        );
+        if (Number.isNaN(minutes) || minutes <= 0) {
+          return;
+        }
+        const bump = Math.max(1, Math.ceil(minutes / slot_minutes));
+        modalDurationSlots += bump;
+        sync_duration_controls(activeEntry, is_entry_editable(activeEntry));
+      });
+    });
+  }
 
   const update_load_status = () => {
     if (!loadStatus) {
@@ -1916,6 +4118,16 @@ function wire_cell_editors() {
     if (loadErrorMessage) {
       loadStatus.innerText = `error loading schedule rows: ${loadErrorMessage}`;
       loadStatus.dataset.state = "error";
+      return;
+    }
+    if (is_lateral_movement_active()) {
+      loadStatus.dataset.state = "ready";
+      loadStatus.innerText = "scanning: waiting for pause";
+      return;
+    }
+    if (is_hydration_locked()) {
+      loadStatus.dataset.state = "ready";
+      loadStatus.innerText = "fast scanning: hydration paused";
       return;
     }
     loadStatus.dataset.state = "ready";
@@ -1934,140 +4146,263 @@ function wire_cell_editors() {
     }
   };
 
-  const addWindowColumns = (start, direction, chunk) => {
-    if (chunk <= 0) {
+  const HISTORY_REPLACE_THROTTLE_MS = 400;
+  const SETTLED_HYDRATE_DEBOUNCE_MS = 300;
+  const FAST_SCAN_FETCH_WINDOW_MS = 1500;
+  const FAST_SCAN_FETCH_THRESHOLD = 8;
+  const FAST_SCAN_LOCK_MS = 2000;
+  const PREFETCH_WINDOW_DAYS = 7;
+  const PREFETCH_INITIAL_DELAY_MS = 0;
+  const PREFETCH_TRIGGER_DELAY_MS = 1500;
+  const PREFETCH_COOLDOWN_MS = 4000;
+  const PREFETCH_EDGE_TRIGGER_DAYS = 2;
+  const SLOT_CACHE_TTL_MS = 4 * 60 * 1000;
+  const SLOT_CACHE_MAX_ENTRIES = 3600;
+
+  let windowShiftInFlight = null;
+  let scheduleWindowVersion = 0;
+  let hydrateAbort = new AbortController();
+  let settledHydrateTimer = 0;
+  let prefetchTimer = 0;
+  let prefetchAbort = null;
+  let pendingHistoryTimer = 0;
+  let pendingHistoryWrite = null;
+  let lastHistoryWriteAt = 0;
+  let recentFetchTimestamps = [];
+  let movementIdleUntil = 0;
+  let hydrationLockUntil = 0;
+  let hydrationLockTimer = 0;
+  let lastPrefetchRunAt = 0;
+  let initialPrefetchScheduled = false;
+  let hasCompletedInitialHydration = false;
+  let prefetchCoverageStart = null;
+  let prefetchCoverageEnd = null;
+  const prefetchInFlightRanges = new Set();
+  const prefetchRecentRanges = new Map();
+  const slotPayloadCache = new Map();
+
+  const cache_key = (dateKey, hour) => `${dateKey}|${hour}`;
+  const prune_slot_cache = () => {
+    const now = Date.now();
+    for (const [key, entry] of slotPayloadCache.entries()) {
+      if (!entry || entry.expiresAt <= now) {
+        slotPayloadCache.delete(key);
+      }
+    }
+    while (slotPayloadCache.size > SLOT_CACHE_MAX_ENTRIES) {
+      const oldest = slotPayloadCache.keys().next().value;
+      if (oldest == null) {
+        break;
+      }
+      slotPayloadCache.delete(oldest);
+    }
+  };
+  const read_slot_cache = (dateKey, hour) => {
+    prune_slot_cache();
+    const key = cache_key(dateKey, hour);
+    const entry = slotPayloadCache.get(key);
+    if (!entry) {
+      return null;
+    }
+    slotPayloadCache.delete(key);
+    slotPayloadCache.set(key, {
+      markup: entry.markup,
+      expiresAt: Date.now() + SLOT_CACHE_TTL_MS,
+    });
+    return entry.markup;
+  };
+  const write_slot_cache = (dateKey, hour, markup) => {
+    const key = cache_key(dateKey, hour);
+    slotPayloadCache.delete(key);
+    slotPayloadCache.set(key, {
+      markup: typeof markup == "string" ? markup : "",
+      expiresAt: Date.now() + SLOT_CACHE_TTL_MS,
+    });
+    prune_slot_cache();
+  };
+  const movement_idle_remaining_ms = () =>
+    Math.max(0, movementIdleUntil - Date.now());
+  const is_lateral_movement_active = () => movement_idle_remaining_ms() > 0;
+  const arm_movement_idle_gate = () => {
+    movementIdleUntil = Date.now() + SETTLED_HYDRATE_DEBOUNCE_MS;
+  };
+  const hydration_lock_remaining_ms = () =>
+    Math.max(0, hydrationLockUntil - Date.now());
+  const is_hydration_locked = () => hydration_lock_remaining_ms() > 0;
+  const queue_lock_release_refresh = () => {
+    if (hydrationLockTimer != 0) {
+      window.clearTimeout(hydrationLockTimer);
+    }
+    const delay = Math.max(0, hydration_lock_remaining_ms() + 20);
+    hydrationLockTimer = window.setTimeout(() => {
+      hydrationLockTimer = 0;
+      update_load_status();
+      queue_settled_window_hydration(
+        scheduleWindowVersion,
+        hydrateAbort?.signal ?? null,
+      );
+    }, delay);
+  };
+  const activate_hydration_lock = (durationMs = FAST_SCAN_LOCK_MS) => {
+    const until = Date.now() + Math.max(0, durationMs);
+    if (until <= hydrationLockUntil) {
       return;
     }
-    const header = scrollContainer.querySelector("thead tr");
-    if (header == null) {
+    hydrationLockUntil = until;
+    recentFetchTimestamps = [];
+    if (prefetchAbort) {
+      prefetchAbort.abort();
+      prefetchAbort = null;
+    }
+    if (prefetchTimer != 0) {
+      window.clearTimeout(prefetchTimer);
+      prefetchTimer = 0;
+    }
+    queue_lock_release_refresh();
+    update_load_status();
+  };
+  const clear_hydration_lock = () => {
+    hydrationLockUntil = 0;
+    recentFetchTimestamps = [];
+    if (hydrationLockTimer != 0) {
+      window.clearTimeout(hydrationLockTimer);
+      hydrationLockTimer = 0;
+    }
+  };
+  const note_schedule_db_fetch_hit = () => {
+    const now = Date.now();
+    recentFetchTimestamps.push(now);
+    const cutoff = now - FAST_SCAN_FETCH_WINDOW_MS;
+    recentFetchTimestamps = recentFetchTimestamps.filter((ts) => ts >= cutoff);
+    if (recentFetchTimestamps.length >= FAST_SCAN_FETCH_THRESHOLD) {
+      activate_hydration_lock();
+    }
+  };
+  const write_history_state = ({ startYmd, days }) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("start", startYmd);
+    params.set("days", String(days));
+    window.history.replaceState(
+      {
+        ...(window.history.state || {}),
+        scheduleStart: startYmd,
+        scheduleDays: days,
+      },
+      "",
+      `${window.location.pathname}?${params.toString()}`,
+    );
+    lastHistoryWriteAt = Date.now();
+  };
+  const flush_history_write = () => {
+    if (!pendingHistoryWrite) {
       return;
     }
-
-    for (let i = 0; i < chunk; i++) {
-      const date = add_days(start, i);
-      const th = document.createElement("th");
-      th.innerText = formatHeaderLabel(date);
-      th.dataset.date = ymd(date);
-      if (direction > 0) {
-        header.append(th);
-      } else {
-        header.prepend(th);
+    const payload = pendingHistoryWrite;
+    pendingHistoryWrite = null;
+    write_history_state(payload);
+  };
+  const queue_history_write = (payload, { force = false } = {}) => {
+    pendingHistoryWrite = payload;
+    if (force) {
+      if (pendingHistoryTimer != 0) {
+        window.clearTimeout(pendingHistoryTimer);
+        pendingHistoryTimer = 0;
       }
+      flush_history_write();
+      return;
     }
-
-    for (const row of rows) {
-      if (!row) {
-        continue;
-      }
-      for (let i = 0; i < chunk; i++) {
-        const td = document.createElement("td");
-        td.dataset.placeholder = "true";
-        if (direction > 0) {
-          row.append(td);
-        } else {
-          row.prepend(td);
-        }
-      }
+    const elapsed = Date.now() - lastHistoryWriteAt;
+    if (elapsed >= HISTORY_REPLACE_THROTTLE_MS && pendingHistoryTimer == 0) {
+      flush_history_write();
+      return;
     }
-
-    rebuildCells();
-    for (const row of rows) {
-      row.dataset.loaded = "false";
-      row.dataset.hydrated = "false";
+    const delay = Math.max(0, HISTORY_REPLACE_THROTTLE_MS - elapsed);
+    if (pendingHistoryTimer != 0) {
+      return;
     }
-    updateHeaderCells();
-    syncHeaderDates();
+    pendingHistoryTimer = window.setTimeout(() => {
+      pendingHistoryTimer = 0;
+      flush_history_write();
+    }, delay);
   };
 
-  const updateHeaderCells = () => {
-    headerCells.length = 0;
-    headerCells.push(
-      ...scrollContainer.querySelectorAll("thead th:not(:first-child)"),
+  const clear_settled_window_hydration = () => {
+    if (settledHydrateTimer == 0) {
+      return;
+    }
+    window.clearTimeout(settledHydrateTimer);
+    settledHydrateTimer = 0;
+  };
+  const clear_prefetch = () => {
+    if (prefetchTimer != 0) {
+      window.clearTimeout(prefetchTimer);
+      prefetchTimer = 0;
+    }
+    if (prefetchAbort) {
+      prefetchAbort.abort();
+      prefetchAbort = null;
+    }
+  };
+  const queue_settled_window_hydration = (
+    version = scheduleWindowVersion,
+    signal = hydrateAbort?.signal ?? null,
+  ) => {
+    clear_settled_window_hydration();
+    const lockDelay = is_hydration_locked() ? hydration_lock_remaining_ms() : 0;
+    const movementDelay = is_lateral_movement_active()
+      ? movement_idle_remaining_ms()
+      : 0;
+    const settleDelay = Math.max(
+      SETTLED_HYDRATE_DEBOUNCE_MS,
+      lockDelay > 0 ? lockDelay + 32 : 0,
+      movementDelay > 0 ? movementDelay + 16 : 0,
+    );
+    settledHydrateTimer = window.setTimeout(() => {
+      settledHydrateTimer = 0;
+      if (version != scheduleWindowVersion || signal?.aborted) {
+        return;
+      }
+      if (is_lateral_movement_active()) {
+        queue_settled_window_hydration(version, signal);
+        return;
+      }
+      if (is_hydration_locked()) {
+        queue_settled_window_hydration(version, signal);
+        return;
+      }
+      void hydrate_rows(rows, { version, signal }).then(() => {
+        if (version != scheduleWindowVersion || signal?.aborted) {
+          return;
+        }
+        queue_prefetch_adjacent_windows(version);
+      });
+    }, settleDelay);
+  };
+
+  const syncJumpPermalink = ({ forceHistory = false } = {}) => {
+    if (!(scheduleWindow.start instanceof Date)) {
+      return;
+    }
+    const jumpForm = document.querySelector("nav.jump-form form");
+    const jumpStartInput = jumpForm?.querySelector('input[name="start"]');
+    const jumpDaysInput = jumpForm?.querySelector('input[name="days"]');
+    if (jumpStartInput instanceof HTMLInputElement) {
+      jumpStartInput.value = ymd(scheduleWindow.start);
+    }
+    if (jumpDaysInput instanceof HTMLInputElement) {
+      jumpDaysInput.value = String(scheduleWindow.requestedDays);
+    }
+    queue_history_write(
+      {
+        startYmd: ymd(scheduleWindow.start),
+        days: scheduleWindow.requestedDays,
+      },
+      { force: forceHistory },
     );
   };
 
-  let leftEdgeAvailable = null;
-  let rightEdgeAvailable = null;
-  let windowShiftInFlight = null;
-  let previousSelectedCol = null;
-
-  const canExpandWindow = async (direction) => {
-    if (!remoteScheduleRows) {
-      return false;
-    }
-    if (direction === -1) {
-      if (leftEdgeAvailable === false) {
-        return false;
-      }
-    } else if (rightEdgeAvailable === false) {
-      return false;
-    }
-
-    const start = scheduleWindow.start;
-    if (start == null || nextDayEndpoint == "") {
-      return false;
-    }
-
-    const probeDate = direction === 1 ? visibleEndDate() ?? start : start;
-
-    const url = new URL(nextDayEndpoint, window.location.href);
-    url.searchParams.set("start", ymd(probeDate));
-    url.searchParams.set("direction", String(direction));
-
-    try {
-      const resp = await fetch(url.toString(), {
-        headers: {
-          Accept: "application/json",
-        },
-      });
-      if (!resp.ok) {
-        throw new Error(`api returned ${resp.status}`);
-      }
-      const data = await resp.json();
-      const next = data?.date ?? null;
-      if (direction === -1) {
-        leftEdgeAvailable = next != null;
-      } else {
-        rightEdgeAvailable = next != null;
-      }
-      return next != null;
-    } catch (_err) {
-      return false;
-    }
-  };
-
-  const expandWindow = async (direction) => {
-    void direction;
-    // Keep the visible day count fixed; jumps recenter via navigateToDateWindow.
-    return false;
-  };
-
-  const maybeExpandAroundCol = (col) => {
-    if (!remoteScheduleRows || Number.isNaN(col) || windowShiftInFlight) {
-      return;
-    }
-    if (previousSelectedCol == null) {
-      previousSelectedCol = col;
-      return;
-    }
-    const movingDirection =
-      col > previousSelectedCol ? 1 : col < previousSelectedCol ? -1 : 0;
-    previousSelectedCol = col;
-    if (movingDirection == 0) {
-      return;
-    }
-    const leftEdgeCol = 1;
-    const rightEdgeCol = Math.max(0, scheduleWindow.totalDays - 2);
-    const shouldExpandLeft = movingDirection < 0 && col <= leftEdgeCol;
-    const shouldExpandRight = movingDirection > 0 && col >= rightEdgeCol;
-    if (!shouldExpandLeft && !shouldExpandRight) {
-      return;
-    }
-    windowShiftInFlight = expandWindow(movingDirection);
-    windowShiftInFlight.finally(() => {
-      windowShiftInFlight = null;
-    });
-  };
+  const expandWindow = async (direction) =>
+    navigateWindowByDirection(direction);
 
   const ensureWindowContainsDate = async (target) => {
     let guard = 0;
@@ -2130,25 +4465,628 @@ function wire_cell_editors() {
       return null;
     }
   };
-  const navigateToDateWindow = (targetDate) => {
+  const navigateToDateWindow = async (
+    targetDate,
+    {
+      usePlaceholders = true,
+      deferHydration = true,
+      showPlaceholdersOnCacheMiss = false,
+      armIdleOnPlaceholder = usePlaceholders,
+      bypassHydrationGuards = false,
+      countFetchForLock = hasCompletedInitialHydration,
+    } = {},
+  ) => {
     if (!(targetDate instanceof Date)) {
-      return;
+      return false;
     }
-    const params = new URLSearchParams(window.location.search);
-    params.set("start", ymd(targetDate));
+    if (!remoteScheduleRows) {
+      return false;
+    }
+    clear_header_settle_timer();
+
+    const start = startDate();
+    const preservedScrollY = window.scrollY;
+    const restore_window_scroll = () => {
+      const maxScroll = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
+      const safeScroll = Math.max(0, Math.min(maxScroll, preservedScrollY));
+      window.scrollTo({ top: safeScroll, left: 0, behavior: "auto" });
+    };
+    const currentSelection = {
+      row: Number.isInteger(editor.scheduleGrid?.row())
+        ? editor.scheduleGrid.row()
+        : 0,
+      col: Number.isInteger(editor.scheduleGrid?.col())
+        ? editor.scheduleGrid.col()
+        : 0,
+    };
 
     const daysInput = document.querySelector(
       'nav.jump-form input[name="days"]',
     );
     const parsedDays = Number.parseInt(daysInput?.value ?? "", 10);
     const safeDays = Number.isNaN(parsedDays)
-      ? scheduleWindow.chunkDays
-      : Math.min(31, Math.max(1, parsedDays));
-    params.set("days", String(safeDays));
-    window.location.assign(`${window.location.pathname}?${params.toString()}`);
+      ? scheduleWindow.requestedDays
+      : parsedDays;
+    const shouldUsePlaceholders =
+      usePlaceholders ||
+      (showPlaceholdersOnCacheMiss &&
+        !is_window_payload_cached(targetDate, safeDays));
+
+    scheduleWindow.start = targetDate;
+    apply_visible_day_layout({
+      requestedDays: safeDays,
+    });
+    clear_header_preview();
+    movementSkeletonActive = false;
+    scheduleWindowVersion += 1;
+    const targetVersion = scheduleWindowVersion;
+    if (bypassHydrationGuards) {
+      clear_hydration_lock();
+    }
+    clear_settled_window_hydration();
+    clear_prefetch();
+    if (hydrateAbort) {
+      hydrateAbort.abort();
+    }
+    hydrateAbort = new AbortController();
+    loadErrorMessage = "";
+
+    syncHeaderDates();
+    syncJumpPermalink();
+    for (const row of rows) {
+      row.dataset.loaded = "false";
+      row.dataset.hydrated = "false";
+      row.dataset.loading = "false";
+    }
+    if (shouldUsePlaceholders) {
+      if (armIdleOnPlaceholder) {
+        arm_movement_idle_gate();
+      } else {
+        movementIdleUntil = 0;
+      }
+      reset_window_placeholders();
+    } else {
+      movementIdleUntil = 0;
+    }
+    sync_row_visibility();
+    update_load_status();
+    updateEdgeScrollButtons();
+    restore_window_scroll();
+
+    const grid = editor.scheduleGrid;
+    if (grid) {
+      const clampedCol = Math.min(
+        Math.max(0, currentSelection.col),
+        Math.max(0, scheduleWindow.totalDays - 1),
+      );
+      grid.focus(currentSelection.row, clampedCol, { scroll: false });
+    }
+
+    const hydrationSignal = hydrateAbort.signal;
+    if (deferHydration) {
+      queue_settled_window_hydration(targetVersion, hydrationSignal);
+    } else {
+      void hydrate_rows(rows, {
+        version: targetVersion,
+        signal: hydrationSignal,
+        countForLock: countFetchForLock,
+        bypassHydrationGuards,
+      }).then(() => {
+        if (targetVersion != scheduleWindowVersion || hydrationSignal.aborted) {
+          return;
+        }
+        queue_prefetch_adjacent_windows(targetVersion);
+      });
+    }
+    if (start != null) {
+      const postGrid = editor.scheduleGrid;
+      if (postGrid) {
+        const clampedCol = Math.min(
+          Math.max(0, currentSelection.col),
+          Math.max(0, scheduleWindow.totalDays - 1),
+        );
+        postGrid.focus(currentSelection.row, clampedCol, { scroll: false });
+      }
+      restore_window_scroll();
+      window.requestAnimationFrame(restore_window_scroll);
+    }
+    updateEdgeScrollButtons();
+    return true;
+  };
+  const navigateWindowByDirection = async (direction, options = {}) => {
+    const start = startDate();
+    if (!remoteScheduleRows || start == null) {
+      return false;
+    }
+    return navigateToDateWindow(add_days(start, direction), options);
+  };
+  const refresh_window_after_layout_change = () => {
+    if (!remoteScheduleRows || !(scheduleWindow.start instanceof Date)) {
+      syncHeaderDates();
+      sync_row_visibility();
+      update_load_status();
+      return;
+    }
+    scheduleWindowVersion += 1;
+    const targetVersion = scheduleWindowVersion;
+    clear_settled_window_hydration();
+    clear_prefetch();
+    if (hydrateAbort) {
+      hydrateAbort.abort();
+    }
+    hydrateAbort = new AbortController();
+    loadErrorMessage = "";
+    for (const row of rows) {
+      row.dataset.loaded = "false";
+      row.dataset.hydrated = "false";
+      row.dataset.loading = "false";
+    }
+    reset_window_placeholders();
+    sync_row_visibility();
+    update_load_status();
+    queue_settled_window_hydration(targetVersion, hydrateAbort.signal);
+  };
+  const activate_movement_skeleton = () => {
+    if (!remoteScheduleRows || movementSkeletonActive) {
+      return;
+    }
+    movementSkeletonActive = true;
+    scheduleWindowVersion += 1;
+    const targetVersion = scheduleWindowVersion;
+    clear_settled_window_hydration();
+    clear_prefetch();
+    if (hydrateAbort) {
+      hydrateAbort.abort();
+    }
+    hydrateAbort = new AbortController();
+    loadErrorMessage = "";
+    for (const row of rows) {
+      row.dataset.loaded = "false";
+      row.dataset.hydrated = "false";
+      row.dataset.loading = "false";
+    }
+    reset_window_placeholders();
+    sync_row_visibility();
+    update_load_status();
+    queue_settled_window_hydration(targetVersion, hydrateAbort.signal);
+  };
+  const has_crossed_movement_skeleton_threshold = () =>
+    Math.abs(headerPreviewOffsetPx) >= visible_day_column_width_px() * 0.5;
+  const settle_header_movement = async () => {
+    if (!remoteScheduleRows || headerSettleInFlight) {
+      return;
+    }
+    const start = startDate();
+    if (!(start instanceof Date)) {
+      clear_header_preview();
+      return;
+    }
+    const colWidth = Math.max(1, visible_day_column_width_px());
+    const dayShift = Math.round(headerPreviewOffsetPx / colWidth);
+    clear_header_preview();
+    update_load_status();
+    if (dayShift == 0) {
+      movementSkeletonActive = false;
+      movementIdleUntil = 0;
+      const version = scheduleWindowVersion;
+      const signal = hydrateAbort?.signal ?? null;
+      void hydrate_rows(rows, { version, signal }).then(() => {
+        if (version != scheduleWindowVersion || signal?.aborted) {
+          return;
+        }
+        queue_prefetch_adjacent_windows(version);
+      });
+      return;
+    }
+    if (windowShiftInFlight) {
+      await windowShiftInFlight;
+    }
+    headerSettleInFlight = true;
+    try {
+      windowShiftInFlight = navigateToDateWindow(add_days(start, dayShift), {
+        usePlaceholders: false,
+        deferHydration: false,
+      });
+      await windowShiftInFlight;
+    } finally {
+      windowShiftInFlight = null;
+      headerSettleInFlight = false;
+      movementSkeletonActive = false;
+      clear_header_preview();
+      update_load_status();
+    }
+  };
+  const queue_header_settle = () => {
+    clear_header_settle_timer();
+    headerSettleTimer = window.setTimeout(() => {
+      headerSettleTimer = 0;
+      void settle_header_movement();
+    }, SETTLED_HYDRATE_DEBOUNCE_MS);
+  };
+  const scrollOneDay = (direction, behavior = "smooth") => {
+    const amount = oneDayScrollAmount();
+    scrollContainer.scrollBy({
+      left: direction * amount,
+      behavior,
+    });
+  };
+  const build_range_date_keys = (rangeStart, days) => {
+    const keys = [];
+    for (let i = 0; i < days; i += 1) {
+      keys.push(ymd(add_days(rangeStart, i)));
+    }
+    return keys;
+  };
+  const read_cached_window_payload = (chunk, dateKeys) => {
+    const payloadByHour = new Map();
+    for (const hour of chunk) {
+      const cells = [];
+      for (const dateKey of dateKeys) {
+        const markup = read_slot_cache(dateKey, hour);
+        if (markup == null) {
+          return null;
+        }
+        cells.push(markup);
+      }
+      payloadByHour.set(hour, cells);
+    }
+    return payloadByHour;
+  };
+  const is_window_payload_cached = (rangeStart, days) => {
+    if (!(rangeStart instanceof Date) || !remoteScheduleRows || days < 1) {
+      return false;
+    }
+    const allHours = rows
+      .map((row) => row.dataset.hour)
+      .filter((hour) => typeof hour == "string");
+    if (allHours.length == 0) {
+      return false;
+    }
+    const dateKeys = build_range_date_keys(rangeStart, days);
+    for (let i = 0; i < allHours.length; i += 12) {
+      const chunk = allHours.slice(i, i + 12);
+      if (read_cached_window_payload(chunk, dateKeys) == null) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const cache_window_payload = (chunk, dateKeys, payloadByHour) => {
+    for (const hour of chunk) {
+      const payloadCells = Array.isArray(payloadByHour.get(hour))
+        ? payloadByHour.get(hour)
+        : [];
+      for (let i = 0; i < dateKeys.length; i += 1) {
+        const markup =
+          typeof payloadCells[i] == "string" ? payloadCells[i] : "";
+        write_slot_cache(dateKeys[i], hour, markup);
+      }
+    }
+  };
+  const apply_window_payload_to_rows = (chunk, windowRange, payloadByHour) => {
+    for (const hour of chunk) {
+      const row = rowsByHour.get(hour);
+      if (!row) {
+        continue;
+      }
+      const slots = [...row.querySelectorAll("td")];
+      const payloadCells = Array.isArray(payloadByHour.get(hour))
+        ? payloadByHour.get(hour)
+        : [];
+      for (
+        let i = 0;
+        i < windowRange.days && i + windowRange.offset < slots.length;
+        i += 1
+      ) {
+        const markup =
+          typeof payloadCells[i] == "string" ? payloadCells[i] : "";
+        const targetCell = slots[i + windowRange.offset];
+        const parsedMarkup = parse_schedule_cell_markup(markup);
+        if (!targetCell) {
+          continue;
+        }
+        if (parsedMarkup.length == 0) {
+          targetCell.dataset.placeholder = "true";
+          delete targetCell.dataset.empty;
+          targetCell.replaceChildren(
+            build_slot_placeholder({ shadow: row_is_in_viewport(row) }),
+          );
+          continue;
+        }
+        delete targetCell.dataset.placeholder;
+        targetCell.replaceChildren(...parsedMarkup);
+        const renderedEntry = targetCell.querySelector("entry-cell");
+        if (renderedEntry instanceof HTMLElement) {
+          sync_slot_empty_state(renderedEntry);
+        } else {
+          delete targetCell.dataset.empty;
+        }
+      }
+      row.dataset.loading = "false";
+      row.querySelectorAll("entry-cell").forEach((entry) => {
+        if (!("active" in entry.dataset)) {
+          entry.dataset.active = "false";
+        }
+      });
+    }
+  };
+  const fetch_window_payload = async (
+    rangeStart,
+    days,
+    chunk,
+    signal,
+    { countForLock = true } = {},
+  ) => {
+    const url = new URL(scheduleWindow.endpoint, window.location.href);
+    url.searchParams.set("start", ymd(rangeStart));
+    url.searchParams.set("days", String(days));
+    url.searchParams.set("hours", chunk.join(","));
+
+    if (countForLock) {
+      note_schedule_db_fetch_hit();
+    }
+    const resp = await fetch(url.toString(), {
+      signal,
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    if (!resp.ok) {
+      throw new Error(`api returned ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const payloadRows = Array.isArray(data.rows) ? data.rows : [];
+    const payloadByHour = new Map();
+    for (const row of payloadRows) {
+      payloadByHour.set(
+        String(row.hour),
+        Array.isArray(row.cells) ? row.cells : [],
+      );
+    }
+    return payloadByHour;
+  };
+  const clone_utc_date = (date) => {
+    if (!(date instanceof Date)) {
+      return null;
+    }
+    return new Date(date.getTime());
+  };
+  const normalize_prefetch_coverage = () => {
+    if (
+      !(prefetchCoverageStart instanceof Date) ||
+      !(prefetchCoverageEnd instanceof Date)
+    ) {
+      prefetchCoverageStart = null;
+      prefetchCoverageEnd = null;
+      return;
+    }
+    const currentStart = startDate();
+    const currentEnd = visibleEndDate();
+    if (!(currentStart instanceof Date) || !(currentEnd instanceof Date)) {
+      return;
+    }
+    if (
+      currentEnd < prefetchCoverageStart ||
+      currentStart > prefetchCoverageEnd
+    ) {
+      prefetchCoverageStart = null;
+      prefetchCoverageEnd = null;
+    }
+  };
+  const merge_prefetch_coverage = (rangeStart, days) => {
+    if (!(rangeStart instanceof Date) || days < 1) {
+      return;
+    }
+    const rangeEnd = add_days(rangeStart, days - 1);
+    if (
+      !(prefetchCoverageStart instanceof Date) ||
+      rangeStart < prefetchCoverageStart
+    ) {
+      prefetchCoverageStart = clone_utc_date(rangeStart);
+    }
+    if (
+      !(prefetchCoverageEnd instanceof Date) ||
+      rangeEnd > prefetchCoverageEnd
+    ) {
+      prefetchCoverageEnd = clone_utc_date(rangeEnd);
+    }
+  };
+  const prefetch_range_key = (rangeStart, days) => `${ymd(rangeStart)}|${days}`;
+  const prune_recent_prefetch_ranges = () => {
+    const cutoff = Date.now() - PREFETCH_COOLDOWN_MS * 3;
+    for (const [key, completedAt] of prefetchRecentRanges.entries()) {
+      if (completedAt < cutoff) {
+        prefetchRecentRanges.delete(key);
+      }
+    }
+  };
+  const build_prefetch_plan = () => {
+    const currentStart = startDate();
+    const currentEnd = visibleEndDate();
+    if (!(currentStart instanceof Date) || !(currentEnd instanceof Date)) {
+      return [];
+    }
+    normalize_prefetch_coverage();
+    if (
+      !(prefetchCoverageStart instanceof Date) ||
+      !(prefetchCoverageEnd instanceof Date)
+    ) {
+      return [
+        {
+          start: add_days(currentStart, -PREFETCH_WINDOW_DAYS),
+          days: PREFETCH_WINDOW_DAYS,
+        },
+        { start: add_days(currentEnd, 1), days: PREFETCH_WINDOW_DAYS },
+      ];
+    }
+    const plan = [];
+    const daysToLeftEdge = days_since(prefetchCoverageStart, currentStart);
+    if (daysToLeftEdge <= PREFETCH_EDGE_TRIGGER_DAYS) {
+      plan.push({
+        start: add_days(prefetchCoverageStart, -PREFETCH_WINDOW_DAYS),
+        days: PREFETCH_WINDOW_DAYS,
+      });
+    }
+    const daysToRightEdge = days_since(currentEnd, prefetchCoverageEnd);
+    if (daysToRightEdge <= PREFETCH_EDGE_TRIGGER_DAYS) {
+      plan.push({
+        start: add_days(prefetchCoverageEnd, 1),
+        days: PREFETCH_WINDOW_DAYS,
+      });
+    }
+    return plan;
+  };
+  const fetch_and_cache_range = async (
+    rangeStart,
+    days,
+    {
+      version = scheduleWindowVersion,
+      signal = null,
+      countForLock = true,
+    } = {},
+  ) => {
+    if (!(rangeStart instanceof Date) || !remoteScheduleRows || days < 1) {
+      return false;
+    }
+    const allHours = rows
+      .map((row) => row.dataset.hour)
+      .filter((hour) => typeof hour == "string");
+    if (allHours.length == 0) {
+      return false;
+    }
+    const dateKeys = build_range_date_keys(rangeStart, days);
+    for (let i = 0; i < allHours.length; i += 12) {
+      if (
+        version != scheduleWindowVersion ||
+        signal?.aborted ||
+        is_hydration_locked() ||
+        is_lateral_movement_active()
+      ) {
+        return false;
+      }
+      const chunk = allHours.slice(i, i + 12);
+      if (read_cached_window_payload(chunk, dateKeys) != null) {
+        continue;
+      }
+      const payloadByHour = await fetch_window_payload(
+        rangeStart,
+        days,
+        chunk,
+        signal,
+        { countForLock },
+      );
+      if (version != scheduleWindowVersion || signal?.aborted) {
+        return false;
+      }
+      cache_window_payload(chunk, dateKeys, payloadByHour);
+    }
+    return true;
+  };
+  const queue_prefetch_adjacent_windows = (
+    version = scheduleWindowVersion,
+    { initial = false } = {},
+  ) => {
+    if (!remoteScheduleRows || !(scheduleWindow.start instanceof Date)) {
+      return;
+    }
+    if (initial && initialPrefetchScheduled) {
+      return;
+    }
+    if (initial) {
+      initialPrefetchScheduled = true;
+    }
+    if (prefetchTimer != 0) {
+      window.clearTimeout(prefetchTimer);
+      prefetchTimer = 0;
+    }
+    if (prefetchAbort) {
+      prefetchAbort.abort();
+      prefetchAbort = null;
+    }
+    const now = Date.now();
+    const sinceLastPrefetch = now - lastPrefetchRunAt;
+    const cooldownDelay =
+      initial || sinceLastPrefetch >= PREFETCH_COOLDOWN_MS
+        ? 0
+        : PREFETCH_COOLDOWN_MS - sinceLastPrefetch;
+    const triggerDelay = initial
+      ? PREFETCH_INITIAL_DELAY_MS
+      : PREFETCH_TRIGGER_DELAY_MS;
+    const scheduleDelay = Math.max(triggerDelay, cooldownDelay);
+    prefetchTimer = window.setTimeout(() => {
+      prefetchTimer = 0;
+      if (
+        version != scheduleWindowVersion ||
+        is_hydration_locked() ||
+        is_lateral_movement_active() ||
+        !(scheduleWindow.start instanceof Date)
+      ) {
+        return;
+      }
+      const plan = build_prefetch_plan();
+      if (plan.length == 0) {
+        return;
+      }
+      const controller = new AbortController();
+      prefetchAbort = controller;
+      lastPrefetchRunAt = Date.now();
+      void (async () => {
+        try {
+          prune_recent_prefetch_ranges();
+          for (const range of plan) {
+            const rangeKey = prefetch_range_key(range.start, range.days);
+            const completedAt = prefetchRecentRanges.get(rangeKey) ?? 0;
+            if (prefetchInFlightRanges.has(rangeKey)) {
+              continue;
+            }
+            if (Date.now() - completedAt < PREFETCH_COOLDOWN_MS) {
+              continue;
+            }
+            prefetchInFlightRanges.add(rangeKey);
+            try {
+              const finished = await fetch_and_cache_range(
+                range.start,
+                range.days,
+                {
+                  version,
+                  signal: controller.signal,
+                  countForLock: false,
+                },
+              );
+              if (finished) {
+                merge_prefetch_coverage(range.start, range.days);
+                prefetchRecentRanges.set(rangeKey, Date.now());
+              }
+            } finally {
+              prefetchInFlightRanges.delete(rangeKey);
+            }
+          }
+        } catch (err) {
+          if (!(err && err.name == "AbortError")) {
+            console.warn("schedule prefetch failed", err);
+          }
+        } finally {
+          if (prefetchAbort == controller) {
+            prefetchAbort = null;
+          }
+        }
+      })();
+    }, scheduleDelay);
   };
 
-  const load_rows = async (hoursToLoad) => {
+  const load_rows = async (
+    hoursToLoad,
+    {
+      version = scheduleWindowVersion,
+      signal = null,
+      countForLock = hasCompletedInitialHydration,
+      bypassHydrationGuards = false,
+    } = {},
+  ) => {
     if (!remoteScheduleRows) {
       return;
     }
@@ -2171,6 +5109,20 @@ function wire_cell_editors() {
       return;
     }
 
+    const blockedByHydrationGuard = () =>
+      !bypassHydrationGuards &&
+      (is_hydration_locked() || is_lateral_movement_active());
+
+    if (blockedByHydrationGuard()) {
+      for (const hour of requested) {
+        const row = rowsByHour.get(hour);
+        if (row) {
+          row.dataset.loading = "false";
+        }
+      }
+      return;
+    }
+
     const chunks = [];
     for (let i = 0; i < requested.length; i += 12) {
       chunks.push(requested.slice(i, i + 12));
@@ -2188,59 +5140,63 @@ function wire_cell_editors() {
     }
 
     for (const chunk of chunks) {
-      try {
-        for (const windowRange of rangeStarts) {
-          const url = new URL(scheduleWindow.endpoint, window.location.href);
-          const rangeStart = add_days(scheduleWindow.start, windowRange.offset);
-          url.searchParams.set("start", ymd(rangeStart));
-          url.searchParams.set("days", String(windowRange.days));
-          url.searchParams.set("hours", chunk.join(","));
-
-          const resp = await fetch(url.toString(), {
-            headers: {
-              Accept: "application/json",
-            },
-          });
-          if (!resp.ok) {
-            throw new Error(`api returned ${resp.status}`);
-          }
-
-          const data = await resp.json();
-          const payloadRows = Array.isArray(data.rows) ? data.rows : [];
-          const payloadByHour = new Map(
-            payloadRows.map((row) => [String(row.hour), row]),
-          );
-
-          for (const hour of chunk) {
-            const row = rowsByHour.get(hour);
-            if (!row) {
-              continue;
-            }
-            const payload = payloadByHour.get(hour);
-            const slots = [...row.querySelectorAll("td")];
-            const payloadCells = Array.isArray(payload?.cells)
-              ? payload.cells
-              : [];
-            for (
-              let i = 0;
-              i < windowRange.days && i + windowRange.offset < slots.length;
-              i += 1
-            ) {
-              const markup =
-                typeof payloadCells[i] == "string" ? payloadCells[i] : "";
-              slots[i + windowRange.offset].replaceChildren(
-                ...parse_schedule_cell_markup(markup),
-              );
-            }
+      if (
+        version != scheduleWindowVersion ||
+        signal?.aborted ||
+        blockedByHydrationGuard()
+      ) {
+        for (const hour of chunk) {
+          const row = rowsByHour.get(hour);
+          if (row) {
             row.dataset.loading = "false";
-            row.querySelectorAll("entry-cell").forEach((entry) => {
-              if (!("active" in entry.dataset)) {
-                entry.dataset.active = "false";
-              }
-            });
           }
         }
+        return;
+      }
+      try {
+        for (const windowRange of rangeStarts) {
+          if (
+            version != scheduleWindowVersion ||
+            signal?.aborted ||
+            blockedByHydrationGuard()
+          ) {
+            break;
+          }
+          const rangeStart = add_days(scheduleWindow.start, windowRange.offset);
+          const dateKeys = build_range_date_keys(rangeStart, windowRange.days);
+          let payloadByHour = read_cached_window_payload(chunk, dateKeys);
+          if (payloadByHour == null) {
+            payloadByHour = await fetch_window_payload(
+              rangeStart,
+              windowRange.days,
+              chunk,
+              signal,
+              { countForLock },
+            );
+            if (version != scheduleWindowVersion || signal?.aborted) {
+              break;
+            }
+            cache_window_payload(chunk, dateKeys, payloadByHour);
+          }
+          if (version != scheduleWindowVersion || signal?.aborted) {
+            break;
+          }
+          apply_window_payload_to_rows(chunk, windowRange, payloadByHour);
+        }
 
+        if (
+          version != scheduleWindowVersion ||
+          signal?.aborted ||
+          blockedByHydrationGuard()
+        ) {
+          for (const hour of chunk) {
+            const row = rowsByHour.get(hour);
+            if (row) {
+              row.dataset.loading = "false";
+            }
+          }
+          return;
+        }
         for (const hour of chunk) {
           const row = rowsByHour.get(hour);
           if (!row) {
@@ -2256,6 +5212,9 @@ function wire_cell_editors() {
             continue;
           }
           row.dataset.loading = "false";
+        }
+        if (err && err.name == "AbortError") {
+          return;
         }
         loadErrorMessage = err instanceof Error ? err.message : "unknown";
       }
@@ -2288,11 +5247,27 @@ function wire_cell_editors() {
     }
     update_caption("error", any_invalid());
     update_caption("changed", any_changed());
-    update_inspector_counts();
+    update_pending_review_control();
+    const activeTargets = inspector_target_entries(activeEntry);
+    if (
+      activeEntry &&
+      (activeEntry.dataset.id == cell.id ||
+        activeTargets.some((target) => target.dataset.id == cell.id))
+    ) {
+      update_inspector_counts(activeEntry, ensure_cell(activeEntry) ?? cell);
+    }
     return cell;
   };
 
-  const hydrate_rows = async (targets) => {
+  const hydrate_rows = async (
+    targets,
+    {
+      version = scheduleWindowVersion,
+      signal = hydrateAbort?.signal ?? null,
+      countForLock = hasCompletedInitialHydration,
+      bypassHydrationGuards = false,
+    } = {},
+  ) => {
     const rowsToHydrate = targets.filter(
       (row) => row && row.dataset.hydrated != "true",
     );
@@ -2304,7 +5279,16 @@ function wire_cell_editors() {
       .map((row) => row.dataset.hour)
       .filter((hour) => typeof hour == "string");
     if (hours.length > 0) {
-      await load_rows(hours);
+      await load_rows(hours, {
+        version,
+        signal,
+        countForLock,
+        bypassHydrationGuards,
+      });
+    }
+
+    if (version != scheduleWindowVersion || signal?.aborted) {
+      return;
     }
 
     for (const row of rowsToHydrate) {
@@ -2316,32 +5300,21 @@ function wire_cell_editors() {
       });
       row.dataset.hydrated = "true";
     }
+    sync_row_visibility();
     update_load_status();
-    if (activeEntry == null) {
-      const grid = editor.scheduleGrid;
-      if (!grid) {
-        return;
-      }
-      for (let rowIndex = 0; rowIndex < grid.cells.length; rowIndex += 1) {
-        const rowCells = grid.cells[rowIndex];
-        for (let colIndex = 0; colIndex < rowCells.length; colIndex += 1) {
-          const entry = rowCells[colIndex]?.querySelector("entry-cell");
-          if (!entry) {
-            continue;
-          }
-          grid.focus(rowIndex, colIndex);
-          return;
-        }
-      }
-    }
   };
 
   const hydrate_row = async (row) => {
     await hydrate_rows([row]);
   };
 
-  const initialRows = rows.filter((row) => !row.hidden).slice(0, 4);
-  void hydrate_rows(initialRows);
+  const initialRows = displayed_rows_for_hydration();
+  void hydrate_rows(initialRows, { countForLock: false }).finally(() => {
+    hasCompletedInitialHydration = true;
+    queue_placeholder_shadow_sync();
+    queue_prefetch_adjacent_windows(scheduleWindowVersion, { initial: true });
+  });
+  queue_settled_window_hydration();
 
   if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver(
@@ -2359,7 +5332,7 @@ function wire_cell_editors() {
         }
       },
       {
-        root: scrollContainer,
+        root: null,
         rootMargin: "160px 0px",
       },
     );
@@ -2375,6 +5348,7 @@ function wire_cell_editors() {
 
   update_caption("error", any_invalid());
   update_caption("changed", any_changed());
+  update_pending_review_control();
   update_load_status();
   update_inspector_counts();
 
@@ -2399,6 +5373,105 @@ function wire_cell_editors() {
   };
   wireJumpControl(jumpPrevDayBtn, -1);
   wireJumpControl(jumpNextDayBtn, 1);
+
+  const wireEdgeScrollControl = (button, direction) => {
+    if (!button) {
+      return;
+    }
+    button.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      void (async () => {
+        if (remoteScheduleRows) {
+          clear_header_settle_timer();
+          clear_header_preview();
+          await navigateWindowByDirection(direction, {
+            usePlaceholders: false,
+            deferHydration: false,
+            showPlaceholdersOnCacheMiss: true,
+            armIdleOnPlaceholder: false,
+            bypassHydrationGuards: true,
+            countFetchForLock: false,
+          });
+          return;
+        }
+        const atEdge = direction < 0 ? atLeftEdge() : atRightEdge();
+        if (hasHorizontalOverflow() && !atEdge) {
+          scrollOneDay(direction);
+          return;
+        }
+        scrollOneDay(direction, "auto");
+      })();
+    });
+  };
+  wireEdgeScrollControl(scrollPrevDayBtn, -1);
+  wireEdgeScrollControl(scrollNextDayBtn, 1);
+  updateEdgeScrollButtons();
+  let layoutResizeTimer = 0;
+  window.addEventListener(
+    "resize",
+    () => {
+      updateEdgeScrollButtons();
+      if (!remoteScheduleRows) {
+        return;
+      }
+      if (layoutResizeTimer != 0) {
+        window.clearTimeout(layoutResizeTimer);
+      }
+      layoutResizeTimer = window.setTimeout(() => {
+        layoutResizeTimer = 0;
+        lockedLeadingColumnWidthPx = 0;
+        const layout = apply_visible_day_layout({
+          requestedDays: scheduleWindow.requestedDays,
+        });
+        syncHeaderDates();
+        queue_floating_header_sync();
+        if (layout.changed && layout.grew) {
+          clear_header_preview();
+          refresh_window_after_layout_change();
+        }
+      }, 120);
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(JUMP_TO_WINDOW_EVENT, async (evt) => {
+    if (!remoteScheduleRows) {
+      return;
+    }
+    const requestedStart = parse_ymd(String(evt.detail?.start ?? ""));
+    if (!(requestedStart instanceof Date)) {
+      return;
+    }
+    evt.preventDefault();
+    const jumpFormElm = document.querySelector("nav.jump-form form");
+    const jumpStartInput = jumpFormElm?.querySelector('input[name="start"]');
+    const jumpDaysInput = jumpFormElm?.querySelector('input[name="days"]');
+    const parsedDays = Number.parseInt(String(evt.detail?.days ?? ""), 10);
+    const safeDays = Number.isNaN(parsedDays)
+      ? scheduleWindow.requestedDays
+      : Math.min(31, Math.max(1, parsedDays));
+    if (jumpStartInput instanceof HTMLInputElement) {
+      jumpStartInput.value = ymd(requestedStart);
+    }
+    if (jumpDaysInput instanceof HTMLInputElement) {
+      jumpDaysInput.value = String(safeDays);
+    }
+    clear_header_settle_timer();
+    clear_header_preview();
+    if (windowShiftInFlight) {
+      await windowShiftInFlight;
+    }
+    windowShiftInFlight = navigateToDateWindow(requestedStart);
+    const moved = await windowShiftInFlight;
+    windowShiftInFlight = null;
+    if (moved) {
+      return;
+    }
+    const fallbackUrl = String(evt.detail?.url ?? "");
+    if (fallbackUrl != "") {
+      window.location.assign(fallbackUrl);
+    }
+  });
 
   document.addEventListener(JUMP_TO_NEXT_NON_EMPTY_DAY_EVENT, async (evt) => {
     if (jumpLookupInFlight) {
@@ -2429,6 +5502,8 @@ function wire_cell_editors() {
       if (windowShiftInFlight) {
         await windowShiftInFlight;
       }
+      clear_header_settle_timer();
+      clear_header_preview();
       const nextDate = await queryNextScheduleDay(current, direction);
       if (nextDate == null) {
         if (source == "control") {
@@ -2439,13 +5514,13 @@ function wire_cell_editors() {
           );
           return;
         }
-        grid.focus(row, col + direction);
+        grid.focus(row, col + direction, { scroll: false });
         return;
       }
 
       const movedIntoWindow = await ensureWindowContainsDate(nextDate);
       if (!movedIntoWindow) {
-        navigateToDateWindow(nextDate);
+        await navigateToDateWindow(nextDate);
         return;
       }
 
@@ -2454,18 +5529,60 @@ function wire_cell_editors() {
         return;
       }
       const targetCol = days_since(windowStart, nextDate);
-      grid.focus(row, targetCol);
+      grid.focus(row, targetCol, { scroll: false });
     } finally {
       jumpLookupInFlight = false;
     }
   });
 
+  document.addEventListener(SHIFT_WINDOW_BY_EDGE_ARROW_EVENT, async (evt) => {
+    const direction = Number(evt.detail?.direction);
+    const row = Number.parseInt(evt.detail?.row, 10);
+    if ((direction !== -1 && direction !== 1) || !remoteScheduleRows) {
+      return;
+    }
+    const grid = editor.scheduleGrid;
+    if (!grid) {
+      return;
+    }
+    const currentCol = grid.col();
+    const atBoundary =
+      direction < 0
+        ? currentCol <= 0
+        : currentCol >= Math.max(0, scheduleWindow.totalDays - 1);
+    if (!atBoundary) {
+      return;
+    }
+    clear_header_settle_timer();
+    clear_header_preview();
+    if (windowShiftInFlight) {
+      await windowShiftInFlight;
+    }
+    windowShiftInFlight = navigateWindowByDirection(direction, {
+      usePlaceholders: false,
+      deferHydration: false,
+      showPlaceholdersOnCacheMiss: true,
+      armIdleOnPlaceholder: false,
+      bypassHydrationGuards: true,
+      countFetchForLock: false,
+    });
+    const moved = await windowShiftInFlight;
+    windowShiftInFlight = null;
+    if (!moved) {
+      return;
+    }
+    const targetCol =
+      direction < 0 ? 0 : Math.max(0, scheduleWindow.totalDays - 1);
+    const targetRow = Number.isNaN(row) ? grid.row() : row;
+    grid.focus(targetRow, targetCol, { scroll: false });
+  });
+
   if (editorTable) {
     editorTable.addEventListener("grid_selection", (evt) => {
+      const currentSelectionVersion = ++selectionVersion;
       const row = parseInt(evt.detail?.row, 10);
       const col = parseInt(evt.detail?.col, 10);
       const entry = evt.detail?.entry;
-      maybeExpandAroundCol(col);
       const rowElm = rows[row];
       if (!entry && rowElm == null) {
         return;
@@ -2479,6 +5596,9 @@ function wire_cell_editors() {
       }
 
       void hydrate_row(rowElm).then(() => {
+        if (currentSelectionVersion !== selectionVersion) {
+          return;
+        }
         const tds = rowElm.querySelectorAll("td");
         const td = tds[col];
         if (!td) {
@@ -2509,15 +5629,74 @@ function wire_cell_editors() {
     }
     scrollExpandTick = window.requestAnimationFrame(() => {
       scrollExpandTick = null;
+      updateEdgeScrollButtons();
       expandOnScroll();
     });
   });
+  const wheelSurface =
+    scrollShell instanceof HTMLElement ? scrollShell : scrollContainer;
+  const wheel_delta_to_px = (evt, delta) => {
+    if (!Number.isFinite(delta)) {
+      return 0;
+    }
+    switch (evt.deltaMode) {
+      case 1:
+        return delta * 16;
+      case 2:
+        return delta * window.innerHeight;
+      default:
+        return delta;
+    }
+  };
+  wheelSurface.addEventListener(
+    "wheel",
+    (evt) => {
+      const absX = Math.abs(evt.deltaX);
+      const absY = Math.abs(evt.deltaY);
+      const horizontalIntent = absX > absY || (evt.shiftKey && absY > 0);
+      if (!horizontalIntent) {
+        return;
+      }
+      const delta =
+        absX >= absY ? evt.deltaX : evt.shiftKey ? evt.deltaY : evt.deltaX;
+      if (!Number.isFinite(delta) || delta == 0) {
+        return;
+      }
+      const deltaPx = wheel_delta_to_px(evt, delta);
+      if (!Number.isFinite(deltaPx) || deltaPx == 0) {
+        return;
+      }
+      // Consume horizontal-intent wheel gestures only while interacting with
+      // the schedule grid surface to prevent browser back/forward swipe there.
+      evt.preventDefault();
+      if (!remoteScheduleRows) {
+        scrollContainer.scrollBy({ left: deltaPx, behavior: "auto" });
+        return;
+      }
+      if (headerSettleInFlight) {
+        return;
+      }
+      headerPreviewOffsetPx += deltaPx * 0.5;
+      if (has_crossed_movement_skeleton_threshold()) {
+        activate_movement_skeleton();
+      }
+      arm_movement_idle_gate();
+      apply_header_preview();
+      update_load_status();
+      queue_settled_window_hydration(
+        scheduleWindowVersion,
+        hydrateAbort?.signal ?? null,
+      );
+      queue_header_settle();
+    },
+    { passive: false, capture: true },
+  );
 
   const expando = document.querySelector("#expando");
   if (expando) {
     expando.addEventListener("click", () => {
       const newlyVisible = rows
-        .filter((row) => !row.hidden && row.dataset.hydrated != "true")
+        .filter((row) => row.dataset.hydrated != "true")
         .slice(0, 2);
       if (newlyVisible.length > 0) {
         void hydrate_rows(newlyVisible);
@@ -2534,9 +5713,27 @@ function wire_cell_editors() {
     activeEntry = preselected;
     update_inspector_selection(preselected);
   }
+  sync_row_visibility();
 
   container.addEventListener("cell_change", (evt) => {
     const cell = evt.detail;
+    if (
+      "serverErrors" in cell.elm.dataset &&
+      cell.preserveServerErrors !== true
+    ) {
+      delete cell.elm.dataset.serverErrors;
+    }
+    const serverErrorRecord = serverErrorState.get(String(cell.id));
+    const shouldPreserveServerErrors =
+      cell.preserveServerErrors === true ||
+      (serverErrorRecord != null &&
+        sameCellValues(serverErrorRecord.snapshot, snapshotCellValues(cell)));
+    if (!shouldPreserveServerErrors) {
+      serverErrorState.delete(String(cell.id));
+    } else if (serverErrorRecord != null) {
+      cell.elm.dataset.serverErrors = JSON.stringify(serverErrorRecord.errors);
+      cell.elm.dataset.error = "true";
+    }
 
     if (cell.invalid) {
       invalid.add(cell);
@@ -2557,21 +5754,542 @@ function wire_cell_editors() {
     } else {
       changedInvalid.delete(cell);
     }
+    update_pending_review_control();
 
     // add the beforeunload handler if there are changes
     // and remove it if not
     setBeforeUnload(any_changed());
+    sync_row_visibility();
     update_inspector_counts();
     if (activeEntry != null && activeEntry.dataset.id == cell.id) {
-      update_inspector_selection(activeEntry);
+      update_inspector_selection(activeEntry, { refreshEditor: false });
     }
   });
 
-  const apply = document.querySelector("#apply");
-  apply.disabled = false;
-  apply.addEventListener("click", (evt) => {
-    evt.preventDefault();
+  const commitCellState = (cell) => {
+    if (!cell) {
+      return;
+    }
+    if (cell.institute) {
+      cell.orig.institute = cell.institute.value;
+    }
+    cell.orig.group = cell.group.value;
+    cell.orig.member = cell.member.value;
+    for (const sr of Object.values(cell.sr)) {
+      if (!sr.requested) {
+        continue;
+      }
+      const requested = sr.requested.checked;
+      sr.orig.requested = requested;
+      sr.orig.handler = requested ? sr.handler?.value ?? "" : "";
+      if (sr.subkind) {
+        const current = sr.subkind.value;
+        sr.orig.subkind = current;
+      }
+    }
+    cell.update();
+    if ("serverErrors" in cell.elm.dataset) {
+      delete cell.elm.dataset.serverErrors;
+    }
+    serverErrorState.delete(String(cell.id));
+    changed.delete(cell);
+    invalid.delete(cell);
+    changedInvalid.delete(cell);
+    update_pending_review_control();
+  };
+  const remapCellIdentity = (oldId, newId) => {
+    const oldKey = String(oldId ?? "");
+    const newKey = String(newId ?? "");
+    if (!oldKey || !newKey || oldKey == newKey) {
+      return;
+    }
+    const cell = cells.get(oldKey);
+    if (!cell) {
+      return;
+    }
+    cells.delete(oldKey);
+    cell.id = newKey;
+    cell.elm.dataset.id = newKey;
+    cells.set(newKey, cell);
+    if (serverErrorState.has(oldKey)) {
+      serverErrorState.set(newKey, serverErrorState.get(oldKey));
+      serverErrorState.delete(oldKey);
+    }
+    if (activeEntry && activeEntry.dataset.id == oldKey) {
+      activeEntry.dataset.id = newKey;
+    }
+  };
+  const readCellValues = (cell) => {
+    const out = {
+      institute: cell.institute?.value ?? "",
+      group: cell.group?.value ?? "",
+      member: cell.member?.value ?? "",
+      sr: {},
+    };
+    for (const [kind, sr] of Object.entries(cell.sr)) {
+      out.sr[kind] = {
+        requested: Boolean(sr.requested?.checked),
+        handler: sr.handler?.value ?? "",
+        subkind: sr.subkind ? sr.subkind.value : "",
+      };
+    }
+    return out;
+  };
+  const buildDiffForValues = (cell, values) => {
+    if (!cell || !values) {
+      return null;
+    }
+    const diff = {
+      id: cell.id,
+      date: cell.date,
+      hour: cell.hour,
+    };
+    if (cell.institute && values.institute != cell.orig.institute) {
+      diff.institute = [cell.orig.institute, values.institute];
+    }
+    if (values.group != cell.orig.group) {
+      diff.group = [cell.orig.group, values.group];
+    }
+    if (values.member != cell.orig.member) {
+      diff.member = [cell.orig.member, values.member];
+    }
+    for (const [kind, sr] of Object.entries(cell.sr)) {
+      const incoming = values.sr?.[kind] ?? {
+        requested: Boolean(sr.requested?.checked),
+        handler: sr.requested?.checked ? sr.handler?.value ?? "" : "",
+        subkind: sr.subkind ? sr.subkind.value : "",
+      };
+      const incomingRequested = Boolean(incoming.requested);
+      const incomingHandler = incomingRequested ? incoming.handler ?? "" : "";
+      const requestedChanged =
+        sr.requested && incomingRequested != sr.orig.requested;
+      const handlerChanged = sr.handler && incomingHandler != sr.orig.handler;
+      const subkindChanged =
+        sr.subkind &&
+        incomingRequested &&
+        (sr.isNew || incoming.subkind != sr.orig.subkind);
+      if (!(requestedChanged || handlerChanged || subkindChanged)) {
+        continue;
+      }
+      const srDiff = {};
+      if (requestedChanged) {
+        srDiff.requested = incomingRequested;
+      }
+      if (handlerChanged) {
+        srDiff.handler = [sr.orig.handler, incomingHandler];
+      }
+      if (sr.subkind) {
+        if (sr.isNew) {
+          srDiff.subkind = ["", incoming.subkind];
+        } else if (incoming.subkind != sr.orig.subkind) {
+          srDiff.subkind = [sr.orig.subkind, incoming.subkind];
+        }
+        srDiff.effectiveSubkind = incoming.subkind;
+      }
+      diff[kind] = srDiff;
+    }
+    return Object.keys(diff).length > 3 ? diff : null;
+  };
+  const buildDiffBatchFromCells = (targetCells) => {
+    const targetList = Array.isArray(targetCells)
+      ? targetCells.filter(Boolean)
+      : [];
+    const diffs = targetList.map((cell) => cell.diff()).filter(Boolean);
+    diffs.sort(compareCellsChronologically);
+    return { targetCells: targetList, diffs };
+  };
+  const setCellSaveErrors = (cell, slotErrors = []) => {
+    if (!cell) {
+      return;
+    }
+    serverErrorState.set(String(cell.id), {
+      errors: slotErrors,
+      snapshot: snapshotCellValues(cell),
+    });
+    cell.elm.dataset.serverErrors = JSON.stringify(slotErrors);
+    cell.elm.dataset.error = "true";
+    invalid.add(cell);
+    changedInvalid.add(cell);
+  };
+  const planOverwriteRebase = (cell, rawError) => {
+    if (!cell || !rawError || rawError.type != "overwrote") {
+      return null;
+    }
+    const key = String(rawError.key ?? "")
+      .trim()
+      .toLowerCase();
+    const expected = rawError.expected == null ? "" : String(rawError.expected);
+    if (key == "institute" && cell.institute) {
+      return () => {
+        cell.orig.institute = expected;
+      };
+    }
+    if (key == "group") {
+      return () => {
+        cell.orig.group = expected;
+      };
+    }
+    if (key == "member") {
+      return () => {
+        cell.orig.member = expected;
+      };
+    }
+    const srKind = {
+      "medical handler": "med",
+      "training handler": "train",
+      "technologist handler": "tech",
+    }[key];
+    if (srKind && cell.sr?.[srKind]) {
+      return () => {
+        cell.sr[srKind].orig.handler = expected;
+      };
+    }
+    return null;
+  };
+  const rebaseCellFromOverwriteErrors = (cell, slotErrors = []) => {
+    if (!cell || !Array.isArray(slotErrors) || slotErrors.length == 0) {
+      return false;
+    }
+    const rebases = [];
+    for (const rawError of slotErrors) {
+      const rebase = planOverwriteRebase(cell, rawError);
+      if (rebase == null) {
+        return false;
+      }
+      rebases.push(rebase);
+    }
+    delete cell.elm.dataset.serverErrors;
+    serverErrorState.delete(String(cell.id));
+    for (const rebase of rebases) {
+      rebase();
+    }
+    cell.update();
+    return true;
+  };
+  const applySaveErrors = (data) => {
+    const failedIds = data.errors ? Object.keys(data.errors) : [];
+    if (failedIds.length == 0) {
+      return;
+    }
+    for (const id of failedIds) {
+      const errCell = cells.get(String(id));
+      if (!errCell) {
+        continue;
+      }
+      const slotErrors = Array.isArray(data.errors?.[id])
+        ? data.errors[id]
+        : [];
+      if (rebaseCellFromOverwriteErrors(errCell, slotErrors)) {
+        continue;
+      }
+      setCellSaveErrors(errCell, slotErrors);
+    }
+    update_caption("error", any_invalid());
+    update_caption("changed", any_changed());
+    update_pending_review_control();
+    setBeforeUnload(any_changed());
+    if (activeEntry) {
+      update_inspector_selection(activeEntry);
+    }
+  };
+  const submitDiffBatch = (
+    diffs,
+    targetCells,
+    {
+      notify = true,
+      closeInspectorOnSuccess = false,
+      applyValues = (cell) => readCellValues(cell),
+    } = {},
+  ) => {
+    result_dialog(
+      async (signal) => {
+        const csrf_token = document.querySelector("#csrf_token").value;
+        const body = JSON.stringify({
+          csrf_token,
+          payload: { diffs, notify },
+        });
+        try {
+          const resp = await fetch(window.location, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            signal,
+          });
+          let data = null;
+          if (resp.ok) {
+            data = await resp.json();
+          } else {
+            const parsed = await parse_server_failure(resp);
+            if (parsed.data) {
+              data = parsed.data;
+            } else {
+              return [null, parsed.message];
+            }
+          }
+          applySaveErrors(data);
+          return [
+            fmt_save_results(data, cells, human_hours),
+            null,
+            {
+              saved: data.saved || 0,
+              idMap: data.id_map || {},
+              failedIds: Object.keys(data.errors ?? {}).map((id) => String(id)),
+              errorMap: data.errors ?? {},
+            },
+          ];
+        } catch (err) {
+          if (err.name == "AbortError") {
+            return [null, null];
+          }
+          return [null, `error: ${err.message}`];
+        }
+      },
+      {
+        reload: false,
+        onResolved: (_payload, meta = {}) => {
+          const failedIds = new Set(meta.failedIds ?? []);
+          const errorMap = meta.errorMap ?? {};
+          const idMap = meta.idMap ?? {};
+          for (const [clientId, serverId] of Object.entries(idMap)) {
+            remapCellIdentity(clientId, serverId);
+          }
+          const successfulCells = targetCells.filter(
+            (cell) => !failedIds.has(String(cell.id)),
+          );
+          for (const cell of successfulCells) {
+            const values = applyValues(cell);
+            if (values) {
+              applyValuesToCell(cell, values);
+            }
+            commitCellState(cell);
+          }
+          if (failedIds.size === 0) {
+            durationDraftSnapshots.clear();
+            modalDurationSlots = 1;
+            modalTargetEntries = [];
+            modalDurationAnchorKey = null;
+          }
+          if (activeEntry != null) {
+            const activeCell = ensure_cell(activeEntry);
+            update_inspector_counts(activeEntry, activeCell, []);
+            update_inspector_selection(activeEntry);
+            mount_inspector_entry_editor(activeEntry);
+            sync_duration_controls(activeEntry, is_entry_editable(activeEntry));
+          }
+          for (const [failedId, rawSlotErrors] of Object.entries(errorMap)) {
+            const failedCell = cells.get(String(failedId));
+            if (!failedCell) {
+              continue;
+            }
+            const slotErrors = Array.isArray(rawSlotErrors)
+              ? rawSlotErrors
+              : [];
+            if (rebaseCellFromOverwriteErrors(failedCell, slotErrors)) {
+              continue;
+            }
+            setCellSaveErrors(failedCell, slotErrors);
+          }
+          update_caption("changed", any_changed());
+          update_caption("error", any_invalid());
+          update_pending_review_control();
+          setBeforeUnload(any_changed());
+          sync_row_visibility();
+          if (
+            activeEntry != null &&
+            failedIds.has(String(ensure_cell(activeEntry)?.id ?? ""))
+          ) {
+            update_inspector_selection(activeEntry);
+          }
+          if (
+            closeInspectorOnSuccess &&
+            successfulCells.length === targetCells.length
+          ) {
+            closeInspector();
+          }
+        },
+      },
+    );
+  };
+  const reviewAndSubmitDiffBatch = (
+    titleText,
+    diffs,
+    targetCells,
+    { closeInspectorOnSuccess = false, applyValues = undefined } = {},
+  ) => {
+    const [, summary] = fmt_editor_diffs(human_hours, false, diffs);
+    editor_dialog(true, true, titleText, summary, (notify) => {
+      submitDiffBatch(diffs, targetCells, {
+        notify,
+        closeInspectorOnSuccess,
+        applyValues,
+      });
+    });
+  };
+  const applyValuesToCell = (cell, values) => {
+    if (!cell || !values) {
+      return;
+    }
+    if (cell.institute) {
+      cell.institute.value = values.institute;
+      resetList(cell.institute);
+    }
+    cell.group.value = values.group;
+    cell.update_list();
+    resetList(cell.group);
+    cell.member.value = values.member;
+    resetList(cell.member);
+    for (const [kind, sr] of Object.entries(cell.sr)) {
+      const incoming = values.sr?.[kind];
+      if (!incoming) {
+        continue;
+      }
+      if (sr.requested) {
+        sr.requested.checked = Boolean(incoming.requested);
+      }
+      if (sr.handler) {
+        sr.handler.value = incoming.requested ? incoming.handler ?? "" : "";
+        resetList(sr.handler);
+      }
+      if (sr.subkind) {
+        sr.subkind.value = incoming.subkind ?? sr.subkind.value;
+      }
+    }
+    cell.update();
+  };
+
+  const closeInspector = () => {
+    syncDurationDraftTargets({ finalize: true });
+    if (inspectorDialog && typeof inspectorDialog.hide == "function") {
+      inspectorDialog.hide();
+    }
+  };
+  const reviewPendingSave = () => {
+    if (templateEditor) {
+      return;
+    }
     if (!any_changed()) {
+      editor_dialog(
+        false,
+        false,
+        "no pending changes",
+        "there are no pending changes to review",
+        null,
+      );
+      return;
+    }
+    if (changedInvalid.size > 0) {
+      editor_dialog(
+        false,
+        false,
+        "outstanding errors",
+        "all validation errors must be resolved before submitting",
+        null,
+      );
+      return;
+    }
+    const { targetCells, diffs } = buildDiffBatchFromCells(
+      sorted_changed_cells(),
+    );
+    if (diffs.length == 0) {
+      editor_dialog(
+        false,
+        false,
+        "no pending changes",
+        "there are no pending changes to review",
+        null,
+      );
+      return;
+    }
+    reviewAndSubmitDiffBatch("review pending changes", diffs, targetCells);
+  };
+
+  const submitSlotSave = () => {
+    if (templateEditor) {
+      return;
+    }
+    if (!activeEntry) {
+      editor_dialog(
+        false,
+        false,
+        "no selected slot",
+        "select a slot to edit or view",
+        null,
+      );
+      return;
+    }
+    const anchorCell = ensure_cell(activeEntry);
+    if (!anchorCell) {
+      editor_dialog(
+        false,
+        false,
+        "no selected slot",
+        "select a valid slot",
+        null,
+      );
+      return;
+    }
+    if (!is_entry_editable(anchorCell.elm)) {
+      editor_dialog(
+        false,
+        false,
+        "not editable",
+        "the selected slot cannot be edited",
+        null,
+      );
+      return;
+    }
+    const targets = resolve_duration_targets(activeEntry, modalDurationSlots);
+    const targetEntries = targets.length > 0 ? targets : [activeEntry];
+    const targetCells = [];
+    for (const entry of targetEntries) {
+      const cell = ensure_cell(entry);
+      if (!cell) {
+        continue;
+      }
+      targetCells.push({ entry, cell });
+    }
+    if (targetCells.length == 0) {
+      editor_dialog(
+        false,
+        false,
+        "no selected slot",
+        "select a valid slot",
+        null,
+      );
+      return;
+    }
+    for (const { cell } of targetCells) {
+      if (!is_entry_editable(cell.elm)) {
+        editor_dialog(
+          false,
+          false,
+          "not editable",
+          "all targeted slots must be editable",
+          null,
+        );
+        return;
+      }
+    }
+    const validationErrors = [];
+    for (const { entry } of targetCells) {
+      validationErrors.push(...readSelectedErrors(entry));
+    }
+    if (validationErrors.length > 0) {
+      editor_dialog(
+        false,
+        false,
+        "outstanding errors",
+        "all validation errors must be resolved before submitting",
+        null,
+      );
+      return;
+    }
+    const anchorValues = readCellValues(anchorCell);
+    const saveTargets = targetCells.map(({ cell }) => cell);
+    const diffs = saveTargets
+      .map((cell) => buildDiffForValues(cell, anchorValues))
+      .filter(Boolean);
+    if (diffs.length == 0) {
       editor_dialog(
         false,
         false,
@@ -2579,77 +6297,167 @@ function wire_cell_editors() {
         "there are no changes to submit",
         null,
       );
-    } else if (changedInvalid.size > 0) {
-      editor_dialog(
-        false,
-        false,
-        "outstanding errors",
-        "all errors must be resolved in updated entries before submitting",
-        null,
-      );
-    } else {
-      // at least one cell is changed and no changed cells contain errors
-      const diffs = [];
-      for (const cell of changed) {
-        diffs.push(cell.diff());
-      }
-      // order the diffs by civil time
-      diffs.sort((a, b) => {
-        if (a.date < b.date) {
-          return -1;
-        } else if (a.date > b.date) {
-          return 1;
-        }
-        if (a.hour < b.hour) {
-          return -1;
-        } else if (a.hour > b.hour) {
-          return 1;
-        }
-        return 0;
-      });
-      let [notifications, summary] = fmt_editor_diffs(
-        human_hours,
-        templateEditor,
-        diffs,
-      );
-      editor_dialog(
-        true,
-        notifications,
-        "publish changes",
-        summary,
-        (notify) => {
-          const csrf_token = document.querySelector("#csrf_token").value;
-          const body = JSON.stringify({
-            csrf_token,
-            payload: { diffs, notify },
-          });
-          result_dialog(async (signal) => {
-            try {
-              const resp = await fetch(window.location, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body,
-                signal,
-              });
-              if (!resp.ok) {
-                return [null, `error: unexpected ${resp.status} from server`];
-              }
-              const data = await resp.json();
-              // the error is for severe errors like networking errors
-              // validation errors are not counted here as they are
-              // considered a normal response
-              return [fmt_save_results(data, cells, human_hours), null];
-            } catch (err) {
-              if (err.name == "AbortError") {
-                return [null, null];
-              }
-              return [null, `error: ${err.message}`];
-            }
-          });
-        },
-      );
+      return;
     }
-  });
+    submitDiffBatch(diffs, saveTargets, {
+      closeInspectorOnSuccess: true,
+      applyValues: () => anchorValues,
+    });
+  };
+
+  if (inspector.review && !templateEditor) {
+    inspector.review.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      reviewPendingSave();
+    });
+  }
+
+  if (inspector.save) {
+    inspector.save.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      submitSlotSave();
+    });
+  }
+
+  if (inspectorContainer) {
+    for (const closer of inspectorContainer.querySelectorAll(
+      "[data-a11y-dialog-hide]",
+    )) {
+      closer.addEventListener("click", () => {
+        if (inspectorDialogOpen()) {
+          syncDurationDraftTargets({ finalize: true });
+        }
+      });
+    }
+  }
+
+  if (inspector.open && !templateEditor) {
+    inspector.open.addEventListener("click", async (evt) => {
+      evt.preventDefault();
+      const selectedRow =
+        activeEntry?.closest("tr") ??
+        rows[
+          Number.isInteger(editor.scheduleGrid?.row())
+            ? editor.scheduleGrid.row()
+            : 0
+        ];
+      if (selectedRow) {
+        await hydrate_row(selectedRow);
+      }
+      if (!activeEntry) {
+        set_inspector_action_label(false);
+        update_inspector_selection(null);
+      } else {
+        update_inspector_selection(activeEntry);
+      }
+      const editable = is_entry_editable(activeEntry);
+      sync_duration_controls(activeEntry, editable);
+      if (inspectorDialog) {
+        inspectorDialog.show();
+      }
+      if (inspector.save && editable) {
+        inspector.save.hidden = false;
+      } else if (inspector.save) {
+        inspector.save.hidden = true;
+      }
+    });
+  }
+
+  if (templateEditor) {
+    const apply = document.querySelector("#apply");
+    if (apply == null) {
+      return;
+    }
+    apply.disabled = false;
+    apply.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      if (!any_changed()) {
+        editor_dialog(
+          false,
+          false,
+          "no changes",
+          "there are no changes to submit",
+          null,
+        );
+      } else if (any_invalid()) {
+        editor_dialog(
+          false,
+          false,
+          "outstanding errors",
+          "all errors must be resolved before submitting",
+          null,
+        );
+      } else {
+        // at least one cell is changed and no changed cells contain errors
+        const diffs = [];
+        for (const cell of changed) {
+          diffs.push(cell.diff());
+        }
+        // order the diffs by civil time
+        diffs.sort((a, b) => {
+          if (a.date < b.date) {
+            return -1;
+          } else if (a.date > b.date) {
+            return 1;
+          }
+          if (a.hour < b.hour) {
+            return -1;
+          } else if (a.hour > b.hour) {
+            return 1;
+          }
+          return 0;
+        });
+        let [notifications, summary] = fmt_editor_diffs(
+          human_hours,
+          templateEditor,
+          diffs,
+        );
+        editor_dialog(
+          true,
+          notifications,
+          "publish changes",
+          summary,
+          (notify) => {
+            const csrf_token = document.querySelector("#csrf_token").value;
+            const body = JSON.stringify({
+              csrf_token,
+              payload: { diffs, notify },
+            });
+            result_dialog(async (signal) => {
+              try {
+                const resp = await fetch(window.location, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body,
+                  signal,
+                });
+                if (resp.ok) {
+                  const data = await resp.json();
+                  // the error is for severe errors like networking errors
+                  // validation errors are not counted here as they are
+                  // considered a normal response
+                  return [fmt_save_results(data, cells, human_hours), null];
+                }
+                const parsed = await parse_server_failure(resp);
+                if (parsed.data) {
+                  return [
+                    fmt_save_results(parsed.data, cells, human_hours),
+                    null,
+                  ];
+                }
+                return [null, parsed.message];
+              } catch (err) {
+                if (err.name == "AbortError") {
+                  return [null, null];
+                }
+                return [null, `error: ${err.message}`];
+              }
+            });
+          },
+        );
+      }
+    });
+  }
 }
 
 function main() {
@@ -2657,6 +6465,7 @@ function main() {
   clear_server_errors_on_input();
   setup_auto_confirms();
   wire_home_readonly_toggle();
+  wire_home_search_and_show_more();
   wire_editor_expando();
   wire_jump_form();
   editor_grid();

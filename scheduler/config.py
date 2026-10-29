@@ -254,6 +254,7 @@ class AuthTestProfile(BaseModel):
     active: bool = True
     admin: bool = False
     groups: List[str] = Field(default_factory=list)
+    pi_groups: List[str] = Field(default_factory=list)
     technologist: bool = False
     test_scanner_tech: bool = False
 
@@ -283,6 +284,15 @@ def _default_auth_test_profiles() -> Dict[str, AuthTestProfile]:
             active=True,
             admin=False,
             groups=["DEV"],
+        ),
+        "dev_pi": AuthTestProfile(
+            username="test-dev-pi",
+            email="test-dev-pi@example.com",
+            display_name="Test DEV PI",
+            active=True,
+            admin=False,
+            groups=["DEV"],
+            pi_groups=["DEV"],
         ),
         "tech": AuthTestProfile(
             username="test-tech",
@@ -493,7 +503,6 @@ class AppConfig(dict):
                 if settings.mail.default_sender is not None
                 else None
             ),
-            "nih_mailing_lists": settings.mail.mailing_lists,
             "SESSION_COOKIE_NAME": settings.session.cookie_name,
             "SESSION_COOKIE_SECURE": settings.session.cookie_secure,
             "SESSION_COOKIE_HTTPONLY": settings.session.cookie_httponly,
@@ -502,7 +511,6 @@ class AppConfig(dict):
             "SESSION_TYPE": settings.session.type,
             "SESSION_USE_SIGNER": settings.session.use_signer,
             "SESSION_SQLALCHEMY_TABLE": settings.session.sqlalchemy_table,
-            "nih_listserv": settings.core.listserv,
             "ENTRA_CLIENT_ID": settings.entra.client_id,
             "ENTRA_TENANT_ID": settings.entra.tenant_id,
             "ENTRA_DISCOVERY_URL": settings.entra.discovery_url,

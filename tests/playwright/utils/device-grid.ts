@@ -5,6 +5,7 @@ const ENTRY_RANGE_REGEX = /All entries are between (\d{4}-\d{1,2}-\d{1,2}) and (
 const GOTO_OPTS = { waitUntil: 'domcontentloaded' as const, timeout: 20000 };
 const GOTO_ATTEMPTS = 2;
 const GOTO_RETRY_DELAY_MS = 250;
+const GRID_BOOTSTRAP_TIMEOUT_MS = 15000;
 
 function summarizeError(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
@@ -39,8 +40,8 @@ async function sparseRowCount(page: Page): Promise<number | null> {
     return null;
   }
 
-  await expect(container).toBeVisible();
-  await expect(container).toHaveClass(/js-grid/);
+  await expect(container).toBeVisible({ timeout: GRID_BOOTSTRAP_TIMEOUT_MS });
+  await expect(container).toHaveClass(/js-grid/, { timeout: GRID_BOOTSTRAP_TIMEOUT_MS });
 
   return container
     .locator('tbody tr')
@@ -125,8 +126,8 @@ export async function openSeededDeviceGrid(page: Page): Promise<{ path: string; 
     await expando.click();
   }
 
-  await expect(page.locator('.editor #scroll-container')).toBeVisible();
-  await expect(page.locator('.editor #scroll-container')).toHaveClass(/js-grid/);
+  await expect(page.locator('.editor #scroll-container')).toBeVisible({ timeout: GRID_BOOTSTRAP_TIMEOUT_MS });
+  await expect(page.locator('.editor #scroll-container')).toHaveClass(/js-grid/, { timeout: GRID_BOOTSTRAP_TIMEOUT_MS });
   await expect(page.locator('#editor-load-status')).toContainText(/rows ready|loading/i);
   await expect
     .poll(

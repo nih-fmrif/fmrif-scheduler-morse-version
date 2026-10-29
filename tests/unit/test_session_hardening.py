@@ -41,14 +41,11 @@ def test_store_session_rotates_identifier():
 def test_get_user_from_session_fails_closed_when_db_lookup_errors(monkeypatch):
     app = _build_test_app()
 
-    def _raise(_):
+    def _raise(entity, _):
+        assert entity is session_helpers.model.User
         raise RuntimeError("database unavailable")
 
-    monkeypatch.setattr(
-        session_helpers.model,
-        "User",
-        SimpleNamespace(query=SimpleNamespace(get=_raise)),
-    )
+    monkeypatch.setattr(session_helpers.model, "get", _raise)
 
     with app.test_request_context("/"):
         session["user_name"] = "danger-user"

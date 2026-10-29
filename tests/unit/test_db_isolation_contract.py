@@ -12,6 +12,11 @@ ISOLATION_FIXTURES = {
     "route_app_context",
     "route_client",
 }
+ROUTE_FIXTURES = {
+    "route_app",
+    "route_app_context",
+    "route_client",
+}
 
 
 def _attribute_path(node: ast.AST) -> tuple[str, ...] | None:
@@ -77,12 +82,24 @@ def _imports_global_scheduler_app(tree: ast.Module) -> bool:
     return False
 
 
+def _fixture_args(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    return {
+        arg.arg
+        for arg in (
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        )
+    }
+
+
 def test_db_access_tests_require_isolation_entrypoints():
     tests_root = Path(__file__).resolve().parent
     this_file = Path(__file__).name
 
     global_app_imports: list[str] = []
     isolation_violations: list[str] = []
+    route_mark_violations: list[str] = []
 
     for path in sorted(tests_root.glob("test_*.py")):
         if path.name == this_file:
@@ -98,18 +115,25 @@ def test_db_access_tests_require_isolation_entrypoints():
                 continue
             if not node.name.startswith("test_"):
                 continue
+            fixture_args = _fixture_args(node)
+            uses_route_fixture = bool(fixture_args & ROUTE_FIXTURES)
+            is_route = module_is_route or _function_is_route_marked(node)
+            if uses_route_fixture and not is_route:
+                route_mark_violations.append(f"{path.name}::{node.name}")
             if not _touches_db_state(node):
                 continue
 
-            fixture_args = {arg.arg for arg in node.args.args}
             has_isolation_fixture = bool(fixture_args & ISOLATION_FIXTURES)
-            is_route = module_is_route or _function_is_route_marked(node)
             if not (has_isolation_fixture or is_route):
                 isolation_violations.append(f"{path.name}::{node.name}")
 
     assert not global_app_imports, (
         "Route tests must use fixture-backed app access instead of importing a "
         "module-level app singleton: " + ", ".join(sorted(global_app_imports))
+    )
+    assert not route_mark_violations, (
+        "Tests using route fixtures must be route-marked so they do not run in "
+        "pixi run test-unit: " + ", ".join(sorted(route_mark_violations))
     )
     assert not isolation_violations, (
         "Tests touching DB state must be route-marked or request an isolation "

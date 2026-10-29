@@ -98,7 +98,7 @@ def _rbac_mutating_route_cases() -> list[tuple[str, str, str]]:
 def _seed_rbac_contract_data() -> None:
     scanner_id = seeded_scanner_id()
     # RBAC contract paths for template edit routes depend on a concrete template id.
-    existing = model.Template.query.get(("A", scanner_id))
+    existing = model.get(model.Template, ("A", scanner_id))
     if existing is not None:
         return
     model.db.session.add(
@@ -130,9 +130,10 @@ def _resolve_seeded_device_sample_path(sample_path: str) -> str:
 
 def _client_for_profile(profile: str, route_app):
     client = route_app.test_client()
+    session_key = "".join(ch for ch in profile.lower() if ch.isalnum())[:6] or "route1"
     response = client.post(
         "/auth/test/session",
-        json={"profile": profile},
+        json={"profile": profile, "session_key": session_key},
         headers={"X-Test-Auth-Secret": "unit-secret"},
     )
     assert response.status_code == 200, (

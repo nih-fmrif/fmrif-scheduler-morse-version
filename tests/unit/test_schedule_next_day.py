@@ -7,6 +7,7 @@ from route_seed import (
     ensure_admin_user,
     set_admin_session,
 )
+from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import logic, model
 
@@ -48,7 +49,7 @@ def test_next_schedule_day_logic(route_app_context):
     _add_schedule_entry(device_id, datetime.date(2026, 1, 10), template="A3")
     model.db.session.flush()
 
-    device = model.Device.query.get(device_id)
+    device = model.get(model.Device, device_id)
     assert device is not None
 
     assert logic.next_schedule_day(
@@ -112,3 +113,23 @@ def test_device_schedule_next_day_endpoint_validates_params(
     )
     assert response.status_code == 200
     assert response.get_json() == {"date": "2026-01-08"}
+
+
+@pytest.mark.route
+def test_device_schedule_next_day_without_start_returns_503_when_db_clock_unavailable(
+    route_client, route_app_context, monkeypatch
+):
+    device_id, _ = create_device()
+    _seed_next_day_device(device_id)
+    ensure_admin_user()
+    set_admin_session(route_client)
+
+    def _raise():
+        raise SQLAlchemyError("db clock unavailable")
+
+    monkeypatch.setattr(logic, "db_now", _raise)
+
+    response = route_client.get(
+        f"/json/v1/device/{device_id}/schedule-next-day?direction=1"
+    )
+    assert response.status_code == 503

@@ -2,14 +2,14 @@
 set -euo pipefail
 
 : "${ENVFILE:=.env}"
-RUNTIME_SCOPE_DIR="/tmp/fmrif-scheduler-runtimes"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/scripts/runtime-scope.sh"
 
 declare -a LOADED_ENV_KEYS=()
 COMPOSE_ENV_FILE=""
 RUNTIME_ENV_FILE=""
-RUNTIME_SCOPE=""
-RUNTIME_SCOPE_OFFSET=0
-RUNTIME_SCOPE_FILE=""
+
 
 cleanup_compose_env_file() {
   if [ -n "${COMPOSE_ENV_FILE}" ] && [ -f "$COMPOSE_ENV_FILE" ]; then
@@ -22,86 +22,160 @@ cleanup_compose_env_file() {
 
 trap cleanup_compose_env_file EXIT
 
-compose_name_for_compose() {
-  local raw_name=$1
-  local sanitized
-
-  if [ -z "$raw_name" ]; then
-    raw_name="$(basename "$PWD")"
-  fi
-
-  sanitized="$(printf '%s' "$raw_name" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9_' '-')"
-  sanitized="${sanitized#-}"
-  sanitized="${sanitized%-}"
-  printf '%s' "${sanitized:-scheduler}"
-}
-
-sanitize_scope() {
-  local raw=$1
-  local value
-  value="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')"
-  value="${value#-}"
-  value="${value%-}"
-  printf '%s' "${value:-default}"
-}
-
-scope_hash_offset() {
-  local raw=$1
-  local hash
-  if [ "$raw" = "default" ]; then
-    printf '0'
-    return 0
-  fi
-  hash="$(printf '%s' "$raw" | cksum | awk '{print $1}')"
-  printf '%s' $((hash % 2000))
-}
-
-derive_runtime_scope() {
-  local raw_scope
-  raw_scope="${FMRIF_RUNTIME_SCOPE:-default}"
-  RUNTIME_SCOPE="$(sanitize_scope "$raw_scope")"
-  RUNTIME_SCOPE_OFFSET="$(scope_hash_offset "$RUNTIME_SCOPE")"
-  export FMRIF_RUNTIME_SCOPE="$RUNTIME_SCOPE"
-  export FMRIF_RUNTIME_SCOPE_OFFSET="$RUNTIME_SCOPE_OFFSET"
-}
-
-acquire_runtime_scope_file() {
-  mkdir -p "$RUNTIME_SCOPE_DIR"
-  RUNTIME_SCOPE_FILE="${RUNTIME_SCOPE_DIR}/${RUNTIME_SCOPE}"
-  : >"$RUNTIME_SCOPE_FILE"
-  return 0
-}
-
-resolve_compose_project() {
-  local base_name="${SCHEDULER_COMPOSE_PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-}}"
-  local derived="$base_name"
-
-  if [ -z "$derived" ]; then
-    derived="$(basename "$PWD")"
-  fi
-
-  if [ "${RUNTIME_SCOPE:-default}" != "default" ]; then
-    case "$derived" in
-      *-"${RUNTIME_SCOPE}")
-        ;;
-      *)
-        derived="${derived}-${RUNTIME_SCOPE}"
-        ;;
-    esac
-  fi
-
-  COMPOSE_PROJECT_NAME="$(compose_name_for_compose "$derived")"
-  export COMPOSE_PROJECT_NAME
+runtime_scope_resolve_compose_project() {
+  local base_name="${SCHEDULER_COMPOSE_PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-scheduler}}"
+  runtime_scope_set_compose_project_name "$base_name"
 }
 
 compose_project_has_running_services() {
+  local project_name="${1:-$COMPOSE_PROJECT_NAME}"
   if ! command -v docker >/dev/null 2>&1; then
     return 1
   fi
   docker ps \
-    --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+    --filter "label=com.docker.compose.project=${project_name}" \
     --filter "status=running" \
     -q | grep -q .
+}
+
+runtime_scope_current_worktree_root() {
+  local root=""
+  if command -v git >/dev/null 2>&1; then
+    root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  fi
+  printf '%s' "$root"
+}
+
+ensure_scope_worktree_match() {
+  local scope="$1"
+  local file_worktree="$2"
+  local current_worktree=""
+  if [ -z "$file_worktree" ]; then
+    return 0
+  fi
+
+  current_worktree="$(runtime_scope_current_worktree_root)"
+  if [ -z "$current_worktree" ]; then
+    return 0
+  fi
+
+  if [ "$file_worktree" != "$current_worktree" ]; then
+    echo "ERROR: scope '${scope}' is owned by a different worktree."
+    echo "  scope metadata worktree: ${file_worktree}"
+    echo "  current worktree: ${current_worktree}"
+    echo "  Set FMRIF_RUNTIME_SCOPE to a different scope, or run from the owning worktree."
+    return 1
+  fi
+  return 0
+}
+
+list_all_scopes() {
+  local scope_files=()
+  local scope_file
+  local scope_name
+  local scope_worktree
+  local project_name
+  local deployed
+
+  if [ ! -d "$RUNTIME_SCOPE_DIR" ]; then
+    echo "No scope metadata directory found: ${RUNTIME_SCOPE_DIR}"
+    return 0
+  fi
+
+  shopt -s nullglob
+  scope_files=("${RUNTIME_SCOPE_DIR}"/*)
+  shopt -u nullglob
+
+  if [ ${#scope_files[@]} -eq 0 ]; then
+    echo "No scope metadata files found in ${RUNTIME_SCOPE_DIR}."
+    return 0
+  fi
+
+  for scope_file in "${scope_files[@]}"; do
+    scope_name="$(basename "$scope_file")"
+    if [ ! -f "$scope_file" ]; then
+      continue
+    fi
+
+    if ! runtime_scope_load_metadata "$scope_file"; then
+      echo "Scope: ${scope_name}"
+      echo "  metadata_status: invalid"
+      echo "  deployed: unknown"
+      echo
+      continue
+    fi
+
+    project_name="${RUNTIME_SCOPE_COMPOSE_PROJECT_NAME:-}"
+    scope_worktree="${RUNTIME_SCOPE_WORKTREE_ROOT:-}"
+    if [ -z "$project_name" ]; then
+      deployed="unknown"
+    elif compose_project_has_running_services "$project_name"; then
+      deployed="running"
+    else
+      deployed="stopped"
+    fi
+
+    echo "Scope: ${scope_name}"
+    echo "  compose_project: ${project_name:-<unset>}"
+    echo "  worktree_root: ${scope_worktree:-<unset>}"
+    echo "  deployed: ${deployed}"
+    echo
+  done
+}
+
+clear_all_scopes() {
+  local scope_files=()
+  local scope_file
+  local scope_name
+  local scope_worktree
+  local project_name
+
+  if [ ! -d "$RUNTIME_SCOPE_DIR" ]; then
+    echo "No scope metadata directory found: ${RUNTIME_SCOPE_DIR}"
+    return 0
+  fi
+
+  shopt -s nullglob
+  scope_files=("${RUNTIME_SCOPE_DIR}"/*)
+  shopt -u nullglob
+
+  if [ ${#scope_files[@]} -eq 0 ]; then
+    echo "No scope metadata files found in ${RUNTIME_SCOPE_DIR}."
+    return 0
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: docker is required for --clear-all stack cleanup." >&2
+    return 1
+  fi
+
+  for scope_file in "${scope_files[@]}"; do
+    scope_name="$(basename "$scope_file")"
+    if [ -f "$scope_file" ] && runtime_scope_load_metadata "$scope_file"; then
+      project_name="${RUNTIME_SCOPE_COMPOSE_PROJECT_NAME:-}"
+      scope_worktree="${RUNTIME_SCOPE_WORKTREE_ROOT:-}"
+      if [ -n "$scope_worktree" ]; then
+        current_worktree="$(runtime_scope_current_worktree_root)"
+        if [ -n "$current_worktree" ] && [ "$scope_worktree" != "$current_worktree" ]; then
+          echo "Warning: scope '${scope_name}' is owned by a different worktree (metadata: ${scope_worktree}); attempting teardown anyway."
+        fi
+      fi
+      if [ -n "$project_name" ]; then
+        echo "Clearing scope '${scope_name}' (project=${project_name})"
+        docker compose \
+          --project-name "$project_name" \
+          down --volumes --remove-orphans || true
+      else
+        echo "Scope '${scope_name}' missing compose project metadata; skipping stack teardown."
+      fi
+    else
+      echo "Could not read metadata for '${scope_name}'; skipping stack teardown."
+    fi
+  done
+
+  echo "Removing all scope metadata files in ${RUNTIME_SCOPE_DIR}..."
+  rm -f "${RUNTIME_SCOPE_DIR}"/*
+  echo "Cleared runtime scope metadata."
 }
 
 show_scope_running_guidance() {
@@ -121,6 +195,9 @@ START_NO_APP=0
 RESUME_STACK=0
 CHECK_ONLY=0
 RESET_STACK=0
+WIPE_SCOPE=0
+LIST_ALL_SCOPES=0
+CLEAR_ALL_SCOPES=0
 
 show_help() {
   cat <<'EOF'
@@ -128,6 +205,9 @@ Usage:
   ./run-compose.sh --no-app            # recommended local dev: postgres + mailpit services only
   ./run-compose.sh --no-app --resume   # reuse existing postgres/mailpit data
   ./run-compose.sh --no-app --reset    # replace stack and wipe volumes
+  ./run-compose.sh --wipe              # wipe active scope stack and metadata
+  ./run-compose.sh --list-all          # list all scopes in metadata store and whether each stack is deployed
+  ./run-compose.sh --clear-all          # wipe all scope stacks and metadata files
   ./run-compose.sh                     # full compose stack (includes app container)
   ./run-compose.sh --resume            # resume existing full stack without destructive reset
   ./run-compose.sh --reset             # replace full stack and wipe volumes
@@ -151,6 +231,15 @@ validate_port() {
   local name=$2
   if [[ ! "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
     echo "ERROR: ${name} must be between 1 and 65535: ${port}" >&2
+    return 1
+  fi
+}
+
+validate_non_negative_int() {
+  local value=$1
+  local name=$2
+  if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: ${name} must be a non-negative integer: ${value}" >&2
     return 1
   fi
 }
@@ -305,6 +394,23 @@ load_env_file() {
   done < "$file"
 }
 
+coalesce_session_cookie_name() {
+  local base_cookie="${1:-}"
+  local scope="${RUNTIME_SCOPE:-default}"
+  if [ -z "${base_cookie}" ]; then
+    base_cookie="dsid-${scope}"
+  fi
+
+  local suffix
+  suffix="-${scope}"
+  if [ "${scope}" = "default" ] || [[ "${base_cookie}" == *"${suffix}" ]]; then
+    printf '%s' "$base_cookie"
+    return 0
+  fi
+
+  printf '%s%s' "$base_cookie" "${suffix}"
+}
+
 build_compose_env_file() {
   local out_file=$1
   local -a keys=(
@@ -398,6 +504,16 @@ validate_runtime_env() {
 
   # Keep parser tolerant of values that would break `source`.
   load_env_file "$ENVFILE"
+  runtime_scope_load_metadata "$RUNTIME_SCOPE_FILE" || true
+
+  PGHOST="${PGHOST:-$(runtime_scope_get_metadata PGHOST "localhost")}"
+  PGPORT="${PGPORT:-$(runtime_scope_get_metadata PGPORT "5444")}"
+  APP_PORT="${APP_PORT:-$(runtime_scope_get_metadata APP_PORT "5051")}"
+  MAILPIT__PORT="${MAILPIT__PORT:-$(runtime_scope_get_metadata MAILPIT_APP_PORT "")}"
+  MAILPIT__SMTP_PORT="${MAILPIT__SMTP_PORT:-$(runtime_scope_get_metadata MAILPIT_APP_SMTP_PORT "")}"
+  PGDATABASE="${PGDATABASE:-$(runtime_scope_get_metadata PGDATABASE "fmrif_scheduler")}"
+  PGUSER="${PGUSER:-$(runtime_scope_get_metadata PGUSER "postgres")}"
+  PGPASSWORD="${PGPASSWORD:-$(runtime_scope_get_metadata PGPASSWORD "")}"
 
   local missing_env=()
   for var in PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE MAIL__DEFAULT_SENDER; do
@@ -410,32 +526,29 @@ validate_runtime_env() {
     return 1
   fi
 
-  if [[ ! "$PGPORT" =~ ^[0-9]+$ ]] || (( PGPORT < 1 || PGPORT > 65535 )); then
-    echo "ERROR: PGPORT must be between 1 and 65535: $PGPORT" >&2
-    return 1
-  fi
-
   if [[ "$MAIL__DEFAULT_SENDER" != *"@"* ]]; then
     echo "ERROR: MAIL__DEFAULT_SENDER must be a valid email address: $MAIL__DEFAULT_SENDER" >&2
     return 1
   fi
 
-  : "${APP_PORT:=5051}"
+  if [[ ! "$PGPORT" =~ ^[0-9]+$ ]] || (( PGPORT < 1 || PGPORT > 65535 )); then
+    echo "ERROR: PGPORT must be between 1 and 65535: $PGPORT" >&2
+    return 1
+  fi
+
   if [[ ! "$APP_PORT" =~ ^[0-9]+$ ]] || (( APP_PORT < 1 || APP_PORT > 65535 )); then
     echo "ERROR: APP_PORT must be between 1 and 65535: $APP_PORT" >&2
     return 1
   fi
 
-  if [[ -n "${MAILPIT__PORT:-}" ]]; then
-    if [[ ! "$MAILPIT__PORT" =~ ^[0-9]+$ ]] || (( MAILPIT__PORT < 1 || MAILPIT__PORT > 65535 )); then
-      echo "ERROR: MAILPIT__PORT must be between 1 and 65535: $MAILPIT__PORT" >&2
-      return 1
-    fi
-  else
+  if [ -z "${MAILPIT__PORT}" ]; then
     MAILPIT__PORT=$((PGPORT + 1))
     if (( MAILPIT__PORT > 65535 )); then
       MAILPIT__PORT=8025
     fi
+  elif [[ ! "$MAILPIT__PORT" =~ ^[0-9]+$ ]] || (( MAILPIT__PORT < 1 || MAILPIT__PORT > 65535 )); then
+    echo "ERROR: MAILPIT__PORT must be between 1 and 65535: $MAILPIT__PORT" >&2
+    return 1
   fi
 
   if [ "$MAILPIT__PORT" = "$APP_PORT" ] || [ "$MAILPIT__PORT" = "$PGPORT" ]; then
@@ -443,16 +556,14 @@ validate_runtime_env() {
     return 1
   fi
 
-  if [[ -n "${MAILPIT__SMTP_PORT:-}" ]]; then
-    if [[ ! "$MAILPIT__SMTP_PORT" =~ ^[0-9]+$ ]] || (( MAILPIT__SMTP_PORT < 1 || MAILPIT__SMTP_PORT > 65535 )); then
-      echo "ERROR: MAILPIT__SMTP_PORT must be between 1 and 65535: $MAILPIT__SMTP_PORT" >&2
-      return 1
-    fi
-  else
+  if [ -z "${MAILPIT__SMTP_PORT}" ]; then
     MAILPIT__SMTP_PORT=$((PGPORT + 2))
     if (( MAILPIT__SMTP_PORT > 65535 )); then
       MAILPIT__SMTP_PORT=8026
     fi
+  elif [[ ! "$MAILPIT__SMTP_PORT" =~ ^[0-9]+$ ]] || (( MAILPIT__SMTP_PORT < 1 || MAILPIT__SMTP_PORT > 65535 )); then
+    echo "ERROR: MAILPIT__SMTP_PORT must be between 1 and 65535: $MAILPIT__SMTP_PORT" >&2
+    return 1
   fi
 
   if [ "$MAILPIT__SMTP_PORT" = "$APP_PORT" ] || [ "$MAILPIT__SMTP_PORT" = "$PGPORT" ] || [ "$MAILPIT__SMTP_PORT" = "$MAILPIT__PORT" ]; then
@@ -460,70 +571,113 @@ validate_runtime_env() {
     return 1
   fi
 
-  local scope_offset="${FMRIF_RUNTIME_SCOPE_OFFSET:-0}"
+  local scope_offset="${FMRIF_RUNTIME_SCOPE_OFFSET:-$(runtime_scope_get_metadata FMRIF_RUNTIME_SCOPE_OFFSET 0)}"
+  validate_non_negative_int "$scope_offset" "FMRIF_RUNTIME_SCOPE_OFFSET"
+  FMRIF_RUNTIME_SCOPE_OFFSET="${scope_offset}"
+  export FMRIF_RUNTIME_SCOPE_OFFSET
+
+  local base_pgport="${PGPORT}"
+  local base_app_port="${APP_PORT}"
+  local base_mailpit_port="${MAILPIT__PORT}"
+  local base_mailpit_smtp_port="${MAILPIT__SMTP_PORT}"
+  local base_integration_app_port
+  local base_mailpit_unit_port
+  local base_mailpit_unit_smtp_port
+  local base_mailpit_routes_port
+  local base_mailpit_routes_smtp_port
+  local base_mailpit_integration_port
+  local base_mailpit_integration_smtp_port
+  SESSION__COOKIE_NAME="${SESSION__COOKIE_NAME:-$(runtime_scope_get_metadata SESSION__COOKIE_NAME "dsid-${RUNTIME_SCOPE}")}"
+  SESSION__COOKIE_NAME="$(coalesce_session_cookie_name "$SESSION__COOKIE_NAME")"
+
   local scoped_pgport scoped_app_port
-  local integration_app_port
-  local mailpit_app_port mailpit_app_smtp_port
-  local mailpit_unit_port mailpit_unit_smtp_port
-  local mailpit_routes_port mailpit_routes_smtp_port
-  local mailpit_integration_port mailpit_integration_smtp_port
+  local scoped_integration_app_port
+  local scoped_mailpit_app_port scoped_mailpit_app_smtp_port
+  local scoped_mailpit_unit_port scoped_mailpit_unit_smtp_port
+  local scoped_mailpit_routes_port scoped_mailpit_routes_smtp_port
+  local scoped_mailpit_integration_port scoped_mailpit_integration_smtp_port
 
-  scoped_pgport=$((PGPORT + scope_offset))
-  scoped_app_port=$((APP_PORT + scope_offset))
-  integration_app_port=$((scoped_app_port + 60))
-  mailpit_app_port=$((MAILPIT__PORT + scope_offset))
-  mailpit_app_smtp_port=$((MAILPIT__SMTP_PORT + scope_offset))
+  base_integration_app_port=$((base_app_port + 60))
+  base_mailpit_unit_port=$((base_mailpit_port + 20))
+  base_mailpit_unit_smtp_port=$((base_mailpit_smtp_port + 20))
+  base_mailpit_routes_port=$((base_mailpit_port + 40))
+  base_mailpit_routes_smtp_port=$((base_mailpit_smtp_port + 40))
+  base_mailpit_integration_port=$((base_mailpit_port + 60))
+  base_mailpit_integration_smtp_port=$((base_mailpit_smtp_port + 60))
 
-  mailpit_unit_port=$((mailpit_app_port + 20))
-  mailpit_unit_smtp_port=$((mailpit_app_smtp_port + 20))
-  mailpit_routes_port=$((mailpit_app_port + 40))
-  mailpit_routes_smtp_port=$((mailpit_app_smtp_port + 40))
-  mailpit_integration_port=$((mailpit_app_port + 60))
-  mailpit_integration_smtp_port=$((mailpit_app_smtp_port + 60))
+  scoped_pgport=$((base_pgport + scope_offset))
+  scoped_app_port=$((base_app_port + scope_offset))
+  scoped_integration_app_port=$((base_integration_app_port + scope_offset))
+  scoped_mailpit_app_port=$((base_mailpit_port + scope_offset))
+  scoped_mailpit_app_smtp_port=$((base_mailpit_smtp_port + scope_offset))
+  scoped_mailpit_unit_port=$((base_mailpit_unit_port + scope_offset))
+  scoped_mailpit_unit_smtp_port=$((base_mailpit_unit_smtp_port + scope_offset))
+  scoped_mailpit_routes_port=$((base_mailpit_routes_port + scope_offset))
+  scoped_mailpit_routes_smtp_port=$((base_mailpit_routes_smtp_port + scope_offset))
+  scoped_mailpit_integration_port=$((base_mailpit_integration_port + scope_offset))
+  scoped_mailpit_integration_smtp_port=$((base_mailpit_integration_smtp_port + scope_offset))
 
   validate_port "$scoped_pgport" "PGPORT (scoped)" || return 1
   validate_port "$scoped_app_port" "APP_PORT (scoped)" || return 1
-  validate_port "$integration_app_port" "INTEGRATION_APP_PORT (scoped)" || return 1
-  validate_port "$mailpit_app_port" "MAILPIT__PORT (app scoped)" || return 1
-  validate_port "$mailpit_app_smtp_port" "MAILPIT__SMTP_PORT (app scoped)" || return 1
-  validate_port "$mailpit_unit_port" "MAILPIT_UNIT__PORT" || return 1
-  validate_port "$mailpit_unit_smtp_port" "MAILPIT_UNIT__SMTP_PORT" || return 1
-  validate_port "$mailpit_routes_port" "MAILPIT_ROUTES__PORT" || return 1
-  validate_port "$mailpit_routes_smtp_port" "MAILPIT_ROUTES__SMTP_PORT" || return 1
-  validate_port "$mailpit_integration_port" "MAILPIT_INTEGRATION__PORT" || return 1
-  validate_port "$mailpit_integration_smtp_port" "MAILPIT_INTEGRATION__SMTP_PORT" || return 1
+  validate_port "$scoped_integration_app_port" "INTEGRATION_APP_PORT (scoped)" || return 1
+  validate_port "$scoped_mailpit_app_port" "MAILPIT__PORT (app scoped)" || return 1
+  validate_port "$scoped_mailpit_app_smtp_port" "MAILPIT__SMTP_PORT (app scoped)" || return 1
+  validate_port "$scoped_mailpit_unit_port" "MAILPIT_UNIT__PORT" || return 1
+  validate_port "$scoped_mailpit_unit_smtp_port" "MAILPIT_UNIT__SMTP_PORT" || return 1
+  validate_port "$scoped_mailpit_routes_port" "MAILPIT_ROUTES__PORT" || return 1
+  validate_port "$scoped_mailpit_routes_smtp_port" "MAILPIT_ROUTES__SMTP_PORT" || return 1
+  validate_port "$scoped_mailpit_integration_port" "MAILPIT_INTEGRATION__PORT" || return 1
+  validate_port "$scoped_mailpit_integration_smtp_port" "MAILPIT_INTEGRATION__SMTP_PORT" || return 1
 
   ensure_ports_distinct \
     "$scoped_pgport" \
     "$scoped_app_port" \
-    "$integration_app_port" \
-    "$mailpit_app_port" \
-    "$mailpit_app_smtp_port" \
-    "$mailpit_unit_port" \
-    "$mailpit_unit_smtp_port" \
-    "$mailpit_routes_port" \
-    "$mailpit_routes_smtp_port" \
-    "$mailpit_integration_port" \
-    "$mailpit_integration_smtp_port" || return 1
+    "$scoped_integration_app_port" \
+    "$scoped_mailpit_app_port" \
+    "$scoped_mailpit_app_smtp_port" \
+    "$scoped_mailpit_unit_port" \
+    "$scoped_mailpit_unit_smtp_port" \
+    "$scoped_mailpit_routes_port" \
+    "$scoped_mailpit_routes_smtp_port" \
+    "$scoped_mailpit_integration_port" \
+    "$scoped_mailpit_integration_smtp_port" || return 1
 
   PGPORT="$scoped_pgport"
   APP_PORT="$scoped_app_port"
-  INTEGRATION_APP_PORT="$integration_app_port"
-  MAILPIT__PORT="$mailpit_app_port"
-  MAILPIT__SMTP_PORT="$mailpit_app_smtp_port"
-  MAILPIT_UNIT__PORT="$mailpit_unit_port"
-  MAILPIT_UNIT__SMTP_PORT="$mailpit_unit_smtp_port"
-  MAILPIT_ROUTES__PORT="$mailpit_routes_port"
-  MAILPIT_ROUTES__SMTP_PORT="$mailpit_routes_smtp_port"
-  MAILPIT_INTEGRATION__PORT="$mailpit_integration_port"
-  MAILPIT_INTEGRATION__SMTP_PORT="$mailpit_integration_smtp_port"
+  INTEGRATION_APP_PORT="$scoped_integration_app_port"
+  MAILPIT__PORT="$scoped_mailpit_app_port"
+  MAILPIT__SMTP_PORT="$scoped_mailpit_app_smtp_port"
+  MAILPIT_UNIT__PORT="$scoped_mailpit_unit_port"
+  MAILPIT_UNIT__SMTP_PORT="$scoped_mailpit_unit_smtp_port"
+  MAILPIT_ROUTES__PORT="$scoped_mailpit_routes_port"
+  MAILPIT_ROUTES__SMTP_PORT="$scoped_mailpit_routes_smtp_port"
+  MAILPIT_INTEGRATION__PORT="$scoped_mailpit_integration_port"
+  MAILPIT_INTEGRATION__SMTP_PORT="$scoped_mailpit_integration_smtp_port"
+
+  export RUNTIME_SCOPE_PGHOST="$PGHOST"
+  export RUNTIME_SCOPE_PGPORT="$base_pgport"
+  export RUNTIME_SCOPE_APP_PORT="$base_app_port"
+  export RUNTIME_SCOPE_INTEGRATION_APP_PORT="$base_integration_app_port"
+  export RUNTIME_SCOPE_MAILPIT_APP_PORT="$base_mailpit_port"
+  export RUNTIME_SCOPE_MAILPIT_APP_SMTP_PORT="$base_mailpit_smtp_port"
+  export RUNTIME_SCOPE_MAILPIT_UNIT_PORT="$base_mailpit_unit_port"
+  export RUNTIME_SCOPE_MAILPIT_UNIT_SMTP_PORT="$base_mailpit_unit_smtp_port"
+  export RUNTIME_SCOPE_MAILPIT_ROUTES_PORT="$base_mailpit_routes_port"
+  export RUNTIME_SCOPE_MAILPIT_ROUTES_SMTP_PORT="$base_mailpit_routes_smtp_port"
+  export RUNTIME_SCOPE_MAILPIT_INTEGRATION_PORT="$base_mailpit_integration_port"
+  export RUNTIME_SCOPE_MAILPIT_INTEGRATION_SMTP_PORT="$base_mailpit_integration_smtp_port"
+  export RUNTIME_SCOPE_COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
+  export RUNTIME_SCOPE_PGDATABASE="${PGDATABASE}"
+  export RUNTIME_SCOPE_SCHEDULER_TEST_DB_NAME="${SCHEDULER_TEST_DB_NAME:-fmrif_scheduler_test}"
+  export RUNTIME_SCOPE_SESSION__COOKIE_NAME="${SESSION__COOKIE_NAME}"
+  export RUNTIME_SCOPE_AUTH_TEST__SHARED_SECRET="${AUTH_TEST__SHARED_SECRET:-}"
 
   export PGHOST PGPORT APP_PORT INTEGRATION_APP_PORT \
     MAILPIT__PORT MAILPIT__SMTP_PORT \
     MAILPIT_UNIT__PORT MAILPIT_UNIT__SMTP_PORT \
     MAILPIT_ROUTES__PORT MAILPIT_ROUTES__SMTP_PORT \
     MAILPIT_INTEGRATION__PORT MAILPIT_INTEGRATION__SMTP_PORT \
-    PGUSER PGPASSWORD PGDATABASE
+    PGUSER PGPASSWORD PGDATABASE SESSION__COOKIE_NAME
 
   if [ "${RESUME_STACK:-0}" -ne 1 ] && [ "${CHECK_ONLY:-0}" -eq 1 ]; then
     ensure_all_scoped_ports_free || return 1
@@ -567,34 +721,12 @@ warn_local_port_overrides() {
   fi
 }
 
-write_runtime_scope_file() {
-  if [ -z "${RUNTIME_SCOPE_FILE}" ]; then
-    return 0
-  fi
-
-  cat > "${RUNTIME_SCOPE_FILE}" <<EOF
-RUNTIME_SCOPE=${RUNTIME_SCOPE}
-FMRIF_RUNTIME_SCOPE_OFFSET=${RUNTIME_SCOPE_OFFSET}
-COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
-PGHOST=${PGHOST}
-PGPORT=${PGPORT}
-APP_PORT=${APP_PORT}
-INTEGRATION_APP_PORT=${INTEGRATION_APP_PORT}
-MAILPIT_APP_PORT=${MAILPIT__PORT}
-MAILPIT_APP_SMTP_PORT=${MAILPIT__SMTP_PORT}
-MAILPIT_UNIT_PORT=${MAILPIT_UNIT__PORT}
-MAILPIT_UNIT_SMTP_PORT=${MAILPIT_UNIT__SMTP_PORT}
-MAILPIT_ROUTES_PORT=${MAILPIT_ROUTES__PORT}
-MAILPIT_ROUTES_SMTP_PORT=${MAILPIT_ROUTES__SMTP_PORT}
-MAILPIT_INTEGRATION_PORT=${MAILPIT_INTEGRATION__PORT}
-MAILPIT_INTEGRATION_SMTP_PORT=${MAILPIT_INTEGRATION__SMTP_PORT}
-EOF
-}
-
 run_preflight() {
-  derive_runtime_scope
+  runtime_scope_derive
+  runtime_scope_load_metadata "$RUNTIME_SCOPE_FILE" || true
   validate_runtime_env || return 1
-  resolve_compose_project
+  runtime_scope_resolve_compose_project
+  runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
   export FMRIF_COMPOSE_WRAPPER="run-compose.sh"
   prepare_compose_config
 
@@ -605,7 +737,7 @@ run_preflight() {
     MAILPIT_UNIT__PORT MAILPIT_UNIT__SMTP_PORT \
     MAILPIT_ROUTES__PORT MAILPIT_ROUTES__SMTP_PORT \
     MAILPIT_INTEGRATION__PORT MAILPIT_INTEGRATION__SMTP_PORT \
-    PGUSER PGPASSWORD PGDATABASE
+    PGUSER PGPASSWORD PGDATABASE SESSION__COOKIE_NAME
   warn_local_port_overrides "$APP_PORT"
 
   if [ ! -f "compose.yaml" ]; then
@@ -683,6 +815,15 @@ for arg in "$@"; do
     --reset)
       RESET_STACK=1
       ;;
+    --wipe)
+      WIPE_SCOPE=1
+      ;;
+    --list-all)
+      LIST_ALL_SCOPES=1
+      ;;
+    --clear-all)
+      CLEAR_ALL_SCOPES=1
+      ;;
     --remove)
       echo "ERROR: --remove has been replaced by --reset." >&2
       show_help
@@ -697,8 +838,8 @@ for arg in "$@"; do
 done
 
 if (( CHECK_ONLY )); then
-  if (( START_NO_APP )) || (( RESUME_STACK )) || (( RESET_STACK )); then
-    echo "ERROR: --check cannot be combined with --no-app, --resume, or --reset." >&2
+  if (( START_NO_APP )) || (( RESUME_STACK )) || (( RESET_STACK )) || (( WIPE_SCOPE )) || (( LIST_ALL_SCOPES )) || (( CLEAR_ALL_SCOPES )); then
+    echo "ERROR: --check cannot be combined with --no-app, --resume, --reset, --wipe, --list-all, or --clear-all." >&2
     show_help
     exit 1
   fi
@@ -718,9 +859,40 @@ if (( RESET_STACK )) && (( CHECK_ONLY )); then
   exit 1
 fi
 
+if (( LIST_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CLEAR_ALL_SCOPES || CHECK_ONLY )); then
+  echo "ERROR: --list-all cannot be combined with other workflow flags." >&2
+  show_help
+  exit 1
+fi
+
+if (( LIST_ALL_SCOPES )); then
+  list_all_scopes
+  exit 0
+fi
+
+if (( CLEAR_ALL_SCOPES )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || WIPE_SCOPE || CHECK_ONLY || LIST_ALL_SCOPES )); then
+  echo "ERROR: --clear-all cannot be combined with other workflow flags." >&2
+  show_help
+  exit 1
+fi
+
+if (( CLEAR_ALL_SCOPES )); then
+  clear_all_scopes
+  exit $?
+fi
+
+if (( WIPE_SCOPE )) && (( START_NO_APP || RESUME_STACK || RESET_STACK || CHECK_ONLY || LIST_ALL_SCOPES || CLEAR_ALL_SCOPES )); then
+  echo "ERROR: --wipe cannot be combined with --no-app, --resume, --reset, --check, --list-all, or --clear-all." >&2
+  show_help
+  exit 1
+fi
+
 export FMRIF_COMPOSE_WRAPPER="run-compose.sh"
-derive_runtime_scope
-acquire_runtime_scope_file || exit 1
+runtime_scope_derive
+runtime_scope_load_metadata "$RUNTIME_SCOPE_FILE" || true
+if ! ensure_scope_worktree_match "$RUNTIME_SCOPE" "${RUNTIME_SCOPE_WORKTREE_ROOT:-}"; then
+  exit 1
+fi
 validate_runtime_env || exit 1
 
 : "${APP_PORT:=5051}"
@@ -729,10 +901,10 @@ export APP_PORT INTEGRATION_APP_PORT PGHOST PGPORT \
   MAILPIT_UNIT__PORT MAILPIT_UNIT__SMTP_PORT \
   MAILPIT_ROUTES__PORT MAILPIT_ROUTES__SMTP_PORT \
   MAILPIT_INTEGRATION__PORT MAILPIT_INTEGRATION__SMTP_PORT \
-  PGUSER PGPASSWORD PGDATABASE
+  PGUSER PGPASSWORD PGDATABASE SESSION__COOKIE_NAME
 
-resolve_compose_project
-write_runtime_scope_file
+runtime_scope_resolve_compose_project
+runtime_scope_write_metadata "$RUNTIME_SCOPE_FILE"
 
 echo "Using environment from $ENVFILE"
 echo "  Runtime scope: $RUNTIME_SCOPE (offset=$RUNTIME_SCOPE_OFFSET)"
@@ -752,6 +924,17 @@ prepare_compose_config
 stack_running=false
 if compose_project_has_running_services; then
   stack_running=true
+fi
+
+if (( WIPE_SCOPE )); then
+  echo "Wipe mode: removing scope '${RUNTIME_SCOPE}' stack and metadata."
+  docker compose \
+    --project-name "$COMPOSE_PROJECT_NAME" \
+    --env-file "$COMPOSE_ENV_FILE" \
+    down --volumes --remove-orphans || true
+  rm -f "$RUNTIME_SCOPE_FILE"
+  echo "Wiped runtime scope '${RUNTIME_SCOPE}'."
+  exit 0
 fi
 
 if (( RESUME_STACK )); then

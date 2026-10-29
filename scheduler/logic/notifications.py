@@ -23,7 +23,7 @@ def _normalize_name(name: str) -> str:
 
 
 def _get_user(user_id: str) -> Optional[model.User]:
-    return model.User.query.get(user_id)
+    return model.get(model.User, user_id)
 
 
 def notify_dev_pi_of_tech_join_form(user: model.User) -> str:
@@ -74,7 +74,7 @@ or go to {page} to manage this user in RBAC explorer.
 
 
 def get_departments_for_join_form(user: model.User) -> Datalist:
-    query = model.db.session.execute(
+    query = model.execute(
         """
         select D.deptcode, D.dept from tlkpdept D
         where D.iscurrent and (D.department or D.deptcode = 'DEV') and deptcode not in (
@@ -107,7 +107,9 @@ def get_mailing_list_form(**kwargs):
                 return False
             return True
 
-    lists = current_app.config["nih_mailing_lists"].items()
+    from scheduler import logic
+
+    lists = logic.get_admin_mailing_lists().items()
     for idx, (name, description) in enumerate(lists):
         setattr(
             MailingListsSubform,
@@ -150,11 +152,13 @@ def get_mailing_list_form(**kwargs):
 
 
 def process_mailing_list_form_submissions(form):
+    from scheduler import logic
+
     selected_lists = [item[0] for item in form.lists.all_checkboxes() if item[1]]
     addr = form.addr.data
     name = _normalize_name(form.name.data)
     sub = form.action.data == "sub"
-    listserv = current_app.config["nih_listserv"]
+    listserv = logic.get_admin_listserv()
     for list_name in selected_lists:
         msg = format_mailing_list_message(sub, list_name, name)
         message.send(
@@ -180,7 +184,7 @@ def format_mailing_list_message(sub: bool, which_list: str, name: str) -> str:
 
 
 def notify_group_pi_of_join_form(user: model.User, group: str) -> str:
-    grp = model.Group.query.get(group)
+    grp = model.get(model.Group, group)
     if grp is None:
         raise RuntimeError(
             f"{user.id} attempted to join group that does not exist: {group}"

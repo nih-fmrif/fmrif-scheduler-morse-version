@@ -153,7 +153,7 @@ def _email_audit_rows(
     if len(filters) > 0:
         where = "where " + " and ".join(filters)
 
-    rows = model.db.session.execute(
+    rows = model.execute(
         sql_text(
             f"""
             select

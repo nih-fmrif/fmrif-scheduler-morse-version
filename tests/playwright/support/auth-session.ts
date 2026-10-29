@@ -1,6 +1,7 @@
 import type { Page, TestInfo } from '@playwright/test';
 
 import { signInWithCredentials } from '../utils/entra-login';
+import { mockSessionKeyFor } from '../utils/mock-session-key';
 import { waitForAppShell } from '../utils/test-helpers';
 
 const AUTH_MODE = (process.env.PLAYWRIGHT_AUTH_MODE ?? 'mock').toLowerCase();
@@ -15,7 +16,11 @@ async function appShellVisible(page: Page): Promise<boolean> {
   }
 }
 
-async function ensureMockSession(page: Page, profile: string): Promise<void> {
+async function ensureMockSession(
+  page: Page,
+  profile: string,
+  sessionKey: string
+): Promise<void> {
   const sharedSecret = process.env.AUTH_TEST__SHARED_SECRET;
   if (!sharedSecret) {
     throw new Error('AUTH_TEST__SHARED_SECRET must be set for PLAYWRIGHT_AUTH_MODE=mock');
@@ -26,7 +31,11 @@ async function ensureMockSession(page: Page, profile: string): Promise<void> {
       'X-Test-Auth-Secret': sharedSecret,
       'Content-Type': 'application/json',
     },
-    data: { profile },
+    data: {
+      profile,
+      reset_profile_state: true,
+      session_key: sessionKey,
+    },
   });
 
   if (!response.ok()) {
@@ -77,7 +86,7 @@ export async function ensureAuthenticated(
   profile: string = 'admin'
 ): Promise<void> {
   if (AUTH_MODE === 'mock') {
-    await ensureMockSession(page, profile);
+    await ensureMockSession(page, profile, mockSessionKeyFor(testInfo));
     return;
   }
 

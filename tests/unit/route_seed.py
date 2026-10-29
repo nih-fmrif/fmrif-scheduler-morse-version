@@ -19,6 +19,12 @@ from scheduler import logic, model
 from scheduler.app import create_app
 
 _ROUTE_SEED_APP = None
+_ROOTED_TEMPLATE_PREFERENCES: tuple[tuple[str, str], ...] = (
+    ("d", "i"),
+    ("d", "j"),
+    ("d", "a"),
+    ("test", "t"),
+)
 
 
 def _seed_app():
@@ -95,7 +101,7 @@ def ensure_group(
     has_membership: bool = True,
 ) -> None:
     with _route_app_context() as created_context:
-        group = model.Group.query.get(group_id)
+        group = model.get(model.Group, group_id)
         if group is None:
             group = model.Group(id=group_id)
 
@@ -148,7 +154,7 @@ def seeded_scanner_id() -> str:
     """Return a scanner id guaranteed to exist in SQL-seeded route-test data."""
     with _route_app_context():
         for scanner_id in ("TEST", "test"):
-            scanner = model.Device.query.get(scanner_id)
+            scanner = model.get(model.Device, scanner_id)
             if scanner is not None and scanner.active:
                 return scanner_id
 
@@ -159,7 +165,7 @@ def seeded_scanner_id() -> str:
             return active.id
 
         for scanner_id in ("TEST", "test"):
-            scanner = model.Device.query.get(scanner_id)
+            scanner = model.get(model.Device, scanner_id)
             if scanner is not None:
                 return scanner_id
 
@@ -170,10 +176,85 @@ def seeded_scanner_id() -> str:
     raise AssertionError("No scanners exist in seeded route-test data")
 
 
+def _iter_seeded_template_keys() -> list[tuple[str, str]]:
+    keys: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for device_id, template_id in _ROOTED_TEMPLATE_PREFERENCES:
+        if model.get(model.Template, (template_id, device_id)) is None:
+            continue
+        keys.append((device_id, template_id))
+        seen.add((device_id, template_id))
+
+    for device_id, template_id in model.execute(
+        """
+        select scannercode, templatecode
+        from tbltemplates
+        order by scannercode, templatecode
+        """
+    ):
+        key = (str(device_id), str(template_id))
+        if key in seen:
+            continue
+        keys.append(key)
+        seen.add(key)
+
+    return keys
+
+
+def seeded_template_compatibility(
+    *,
+    archived: bool | None = None,
+    require_blocking: bool | None = None,
+    issue_code: str | None = None,
+) -> tuple[str, str, dict[str, object]]:
+    """Return a seeded template plus its current compatibility report."""
+
+    with _route_app_context():
+        for device_id, template_id in _iter_seeded_template_keys():
+            template = model.get(model.Template, (template_id, device_id))
+            if template is None:
+                continue
+            if archived is not None and template.hidden != archived:
+                continue
+
+            device = model.get(model.Device, device_id)
+            if device is None:
+                continue
+
+            report = logic.inspect_template_compatibility(device, [template_id]).get(
+                template_id
+            )
+            if report is None:
+                continue
+            if (
+                require_blocking is not None
+                and bool(report["blocking"]) != require_blocking
+            ):
+                continue
+            if issue_code is not None and not any(
+                issue["code"] == issue_code for issue in report["issues"]
+            ):
+                continue
+            return device_id, template_id, report
+
+    filters = []
+    if archived is not None:
+        filters.append(f"archived={archived}")
+    if require_blocking is not None:
+        filters.append(f"blocking={require_blocking}")
+    if issue_code is not None:
+        filters.append(f"issue_code={issue_code}")
+    details = ", ".join(filters) if filters else "no filters"
+    raise AssertionError(
+        f"No seeded template matched the rooted compatibility lookup ({details})"
+    )
+
+
 def seeded_dev_user_id() -> str:
     """Return an existing approved DEV member id from seeded route-test data."""
     with _route_app_context():
-        row = model.db.session.execute(
+        row = model.execute(
             """
             select m."user"
             from membership m
@@ -197,7 +278,7 @@ def seeded_dev_user_id() -> str:
 def seeded_sched_log_id() -> str:
     """Return an existing schedule id for /json/v1/log/<id> contract checks."""
     with _route_app_context():
-        row = model.db.session.execute(
+        row = model.execute(
             """
             select s.schedid
             from tblsched s
@@ -210,7 +291,7 @@ def seeded_sched_log_id() -> str:
         if row is not None:
             return str(row[0])
 
-        row = model.db.session.execute(
+        row = model.execute(
             "select s.schedid from tblsched s order by s.schedid limit 1"
         ).first()
         if row is not None:
@@ -227,7 +308,7 @@ def set_group_membership(
     pi: bool = False,
 ) -> None:
     with _route_app_context() as created_context:
-        membership = model.GroupMember.query.get((group_id, user_id))
+        membership = model.get(model.GroupMember, (group_id, user_id))
         approved_at = datetime.now(timezone.utc) if approved else None
         if membership is None:
             membership = model.GroupMember(
@@ -242,7 +323,7 @@ def set_group_membership(
                 membership.email_status = logic.EMAIL_STATUS_NONE
         model.db.session.add(membership)
 
-        pi_entry = model.PrimaryGroupMember.query.get((group_id, user_id))
+        pi_entry = model.get(model.PrimaryGroupMember, (group_id, user_id))
         if pi:
             current_pi = model.PrimaryGroupMember.query.filter_by(
                 group=group_id
@@ -250,7 +331,7 @@ def set_group_membership(
             if current_pi is not None and current_pi.user != user_id:
                 # DB schema enforces one PI per group (deptcode uniqueness).
                 # Use direct SQL delete so delete happens before insert in this txn.
-                model.db.session.execute(
+                model.execute(
                     "delete from primarygroupmember where deptcode = :group_id",
                     {"group_id": group_id},
                 )
@@ -275,3 +356,29 @@ def ensure_admin_user() -> None:
     )
     ensure_active_user("test-admin", "test-admin@example.com", "Test Admin")
     set_group_membership("admin", "test-admin", approved=True, pi=True)
+
+
+def ensure_group_pi_user(
+    group_id: str,
+    *,
+    user_id: str = "test-group-pi",
+) -> tuple[str, str]:
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Test Group PI")
+    set_group_membership(group_id, user_id, approved=True, pi=True)
+    return user_id, email
+
+
+def ensure_dev_pi_user(*, user_id: str = "test-dev-pi") -> tuple[str, str]:
+    ensure_group(
+        "DEV",
+        label="DEV",
+        description="Development Group",
+        color="#222222",
+        active=True,
+        has_membership=True,
+    )
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Test DEV PI")
+    set_group_membership("DEV", user_id, approved=True, pi=True)
+    return user_id, email

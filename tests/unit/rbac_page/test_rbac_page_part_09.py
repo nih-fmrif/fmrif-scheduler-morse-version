@@ -134,7 +134,7 @@ def test_app_issues_scan_expires_old_resolved_notification_incidents(route_clien
 
     _run_notification_scan(route_client)
 
-    expired = model.NotificationIncident.query.get(issue_key)
+    expired = model.get(model.NotificationIncident, issue_key)
     assert expired is None
 
 
@@ -209,7 +209,7 @@ def test_app_issues_notification_state_sets_ignored_and_respects_expiry(route_cl
     )
     assert response.status_code == 302
 
-    ignored = model.NotificationIncident.query.get(issue_key)
+    ignored = model.get(model.NotificationIncident, issue_key)
     assert ignored is not None
     assert ignored.state == "ignored"
     assert ignored.active is True
@@ -217,7 +217,7 @@ def test_app_issues_notification_state_sets_ignored_and_respects_expiry(route_cl
 
     _run_notification_scan(route_client)
 
-    reopened = model.NotificationIncident.query.get(issue_key)
+    reopened = model.get(model.NotificationIncident, issue_key)
     assert reopened is not None
     assert reopened.state == "open"
     assert reopened.active is True
@@ -241,7 +241,7 @@ def test_app_issues_scan_auto_resolves_and_reopens_new_occurrence(route_client):
 
     _run_notification_scan(route_client)
     issue_key = f"join-group:{group_id}:{requester_id}"
-    first = model.NotificationIncident.query.get(issue_key)
+    first = model.get(model.NotificationIncident, issue_key)
     assert first is not None
     first_occurrence = int(first.occurrence_count)
     assert first.state == "open"
@@ -252,7 +252,7 @@ def test_app_issues_scan_auto_resolves_and_reopens_new_occurrence(route_client):
     model.db.session.commit()
     _run_notification_scan(route_client)
 
-    resolved = model.NotificationIncident.query.get(issue_key)
+    resolved = model.get(model.NotificationIncident, issue_key)
     assert resolved is not None
     assert resolved.state == "resolved"
     assert resolved.active is False
@@ -262,7 +262,7 @@ def test_app_issues_scan_auto_resolves_and_reopens_new_occurrence(route_client):
     model.db.session.commit()
     _run_notification_scan(route_client)
 
-    reopened = model.NotificationIncident.query.get(issue_key)
+    reopened = model.get(model.NotificationIncident, issue_key)
     assert reopened is not None
     assert reopened.state == "open"
     assert reopened.active is True
@@ -298,32 +298,44 @@ def test_app_issues_page_allows_searching_resolved_notification_history(route_cl
     assert "notification issue resolved" in body
 
 
-def test_app_issues_page_allows_searching_rbac_audit_history(route_client):
+def test_app_issues_page_allows_searching_email_audit_history(route_client):
     ensure_admin_user()
     set_admin_session(route_client)
 
-    actor_id = f"ra{uuid.uuid4().hex[:6]}"
-    logic.log_rbac_audit_event(
-        action="group.member.update",
-        actor=actor_id,
-        where="/rbac?scope=group&entity=DEV",
-        how="rbac-explorer-batch",
-        what="group=DEV, user=test-user, approved=true",
+    recipient_id = f"recip-{uuid.uuid4().hex[:6]}"
+    logic.log_email_audit_event(
+        action="email.scheduler.notification",
+        actor="test-admin",
+        where="/app",
+        how="unit-test",
+        status=logic.EMAIL_AUDIT_STATUS_SENT,
+        recipient=recipient_id,
+        subject="unit test email audit history",
+        details="recipient search test",
+        issue_state=logic.EMAIL_AUDIT_ISSUE_RESOLVED,
     )
-    logic.log_rbac_audit_event(
-        action="group.member.update",
-        actor="nomatch1",
-        where="/rbac?scope=group&entity=DEV",
-        how="rbac-explorer-batch",
-        what="group=DEV, user=other-user, approved=true",
+    logic.log_email_audit_event(
+        action="email.scheduler.notification",
+        actor="test-admin",
+        where="/app",
+        how="unit-test",
+        status=logic.EMAIL_AUDIT_STATUS_FAILED,
+        recipient="other@example.com",
+        subject="other test email",
+        details="other recipient",
+        issue_state=logic.EMAIL_AUDIT_ISSUE_OPEN,
     )
     model.db.session.commit()
 
-    response = route_client.get(f"/app/issues?search_field=actor&search={actor_id}")
+    response = route_client.get(
+        f"/app/issues?email_issue_state=all&email_search_field=recipient&email_search={recipient_id}"
+    )
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "RBAC audit log" in body
-    assert actor_id in body
+    assert "Email audit log" in body
+    assert recipient_id in body
+    assert "unit test email audit history" in body
+    assert "RBAC audit log" not in body
 
 
 @pytest.mark.covers_route("/json/v1/rbac/audit", "GET")

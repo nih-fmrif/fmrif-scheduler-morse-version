@@ -20,6 +20,10 @@ from scheduler.auth.session import (
     get_user_from_session,
     require_jwt,
 )
+from scheduler.auth.test_session_state import (
+    get_auth_test_session_pi_groups,
+    has_auth_test_session_pi_group,
+)
 from scheduler.auth.views import auth
 
 from . import logic, message, model
@@ -247,17 +251,19 @@ def _home_device_permissions(
 
     is_dev_pi = False
     if not is_admin and "DEV" in memberships:
-        M = model.Membership
-        is_dev_pi = (
-            M.query.filter(M.user == user_id)
-            .filter(M.group == "DEV")
-            .filter(M.pi)
-            .filter(M.approved)
-            .filter(M.user_active)
-            .filter(M.group_active)
-            .first()
-            is not None
-        )
+        is_dev_pi = has_auth_test_session_pi_group(user_id, "DEV")
+        if not is_dev_pi:
+            M = model.Membership
+            is_dev_pi = (
+                M.query.filter(M.user == user_id)
+                .filter(M.group == "DEV")
+                .filter(M.pi)
+                .filter(M.approved)
+                .filter(M.user_active)
+                .filter(M.group_active)
+                .first()
+                is not None
+            )
 
     if is_admin or is_dev_pi:
         for device_id in device_id_set:
@@ -321,14 +327,16 @@ def _rbac_user_is_group_pi(user: model.User) -> bool:
     if cached is not None:
         return bool(cached)
 
-    M = model.Membership
-    q = M.query
-    q = q.filter(M.user == user_id)
-    q = q.filter(M.user_active)
-    q = q.filter(M.approved)
-    q = q.filter(M.pi)
-    q = q.filter(M.group_active)
-    value = q.first() is not None
+    value = len(get_auth_test_session_pi_groups(user_id)) > 0
+    if not value:
+        M = model.Membership
+        q = M.query
+        q = q.filter(M.user == user_id)
+        q = q.filter(M.user_active)
+        q = q.filter(M.approved)
+        q = q.filter(M.pi)
+        q = q.filter(M.group_active)
+        value = q.first() is not None
     cache[user_id] = bool(value)
     return value
 
@@ -750,7 +758,7 @@ def join_form():
     if form.validate_on_submit():
         if logic.record_join_form(form, g.user, form.group.data):
             notify_state = logic.notify_group_pi_of_join_form(g.user, form.group.data)
-            request_row = model.GroupMember.query.get((form.group.data, g.user.id))
+            request_row = model.get(model.GroupMember, (form.group.data, g.user.id))
             if request_row is not None and request_row.approved is None:
                 request_row.email_status = notify_state
                 model.db.session.add(request_row)
@@ -786,18 +794,25 @@ def join_form_tech():
     # if the browser allowed the form to be submitted, it's good
     if form.validate_on_submit():
         request_row = logic.record_tech_join_request(g.user)
-        model.db.session.commit()
-        notify_state = logic.notify_dev_pi_of_tech_join_form(g.user)
-        request_row.email_status = notify_state
+        logic.handle_tech_join_request(True, request_row)
+        request_row.email_status = logic.EMAIL_STATUS_NONE
         model.db.session.add(request_row)
         model.db.session.commit()
         audit_rbac_action(
-            action="group.join.tech.request",
+            action="group.join.tech.autoapprove",
             where="/join/tech",
-            how="email",
-            what=f"user={g.user.id}, group=DEV, email_status={notify_state}",
+            how="form",
+            what=f"user={g.user.id}, group=DEV, approved=true",
         )
-        flash("your technologist application has been submitted for review")
+        logic.notify_user_of_tech_join_request_outcome(True, g.user)
+        try:
+            model.db.session.commit()
+        except SQLAlchemyError:
+            model.db.session.rollback()
+            current_app.logger.exception(
+                "Failed to commit email audit records for technologist auto-approval"
+            )
+        flash("your technologist access has been approved")
         return to("home")
     return {
         "form": form,

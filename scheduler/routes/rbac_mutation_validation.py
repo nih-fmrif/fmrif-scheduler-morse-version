@@ -326,7 +326,7 @@ def _rbac_validate_batch_operation(
         is_dev_member, _ = logic.get_dev_tech_status(user)
         if applied and not is_dev_member:
             raise ValueError(f"user is not an active DEV member: {user.id}")
-        current = model.Technologist.query.get(user.id)
+        current = model.get(model.Technologist, user.id)
         current_email_status = _rbac_email_status(
             current.email_status if current is not None else logic.EMAIL_STATUS_NONE
         )
@@ -452,7 +452,7 @@ def _rbac_validate_batch_operation(
             field="inst",
             max_length=7,
         )
-        if inst != "" and model.Inst.query.get(inst) is None:
+        if inst != "" and model.get(model.Inst, inst) is None:
             raise ValueError(f"institute not found: {inst}")
 
         active = _rbac_json_bool(operation.get("active", True), field="active")
@@ -580,7 +580,7 @@ def _rbac_validate_batch_operation(
             field="inst",
             max_length=7,
         )
-        if inst != "" and model.Inst.query.get(inst) is None:
+        if inst != "" and model.get(model.Inst, inst) is None:
             raise ValueError(f"institute not found: {inst}")
         active = _rbac_json_bool(operation.get("active", group.active), field="active")
 
@@ -791,7 +791,7 @@ def _rbac_validate_batch_operation(
         device = logic.get_device(device_id)
         if device is None:
             raise ValueError(f"device not found: {device_id}")
-        existing = model.DeviceGroup.query.get((device.id, group.id)) is not None
+        existing = model.get(model.DeviceGroup, (device.id, group.id)) is not None
         expected_linked = _rbac_optional_json_bool(operation, field="expected_linked")
         if linked and not existing and (not group.active or not bool(group.department)):
             raise ValueError(f"group cannot be linked to devices: {group.id}")
@@ -925,7 +925,7 @@ def _rbac_validate_batch_operation(
         user = logic.get_user(user_id)
         if user is None:
             raise ValueError(f"user not found: {user_id}")
-        existing = model.GroupMember.query.get((group.id, user.id))
+        existing = model.get(model.GroupMember, (group.id, user.id))
         current_email_status = _rbac_email_status(
             existing.email_status if existing is not None else logic.EMAIL_STATUS_NONE
         )

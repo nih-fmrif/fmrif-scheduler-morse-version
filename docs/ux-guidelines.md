@@ -41,6 +41,29 @@ At each breakpoint, confirm:
 - Empty states should include one clear next action.
 - Preserve visual hierarchy with consistent section spacing and heading order.
 
+## Stateful Editor Rules
+
+- If one draft is visible in multiple surfaces, those surfaces must derive from one source of truth.
+- Counts shown in badges, summaries, and inspectors must update together or with a deliberate documented difference.
+- Mirror hidden/backing validation into visible cloned controls; do not let the visible editor appear valid when the real field is invalid.
+- Preserve unsaved draft state across view transitions unless the user explicitly discards it.
+
+For scheduler-style editors, treat these as required behavior:
+
+- pending-count chrome and in-editor pending summaries must agree
+- invalid-slot counts and field-error counts must use distinct labels if they measure different things
+- batch result dialogs must distinguish:
+  - save success
+  - partial save failure
+  - notification success/failure
+  - data issues such as missing recipients
+
+## Dialog Rules
+
+- Confirmation dialogs must submit from the explicit confirm action, not from generic hide/close events.
+- Cancel and close actions must be side-effect free.
+- Result dialogs should preserve enough context for the user to retry or understand what needs correction.
+
 ## PR Checklist
 
 - Verified at small, medium, and wide viewport sizes.
@@ -48,3 +71,4 @@ At each breakpoint, confirm:
 - Updated forms/filters are grouped and scannable.
 - Primary action is obvious in each changed panel.
 - Empty-state messaging still communicates the next action.
+- Multi-surface draft state stays in sync when the changed UI includes an editor, badge, dialog, or review surface.

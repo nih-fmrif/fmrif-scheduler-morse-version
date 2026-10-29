@@ -37,11 +37,20 @@
 - Scope: issues reproducible only against live environments or evolving production-like data
 - CI: no
 
+6. Old-bootstrap compatibility verification (`pytest`, opt-in)
+- Location: `tests/unit/test_old_bootstrap_compat.py`
+- Scope: verifies the current SQL chain still accepts rooted data derived from the old repository in both `pre-018` and `post-018` researcher-code stages
+- Runtime: requires reachable Postgres and access to the old repo checkout used by `scripts/bootstrap-old-compat-db.sh`
+- CI: optional/manual by default
+
 ## Shared Test Infrastructure
 
 - Authenticated Playwright integration tests share `tests/playwright/support/auth-fixture.ts`.
 - Mode behavior:
   - `PLAYWRIGHT_AUTH_MODE=mock`: creates a test session via `POST /auth/test/session` with `AUTH_TEST__SHARED_SECRET`.
+    - `session_key` is required.
+    - mock usernames/emails are scoped by `session_key`.
+    - this isolates mock-auth/profile state across parallel workers on one shared database.
   - `PLAYWRIGHT_AUTH_MODE=entra`: uses saved storage state or interactive credentials path.
 - This enables identical integration specs across mock CI and real-auth workflows.
 
@@ -52,6 +61,7 @@
 3. If it validates UI workflows and can run without external NIH VPN/staging access, add it to `tests/playwright/integration/`.
 4. If it requires live Entra/NIH VPN/staging access, add it to `tests/playwright/auth-flow/`.
 5. If only reproducible against live environments/data, use `tests/playwright/live-incident/` and include a migration plan.
+6. If it verifies compatibility of the current SQL bootstrap against old rooted data, use the opt-in old-bootstrap compatibility test path instead of the fast suites.
 
 ## Commands (Pixi-first)
 
@@ -90,6 +100,12 @@ overhead than reseeding every run. You can bypass the runtime reset with
 Use `FMRIF_INTEGRATION_DB_REBUILD_TEMPLATE=true` to force template refresh or
 `FMRIF_INTEGRATION_DB_TEMPLATE_NAME` to override template naming.
 
+Parallel caveat:
+
+- The isolated integration database removes cross-suite interference.
+- `session_key` removes same-user mock-auth collisions inside one shared test database.
+- Neither mechanism prevents two tests from intentionally mutating the same business rows at the same time.
+
 Auth-flow tests (credentials mode):
 ```bash
 pixi run test-auth-flow-credentials
@@ -100,14 +116,14 @@ Auth-flow tests (storage-state mode):
 ```bash
 pixi run test-auth-flow-storage-state
 ```
-`PLAYWRIGHT_STORAGE_STATE` is optional and defaults to `./playwright-auth.json`.
+`PLAYWRIGHT_STORAGE_STATE` is optional and defaults to `./playwright-auth.${FMRIF_RUNTIME_SCOPE:-default}.json`.
 
 Generate storage state (headed):
 ```bash
 pixi run generate-auth-storage-state
 ```
 Requires `OAUTH_TEST_USERNAME` and `OAUTH_TEST_PASSWORD` in `.env`.
-`PLAYWRIGHT_STORAGE_STATE` is optional and defaults to `./playwright-auth.json`.
+`PLAYWRIGHT_STORAGE_STATE` is optional and defaults to `./playwright-auth.${FMRIF_RUNTIME_SCOPE:-default}.json`.
 
 Live-incident tests (manual/gated):
 ```bash

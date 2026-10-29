@@ -93,11 +93,17 @@
 
   const mapRbacQueryParams = (form) => {
     const params = new URLSearchParams();
-    params.set("scope", getFieldValue(form, "scope", "all"));
-    params.set("entity", getFieldValue(form, "entity", ""));
-    params.set("search", getFieldValue(form, "search", ""));
-    params.set("search_field", getFieldValue(form, "search_field", "all"));
-    params.set("limit", getFieldValue(form, "limit", String(defaultRbacLimit)));
+    params.set("scope", getFieldValue(form, "audit_scope", "all"));
+    params.set("entity", getFieldValue(form, "audit_entity", ""));
+    params.set("search", getFieldValue(form, "audit_search", ""));
+    params.set(
+      "search_field",
+      getFieldValue(form, "audit_search_field", "all"),
+    );
+    params.set(
+      "limit",
+      getFieldValue(form, "audit_limit", String(defaultRbacLimit)),
+    );
     return params;
   };
 
@@ -160,36 +166,47 @@
       "notification-issues-filters",
     );
     if (
-      !(rbacForm instanceof HTMLFormElement) ||
-      !(emailForm instanceof HTMLFormElement)
+      !(rbacForm instanceof HTMLFormElement) &&
+      !(emailForm instanceof HTMLFormElement) &&
+      !(notificationForm instanceof HTMLFormElement)
     ) {
       return;
     }
     const params = new URLSearchParams();
-    params.set("scope", getFieldValue(rbacForm, "scope", "all"));
-    params.set("entity", getFieldValue(rbacForm, "entity", ""));
-    params.set("search", getFieldValue(rbacForm, "search", ""));
-    params.set("search_field", getFieldValue(rbacForm, "search_field", "all"));
-    params.set(
-      "limit",
-      getFieldValue(rbacForm, "limit", String(defaultRbacLimit)),
-    );
-    params.set("email_scope", getFieldValue(emailForm, "email_scope", "all"));
-    params.set("email_entity", getFieldValue(emailForm, "email_entity", ""));
-    params.set("email_status", getFieldValue(emailForm, "email_status", "all"));
-    params.set(
-      "email_issue_state",
-      getFieldValue(emailForm, "email_issue_state", "all"),
-    );
-    params.set("email_search", getFieldValue(emailForm, "email_search", ""));
-    params.set(
-      "email_search_field",
-      getFieldValue(emailForm, "email_search_field", "all"),
-    );
-    params.set(
-      "email_limit",
-      getFieldValue(emailForm, "email_limit", String(defaultEmailLimit)),
-    );
+    if (rbacForm instanceof HTMLFormElement) {
+      params.set("audit_scope", getFieldValue(rbacForm, "audit_scope", "all"));
+      params.set("audit_entity", getFieldValue(rbacForm, "audit_entity", ""));
+      params.set("audit_search", getFieldValue(rbacForm, "audit_search", ""));
+      params.set(
+        "audit_search_field",
+        getFieldValue(rbacForm, "audit_search_field", "all"),
+      );
+      params.set(
+        "audit_limit",
+        getFieldValue(rbacForm, "audit_limit", String(defaultRbacLimit)),
+      );
+    }
+    if (emailForm instanceof HTMLFormElement) {
+      params.set("email_scope", getFieldValue(emailForm, "email_scope", "all"));
+      params.set("email_entity", getFieldValue(emailForm, "email_entity", ""));
+      params.set(
+        "email_status",
+        getFieldValue(emailForm, "email_status", "all"),
+      );
+      params.set(
+        "email_issue_state",
+        getFieldValue(emailForm, "email_issue_state", "all"),
+      );
+      params.set("email_search", getFieldValue(emailForm, "email_search", ""));
+      params.set(
+        "email_search_field",
+        getFieldValue(emailForm, "email_search_field", "all"),
+      );
+      params.set(
+        "email_limit",
+        getFieldValue(emailForm, "email_limit", String(defaultEmailLimit)),
+      );
+    }
     if (notificationForm instanceof HTMLFormElement) {
       params.set(
         "notification_state_filter",
@@ -230,7 +247,7 @@
     const count = Math.max(0, parseNumber(payload.count, 0));
     const limit = Math.max(1, parseNumber(payload.limit, defaultRbacLimit));
     if (kind === "rbac") {
-      setFieldValue(form, "limit", String(limit));
+      setFieldValue(form, "audit_limit", String(limit));
       renderRbacRows(Array.isArray(payload.events) ? payload.events : []);
       const empty = document.getElementById("rbac-audit-empty");
       const tableWrap = document.getElementById("rbac-audit-table-wrap");

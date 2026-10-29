@@ -31,11 +31,15 @@ from .jwt_utils import extract_bearer_token, verify_jwt
 from .oidc import get_authorization_endpoint, get_token_endpoint
 from .pkce import code_challenge_s256, generate_code_verifier
 from .session import (
+    apply_test_group_pi_memberships,
     get_user_from_session,
     login_test_user,
     login_user_with_claims,
     login_user_with_token,
     logout_user,
+    normalize_auth_test_session_key,
+    reset_test_auth_profile_state,
+    resolve_auth_test_profile,
 )
 
 # Create blueprint
@@ -251,7 +255,37 @@ def establish_test_session():
     payload = request.get_json(silent=True) or {}
     profile = str(payload.get("profile") or "admin")
     try:
-        user = login_test_user(profile)
+        session_key = normalize_auth_test_session_key(payload.get("session_key"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if session_key == "":
+        return jsonify({"error": "session_key is required for auth test sessions"}), 400
+    profile_config = resolve_auth_test_profile(profile, session_key=session_key)
+    if profile_config is None:
+        return jsonify({"error": f"Unknown test auth profile: {profile}"}), 400
+
+    raw_reset_value = payload.get("reset_profile_state")
+    if raw_reset_value is None:
+        reset_profile_state = False
+    elif isinstance(raw_reset_value, bool):
+        reset_profile_state = raw_reset_value
+    else:
+        return jsonify({"error": "reset_profile_state must be a boolean"}), 400
+
+    if reset_profile_state:
+        target_user = profile_config.username
+        try:
+            reset_test_auth_profile_state(target_user)
+        except SQLAlchemyError:
+            model.db.session.rollback()
+            if current_app and current_app.logger:
+                current_app.logger.exception(
+                    "Failed to reset auth-test profile state during test auth session setup"
+                )
+            return jsonify({"error": "Unable to reset test session state"}), 500
+
+    try:
+        user = login_test_user(profile, session_key=session_key)
     except SQLAlchemyError:
         model.db.session.rollback()
         if current_app and current_app.logger:
@@ -259,6 +293,30 @@ def establish_test_session():
         return jsonify({"error": "Unable to establish test session"}), 500
     if not user:
         return jsonify({"error": f"Unknown test auth profile: {profile}"}), 400
+
+    raw_group_pi_groups = payload.get("group_pi_groups")
+    if raw_group_pi_groups is not None:
+        if isinstance(raw_group_pi_groups, str):
+            group_pi_groups = [raw_group_pi_groups]
+        elif isinstance(raw_group_pi_groups, list):
+            group_pi_groups = [str(group_id) for group_id in raw_group_pi_groups]
+        else:
+            return jsonify({"error": "group_pi_groups must be a string or list"}), 400
+        try:
+            apply_test_group_pi_memberships(
+                user.username,
+                group_pi_groups,
+                persist_primary_memberships=False,
+            )
+        except SQLAlchemyError:
+            model.db.session.rollback()
+            if current_app and current_app.logger:
+                current_app.logger.exception(
+                    "Failed to apply group_pi_groups during test auth session setup"
+                )
+            return jsonify(
+                {"error": "Unable to apply test session group_pi_groups"}
+            ), 500
 
     return jsonify(
         {

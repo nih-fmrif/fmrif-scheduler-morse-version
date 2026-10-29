@@ -231,7 +231,7 @@ def _record_rbac_audit_event(
             **base_params,
             "ip_addr": ip or None,
         }
-        model.db.session.execute(
+        model.execute(
             text(
                 """
                 insert into rbac_audit_log (
@@ -246,7 +246,7 @@ def _record_rbac_audit_event(
             params,
         )
         return
-    model.db.session.execute(
+    model.execute(
         text(
             """
             insert into rbac_audit_log (
@@ -354,7 +354,7 @@ def _record_email_audit_event(
         ),
     )
 
-    model.db.session.execute(
+    model.execute(
         text(
             """
             insert into email_audit_log (

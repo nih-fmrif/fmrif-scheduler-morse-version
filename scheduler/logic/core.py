@@ -12,6 +12,10 @@ from sqlalchemy.sql.functions import func
 from wtforms import fields, validators, widgets
 
 from scheduler import model
+from scheduler.auth.test_session_state import (
+    get_auth_test_session_pi_groups,
+    has_auth_test_session_pi_group,
+)
 
 from .rbac_audit_support import EMAIL_STATUS_NONE, EMAIL_STATUS_VALUES, constraint_of
 from .schedule_editor import _clear_reference_data_cache
@@ -42,7 +46,7 @@ def normalize_name(name: str) -> str:
 
 
 def record_tech_join_request(user: model.User) -> model.Technologist:
-    r = model.Technologist.query.get(user.id)
+    r = model.get(model.Technologist, user.id)
     if r is None:
         r = model.Technologist(
             user=user.id,
@@ -86,7 +90,7 @@ def show_tech_join_form(user: model.User) -> bool:
             return cached
 
     # return a row if user is in DEV unless they have already applied
-    q = model.db.session.execute(
+    q = model.execute(
         """
         select researchercode from groupmembers G
         where G.deptcode = 'DEV'
@@ -124,11 +128,11 @@ def add_admin(user: model.User):
 def get_join_request(
     user: model.User, group: model.Group
 ) -> Optional[model.GroupMember]:
-    return model.GroupMember.query.get((group.id, user.id))
+    return model.get(model.GroupMember, (group.id, user.id))
 
 
 def get_pending_tech_join_request(user: model.User) -> Optional[model.Technologist]:
-    req = model.Technologist.query.get(user.id)
+    req = model.get(model.Technologist, user.id)
     if req is None:
         return None
     if req.approved_on is not None:
@@ -155,7 +159,7 @@ def handle_tech_join_request(approved: bool, req: model.Technologist) -> None:
 
 
 def get_user(user: str) -> Optional[model.User]:
-    return model.User.query.get(user)
+    return model.get(model.User, user)
 
 
 def _user_id_from_value(user: Any) -> str:
@@ -202,8 +206,8 @@ def _try_rekey_user_primary_id(old_id: str, new_id: str) -> bool:
         return True
     try:
         with model.db.session.begin_nested():
-            record = model.User.query.get(old_id)
-            if record is None or model.User.query.get(new_id) is not None:
+            record = model.get(model.User, old_id)
+            if record is None or model.get(model.User, new_id) is not None:
                 return False
             record.id = new_id
             model.db.session.flush()
@@ -218,7 +222,7 @@ def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
 
     memberships = model.GroupMember.query.filter_by(user=old_id).all()
     for row in memberships:
-        existing = model.GroupMember.query.get((row.group, new_id))
+        existing = model.get(model.GroupMember, (row.group, new_id))
         if existing is not None:
             if existing.approved is None and row.approved is not None:
                 existing.approved = row.approved
@@ -230,16 +234,16 @@ def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
 
     primary_memberships = model.PrimaryGroupMember.query.filter_by(user=old_id).all()
     for row in primary_memberships:
-        existing = model.PrimaryGroupMember.query.get((row.group, new_id))
+        existing = model.get(model.PrimaryGroupMember, (row.group, new_id))
         if existing is not None:
             model.db.session.delete(row)
             continue
         row.user = new_id
         model.db.session.add(row)
 
-    technologist = model.Technologist.query.get(old_id)
+    technologist = model.get(model.Technologist, old_id)
     if technologist is not None:
-        if model.Technologist.query.get(new_id) is not None:
+        if model.get(model.Technologist, new_id) is not None:
             model.db.session.delete(technologist)
         else:
             technologist.user = new_id
@@ -247,7 +251,7 @@ def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
 
     permissions = model.UserDevice.query.filter_by(user=old_id).all()
     for row in permissions:
-        existing = model.UserDevice.query.get((new_id, row.device))
+        existing = model.get(model.UserDevice, (new_id, row.device))
         if existing is not None:
             existing.templates = bool(existing.templates or row.templates)
             existing.slot = bool(existing.slot or row.slot)
@@ -288,14 +292,14 @@ def _migrate_user_identity(
         # Some test/local DB backends may not enforce ON UPDATE CASCADE consistently.
         # Ensure dependent rows are rewritten even when primary-key rekey succeeds.
         _rekey_user_foreign_keys(old_id, new_id)
-        migrated = model.User.query.get(new_id)
+        migrated = model.get(model.User, new_id)
         if migrated is None:
             raise RuntimeError(f"Failed to migrate user id from {old_id} to {new_id}")
         return _sync_user_profile(migrated, normalized_mail, normalized_name)
 
-    target = model.User.query.get(new_id)
+    target = model.get(model.User, new_id)
     if target is None:
-        model.db.session.execute(
+        model.execute(
             """
             insert into tlkpresearcher(researchercode, name, email, active, chg_at)
             values (:user, :name, :mail, :active, :chg_at)
@@ -309,13 +313,13 @@ def _migrate_user_identity(
                 "chg_at": datetime.datetime.utcnow(),
             },
         )
-        target = model.User.query.get(new_id)
+        target = model.get(model.User, new_id)
         if target is None:
             raise RuntimeError(f"Failed to create migration target user {new_id}")
 
     _rekey_user_foreign_keys(old_id, new_id)
 
-    stale = model.User.query.get(old_id)
+    stale = model.get(model.User, old_id)
     if stale is not None and stale.id != new_id:
         try:
             with model.db.session.begin_nested():
@@ -325,7 +329,7 @@ def _migrate_user_identity(
             stale.addr = ""
             model.db.session.add(stale)
 
-    target = model.User.query.get(new_id)
+    target = model.get(model.User, new_id)
     if target is None:
         raise RuntimeError(f"Failed to load migrated user id {new_id}")
     return _sync_user_profile(target, normalized_mail, normalized_name)
@@ -355,7 +359,7 @@ def upsert_user(
             )
 
     resolved_id = requested_id
-    existing_by_id = model.User.query.get(resolved_id)
+    existing_by_id = model.get(model.User, resolved_id)
     if (
         existing_by_id is not None
         and normalized_mail
@@ -364,10 +368,10 @@ def upsert_user(
     ):
         # Existing id belongs to another email; derive a stable scoped id.
         resolved_id = scoped_user_id_from_identifier(normalized_mail)
-        existing_by_id = model.User.query.get(resolved_id)
+        existing_by_id = model.get(model.User, resolved_id)
 
     if existing_by_id is None:
-        model.db.session.execute(
+        model.execute(
             """
             insert into tlkpresearcher(researchercode, name, email, active, chg_at)
             values (:user, :name, :mail, :active, :chg_at)
@@ -381,7 +385,7 @@ def upsert_user(
                 "chg_at": datetime.datetime.utcnow(),
             },
         )
-        existing_by_id = model.User.query.get(resolved_id)
+        existing_by_id = model.get(model.User, resolved_id)
 
     if existing_by_id is None:
         raise RuntimeError(f"Failed to upsert user record for {resolved_id}")
@@ -440,7 +444,7 @@ def get_memberships(user: Any) -> List[str]:
 
 
 def get_group(which: str) -> Optional[model.Group]:
-    return model.Group.query.get(which)
+    return model.get(model.Group, which)
 
 
 def pi_of_group(group: str) -> str:
@@ -484,7 +488,7 @@ def get_members_of_group(
 
 
 def remove_user_from_group(user: model.User, group: model.Group) -> None:
-    req = model.GroupMember.query.get((group.id, user.id))
+    req = model.get(model.GroupMember, (group.id, user.id))
     if req is None:
         return  # not a member of group
     model.db.session.delete(req)
@@ -494,6 +498,7 @@ Group_leader_kind = Set[Literal["group_pi", "dev_pi", "admin"]]
 
 
 def get_group_leader_kind(user: model.User, group: model.Group) -> Group_leader_kind:
+    session_pi_groups = get_auth_test_session_pi_groups(user)
     M = model.Membership
     q = M.query
     q = q.filter(M.user == user.id)
@@ -514,6 +519,10 @@ def get_group_leader_kind(user: model.User, group: model.Group) -> Group_leader_
             result.add("dev_pi")
         elif r.group == "admin":
             result.add("admin")
+    if group.id in session_pi_groups:
+        result.add("group_pi")
+    if "DEV" in session_pi_groups:
+        result.add("dev_pi")
     return result
 
 
@@ -738,7 +747,7 @@ def process_group_pi_form(
 
 
 def get_device(id: str) -> Optional[model.Device]:
-    return model.Device.query.get(id)
+    return model.get(model.Device, id)
 
 
 def get_devices(active: bool) -> List[model.Device]:
@@ -835,6 +844,8 @@ def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
 
     # is user an admin or the DEV PI
     is_admin, is_dpi = False, False
+    if has_auth_test_session_pi_group(user, "DEV"):
+        is_dpi = True
     M = model.Membership
     q = M.query
     q = q.filter(M.user == user.id)
@@ -860,7 +871,7 @@ def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
         return perms
 
     # see if we have regular edit access
-    q = model.db.session.execute(
+    q = model.execute(
         """
             select count(G.deptcode) from devicegroup G where scannercode = :device and exists (
                 select * from membership M where M."user" = :user and M.approved and M."group" = G.deptcode
@@ -875,7 +886,7 @@ def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
     can_edit = q.first()[0] > 0
 
     # grab any special permissions on this device
-    UD = model.UserDevice.query.get((user.id, device.id))
+    UD = model.get(model.UserDevice, (user.id, device.id))
     perms = DevicePerms(False, False, can_edit, UD)
     if cache is not None and key is not None:
         cache[key] = perms
@@ -988,7 +999,7 @@ def create_device(form: DeviceEditForm) -> Optional[model.Device]:
 
 
 def groups_of_device(device: model.Device) -> Datalist:
-    q = model.db.session.execute(
+    q = model.execute(
         """
         select G.deptcode, G.dept_short from tlkpdept G
         inner join devicegroup DG using(deptcode)
@@ -1006,7 +1017,7 @@ def groups_of_device(device: model.Device) -> Datalist:
 
 
 def groups_not_of_device(device: model.Device) -> Datalist:
-    q = model.db.session.execute(
+    q = model.execute(
         """
         select G.deptcode, G.dept_short from tlkpdept G
         where G.department and G.iscurrent and not exists (
@@ -1029,7 +1040,7 @@ def add_group_to_device(group: str, device: str):
 
 
 def remove_group_from_device(group: str, device: str):
-    dg = model.DeviceGroup.query.get((device, group))
+    dg = model.get(model.DeviceGroup, (device, group))
     if dg is None:
         # pairing does not exist so request
         # for pairing to not exit has succeeded
@@ -1074,7 +1085,7 @@ def get_dev_members_for_device(
     device: model.Device,
 ) -> Tuple[List[str], List[str]]:
     # get all dev group users and whether they have special permissions on this device
-    q = model.db.session.execute(
+    q = model.execute(
         """
         select M."user", D.scannercode from membership M
         left join userdevice D on D.researchercode = M."user" and M."group" = 'DEV'
@@ -1099,7 +1110,7 @@ def get_dev_tech_status(user: model.User) -> Tuple[bool, bool]:
         return False, False
 
     # always returns a pair of numbers each of which is 0 or 1
-    q = model.db.session.execute(
+    q = model.execute(
         """
         select count(M."user"), count(T.researchercode) from membership M
         left join technologist T on M."user" = T.researchercode and T.approved_on is not null
@@ -1113,14 +1124,14 @@ def get_dev_tech_status(user: model.User) -> Tuple[bool, bool]:
 
 
 def is_technologist(user_id: str) -> bool:
-    row = model.Technologist.query.get(user_id)
+    row = model.get(model.Technologist, user_id)
     return row is not None and row.approved_on is not None
 
 
 def get_user_device_special_perms(
     user: model.User, device: model.Device
 ) -> Tuple[bool, model.UserDevice]:
-    ud = model.UserDevice.query.get((user.id, device.id))
+    ud = model.get(model.UserDevice, (user.id, device.id))
     if ud is None:
         return True, model.UserDevice(user=user.id, device=device.id)
     return False, ud

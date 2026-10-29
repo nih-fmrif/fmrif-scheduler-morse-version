@@ -140,7 +140,7 @@ def test_rbac_mutate_batch_updates_group_and_device_metadata(
     assert group_payload is not None
     assert group_payload["ok"] is True
     assert group_payload["applied"] == 1
-    group = model.Group.query.get(group_id)
+    group = model.get(model.Group, group_id)
     assert group is not None
     assert group.label == "Meta Group"
     assert group.description == "Metadata Updated Group"
@@ -180,7 +180,7 @@ def test_rbac_mutate_batch_updates_group_and_device_metadata(
     assert device_payload is not None
     assert device_payload["ok"] is True
     assert device_payload["applied"] == 1
-    device = model.Device.query.get(device_id)
+    device = model.get(model.Device, device_id)
     assert device is not None
     assert device.label == "Meta Device"
     assert device.description == "Updated device description"
@@ -294,12 +294,12 @@ def test_rbac_mutate_batch_creates_group_and_device(
     group_payload = group_response.get_json()
     assert group_payload is not None
     assert group_payload["ok"] is True
-    created_group = model.Group.query.get(new_group)
+    created_group = model.get(model.Group, new_group)
     assert created_group is not None
     assert created_group.label == f"Label {new_group}"
-    membership = model.GroupMember.query.get((new_group, pi_user))
+    membership = model.get(model.GroupMember, (new_group, pi_user))
     assert membership is not None
-    pi = model.PrimaryGroupMember.query.get((new_group, pi_user))
+    pi = model.get(model.PrimaryGroupMember, (new_group, pi_user))
     assert pi is not None
 
     device_response = route_client.post(
@@ -331,7 +331,7 @@ def test_rbac_mutate_batch_creates_group_and_device(
     device_payload = device_response.get_json()
     assert device_payload is not None
     assert device_payload["ok"] is True
-    created_device = model.Device.query.get(new_device)
+    created_device = model.get(model.Device, new_device)
     assert created_device is not None
     assert created_device.label == f"Label {new_device}"
 

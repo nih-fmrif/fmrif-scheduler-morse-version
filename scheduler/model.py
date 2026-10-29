@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text as sql_text
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from sqlalchemy.sql import func
 
@@ -8,6 +9,17 @@ db = SQLAlchemy()
 
 # this is only needed to avoid confusing mypy
 Model: DeclarativeMeta = db.Model
+
+
+def get(entity: Any, ident: Any) -> Any:
+    return db.session.get(entity, ident)
+
+
+def execute(statement: Any, *args: Any, **kwargs: Any) -> Any:
+    if isinstance(statement, str):
+        statement = sql_text(statement)
+    return db.session.execute(statement, *args, **kwargs)
+
 
 # This file contains the reflection of the schema into sqlalchemy
 # The reflection is not 1:1.
@@ -503,3 +515,18 @@ class OAuthState(Model):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class AppSetting(Model):
+    __tablename__ = "app_settings"
+
+    key: str = db.Column("key", db.String(128), primary_key=True)
+    value: str = db.Column("value", db.Text(), nullable=False, default="")
+    updated_at: Any = db.Column(
+        "updated_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_by: Optional[str] = db.Column("updated_by", db.String(20), nullable=True)

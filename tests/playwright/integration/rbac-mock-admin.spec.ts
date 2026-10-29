@@ -7,11 +7,11 @@ test.describe('Mock Role Coverage (Admin)', () => {
   test.skip(!isMockMode, 'Mock role coverage only runs when PLAYWRIGHT_AUTH_MODE=mock');
   test.use({ authProfile: 'admin' });
 
-  test('should access consolidated RBAC admin pages', async ({ page }) => {
-    await ensureProfileSession(page, 'admin', 'test-admin');
+  test('should access consolidated RBAC admin pages', async ({ page }, testInfo) => {
+    await ensureProfileSession(page, 'admin', 'test-admin', { testInfo });
 
     await page.goto('/rbac');
-    await expect(page).toHaveURL(/\/rbac$/);
+    await expect(page).toHaveURL(/\/rbac(?:\?|$)/);
     await expect(page.getByRole('heading', { name: /rbac explorer/i })).toBeVisible();
 
     await page.goto('/app/issues');
@@ -19,8 +19,8 @@ test.describe('Mock Role Coverage (Admin)', () => {
     await expect(page.getByRole('heading', { name: /potential issues/i })).toBeVisible();
   });
 
-  test('updates admin audit filters in place without full page reload', async ({ page }) => {
-    await ensureProfileSession(page, 'admin', 'test-admin');
+  test('updates admin audit filters in place without full page reload', async ({ page }, testInfo) => {
+    await ensureProfileSession(page, 'admin', 'test-admin', { testInfo });
 
     await page.goto('/app/issues');
     await expect(page.getByRole('heading', { name: /potential issues/i })).toBeVisible();
@@ -31,15 +31,6 @@ test.describe('Mock Role Coverage (Admin)', () => {
       window.__adminAuditPageMarker = marker;
       return marker;
     });
-
-    await page.locator('#rbac-audit-search-field').selectOption('actor');
-    await page.locator('#rbac-audit-search').fill('test-admin');
-    await expect
-      .poll(() => {
-        const url = new URL(page.url());
-        return `${url.searchParams.get('search_field')}|${url.searchParams.get('search')}`;
-      })
-      .toBe('actor|test-admin');
 
     await page.locator('#email-audit-search-field').selectOption('recipient');
     await page.locator('#email-audit-search').fill('listserv@example.com');
@@ -52,7 +43,6 @@ test.describe('Mock Role Coverage (Admin)', () => {
 
     const finalUrl = new URL(page.url());
     expect(finalUrl.pathname).toBe('/app/issues');
-    expect(finalUrl.searchParams.get('search')).toBe('test-admin');
     expect(finalUrl.searchParams.get('email_search')).toBe('listserv@example.com');
     const markerAfterFilters = await page.evaluate(() => window.__adminAuditPageMarker);
     expect(markerAfterFilters).toBe(pageMarker);
@@ -60,8 +50,8 @@ test.describe('Mock Role Coverage (Admin)', () => {
 
   test('runs notification detection scan and applies notification search filters', async ({
     page,
-  }) => {
-    await ensureProfileSession(page, 'admin', 'test-admin');
+  }, testInfo) => {
+    await ensureProfileSession(page, 'admin', 'test-admin', { testInfo });
 
     await page.goto('/app/issues');
     await expect(page.getByRole('heading', { name: /potential issues/i })).toBeVisible();

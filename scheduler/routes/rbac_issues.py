@@ -511,7 +511,7 @@ def set_notification_incident_state(
     }:
         raise ValueError(f"invalid state target: {target_state}")
 
-    row = model.NotificationIncident.query.get(issue_token)
+    row = model.get(model.NotificationIncident, issue_token)
     if row is None:
         return False
 

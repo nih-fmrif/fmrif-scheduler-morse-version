@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import pytest
 from jinja2 import meta
+from route_seed import seeded_template_compatibility
 
 from scheduler import logic, model
 
@@ -98,6 +100,26 @@ def test_template_validation(app_context):
     # Test invalid template
     errors = logic.validate_templates_before_application(device, "invalid_template")
     assert "invalid template codes provided" in errors
+
+
+def test_normalize_template_group():
+    assert logic.normalize_template_group(None) is None
+    assert logic.normalize_template_group("") is None
+    assert logic.normalize_template_group("(none)") is None
+    assert logic.normalize_template_group("DEV") == "DEV"
+
+
+@pytest.mark.route
+def test_seeded_template_compatibility_flags_legacy_member(route_app_context):
+    _, _, report = seeded_template_compatibility(
+        archived=False,
+        require_blocking=True,
+        issue_code="legacy-member",
+    )
+
+    assert report["blocking"] is True
+    assert any(issue["code"] == "legacy-member" for issue in report["issues"])
+    assert any("stale member" in summary.lower() for summary in report["summary"])
 
 
 def test_verify_template_diffs():

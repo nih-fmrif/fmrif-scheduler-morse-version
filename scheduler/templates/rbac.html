@@ -1,6 +1,9 @@
 {% extends "page.html" %} {% block title %}RBAC{% endblock %} {% block body %}
 <article
-  class="rbac-explorer"
+  class="rbac-explorer rbac-audit-page"
+  data-audit-max-limit="{{ audit_max_limit }}"
+  data-rbac-audit-default-limit="{{ audit_limit }}"
+  data-audit-show-more-increment="{{ audit_show_more_increment }}"
   data-rbac-explorer
   data-endpoint="{{ url_for('rbac_explorer_data') }}"
   data-mutation-endpoint="{{ url_for('rbac_explorer_mutate') }}"
@@ -126,28 +129,168 @@
     <div id="rbac-matrices"></div>
   </section>
 
-  <section class="rbac-audit-panel" aria-labelledby="rbac-audit-title">
-    <h2 id="rbac-audit-title">RBAC Audit</h2>
-    {% if can_view_audit %}
-    <p id="rbac-audit-note" class="rbac-audit-note">
-      Loading recent RBAC audit activity...
+  {% if can_view_audit %}
+  <section class="rbac-audit-log-panel" aria-labelledby="rbac-audit-title">
+    <h2 id="rbac-audit-title">RBAC Audit Log</h2>
+    <p>
+      Full RBAC activity logs for recent permission checks and relationship
+      changes.
     </p>
-    {% else %}
-    <p id="rbac-audit-note" class="rbac-audit-note">
-      RBAC audit visibility is restricted to admins.
+    <form
+      class="rbac-audit-filters"
+      action="{{ url_for('rbac') }}"
+      method="get"
+      id="rbac-audit-filters"
+      data-audit-kind="rbac"
+      data-audit-endpoint="{{ url_for('rbac_explorer_audit') }}"
+    >
+      <input
+        id="rbac-audit-limit"
+        type="hidden"
+        name="audit_limit"
+        value="{{ audit_limit }}"
+      />
+      <div class="admin-filter-field">
+        <label for="rbac-audit-scope">scope</label>
+        <select id="rbac-audit-scope" name="audit_scope">
+          {% for option in audit_scopes %}
+          <option
+            value="{{ option.id }}"
+            {%
+            if
+            option.selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ option.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="admin-filter-field">
+        <label for="rbac-audit-entity">entity id</label>
+        <input
+          id="rbac-audit-entity"
+          type="text"
+          name="audit_entity"
+          value="{{ audit_entity }}"
+          placeholder="user / group / device id"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="admin-filter-field">
+        <label for="rbac-audit-search-field">in</label>
+        <select id="rbac-audit-search-field" name="audit_search_field">
+          {% for option in rbac_audit_search_field_options %}
+          <option
+            value="{{ option.id }}"
+            {%
+            if
+            option.selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ option.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="admin-filter-field admin-filter-last-row">
+        <label for="rbac-audit-search">search</label>
+        <input
+          id="rbac-audit-search"
+          type="text"
+          name="audit_search"
+          value="{{ audit_search }}"
+          placeholder="action, actor, details, where, how, ip, entity ids"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+    </form>
+
+    {% set has_audit_events = audit_events|length != 0 %}
+    <p
+      class="none"
+      id="rbac-audit-empty"
+      {%
+      if
+      has_audit_events
+      %}hidden{%
+      endif
+      %}
+    >
+      No RBAC audit events found.
     </p>
-    {% endif %}
-    <ol id="rbac-audit-list" class="rbac-audit-list"></ol>
-    <div id="rbac-audit-show-more-wrap" class="admin-show-more-wrap" hidden>
+    <div
+      class="rbac-audit-table-wrap"
+      id="rbac-audit-table-wrap"
+      {%
+      if
+      not
+      has_audit_events
+      %}hidden{%
+      endif
+      %}
+    >
+      <table class="rbac-audit-table">
+        <thead>
+          <tr>
+            <th>when</th>
+            <th>action</th>
+            <th>actor</th>
+            <th>ip</th>
+            <th>where</th>
+            <th>how</th>
+            <th>details</th>
+          </tr>
+        </thead>
+        <tbody id="rbac-audit-body">
+          {% for event in audit_events %}
+          <tr>
+            <td>{{ event.when or "-" }}</td>
+            <td>{{ event.action }}</td>
+            <td>{{ event.actor }}</td>
+            <td>{{ event.ip or "-" }}</td>
+            <td>{{ event.where }}</td>
+            <td>{{ event.how }}</td>
+            <td>{{ event.what or "-" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% set audit_show_more_hidden = not (audit_events|length == audit_limit and
+    audit_limit < audit_max_limit) %}
+    <div
+      class="admin-show-more-wrap"
+      id="rbac-audit-show-more-wrap"
+      {%
+      if
+      audit_show_more_hidden
+      %}hidden{%
+      endif
+      %}
+    >
       <button
-        id="rbac-audit-show-more"
         type="button"
         class="admin-show-more-button"
+        data-form="rbac-audit-filters"
+        data-limit-input="rbac-audit-limit"
+        data-limit-step="{{ audit_show_more_increment }}"
+        data-limit-max="{{ audit_max_limit }}"
       >
         show more
       </button>
     </div>
   </section>
+  {% endif %}
 
   <noscript>
     <section aria-labelledby="rbac-noscript-title">
@@ -200,4 +343,5 @@
   type="module"
   src="{{ url_for('static', filename='js/rbac-explorer.js') }}"
 ></script>
+<script src="{{ url_for('static', filename='js/admin-audit.js') }}"></script>
 {% endblock %}

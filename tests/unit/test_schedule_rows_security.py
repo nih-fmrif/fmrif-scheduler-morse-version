@@ -30,7 +30,7 @@ def test_schedule_rows_escapes_html_like_values(route_client, route_app_context)
     malicious_user = "<x onerror=1>"
     malicious_group = "<img/>"
 
-    if model.User.query.get(malicious_user) is None:
+    if model.get(model.User, malicious_user) is None:
         model.db.session.add(
             model.User(
                 id=malicious_user,

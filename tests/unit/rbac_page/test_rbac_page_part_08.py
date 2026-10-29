@@ -148,7 +148,7 @@ def test_rbac_mutate_batch_admin_can_approve_pending_technologist_request(
     assert payload is not None
     assert payload["ok"] is True
     assert payload["applied"] == 1
-    row = model.Technologist.query.get(user_id)
+    row = model.get(model.Technologist, user_id)
     assert row is not None
     assert row.approved_on is not None
 
@@ -164,7 +164,7 @@ def test_app_issues_page_renders_for_admin(route_client):
     assert "Admin Panel" in body
     assert "<title>Admin Panel - device scheduler</title>" in body
     assert "Potential issues" in body
-    assert "RBAC audit log" in body
+    assert "RBAC audit log" not in body
     assert "Email audit log" in body
 
 
@@ -194,10 +194,6 @@ def test_app_issues_page_defaults_audit_limits_to_10(route_client, monkeypatch):
 
     captured: dict[str, int] = {}
 
-    def fake_rbac_rows(scope: str, entity: str, *, limit: int, **_kwargs):
-        captured["rbac"] = limit
-        return []
-
     def fake_email_rows(scope: str, entity: str, *, limit: int, **_kwargs):
         captured["email"] = limit
         return []
@@ -205,14 +201,13 @@ def test_app_issues_page_defaults_audit_limits_to_10(route_client, monkeypatch):
     monkeypatch.setattr(logic, "rbac_audit_table_available", lambda: True)
     monkeypatch.setattr(logic, "email_audit_table_available", lambda: True)
     monkeypatch.setattr(logic, "notification_incident_table_available", lambda: False)
-    monkeypatch.setattr(rbac_routes, "_rbac_audit_rows", fake_rbac_rows)
     monkeypatch.setattr(rbac_routes, "_email_audit_rows", fake_email_rows)
     monkeypatch.setattr(rbac_routes, "_build_potential_issues", lambda: [])
     monkeypatch.setattr(rbac_routes, "_build_potential_issue_sections", lambda _i: [])
 
     response = route_client.get("/app/issues")
     assert response.status_code == 200
-    assert captured == {"rbac": 10, "email": 10}
+    assert captured == {"email": 10}
 
 
 def test_app_issues_page_clamps_audit_limits_to_200(route_client, monkeypatch):
@@ -221,10 +216,6 @@ def test_app_issues_page_clamps_audit_limits_to_200(route_client, monkeypatch):
 
     captured: dict[str, int] = {}
 
-    def fake_rbac_rows(scope: str, entity: str, *, limit: int, **_kwargs):
-        captured["rbac"] = limit
-        return []
-
     def fake_email_rows(scope: str, entity: str, *, limit: int, **_kwargs):
         captured["email"] = limit
         return []
@@ -232,14 +223,13 @@ def test_app_issues_page_clamps_audit_limits_to_200(route_client, monkeypatch):
     monkeypatch.setattr(logic, "rbac_audit_table_available", lambda: True)
     monkeypatch.setattr(logic, "email_audit_table_available", lambda: True)
     monkeypatch.setattr(logic, "notification_incident_table_available", lambda: False)
-    monkeypatch.setattr(rbac_routes, "_rbac_audit_rows", fake_rbac_rows)
     monkeypatch.setattr(rbac_routes, "_email_audit_rows", fake_email_rows)
     monkeypatch.setattr(rbac_routes, "_build_potential_issues", lambda: [])
     monkeypatch.setattr(rbac_routes, "_build_potential_issue_sections", lambda _i: [])
 
     response = route_client.get("/app/issues?limit=9999&email_limit=9999")
     assert response.status_code == 200
-    assert captured == {"rbac": 200, "email": 200}
+    assert captured == {"email": 200}
 
 
 def test_build_potential_issues_batches_pi_user_resolution(
@@ -298,7 +288,7 @@ def test_app_issues_page_surfaces_failed_join_request_notification(route_client)
             r'<details[^>]*class="potential-issue-card urgent"[^>]*\bopen\b',
             body,
         )
-        is not None
+        is None
     )
 
 
@@ -354,7 +344,7 @@ def test_app_issues_scan_persists_detected_incidents(route_client):
     _run_notification_scan(route_client)
 
     issue_key = f"join-group:{group_id}:{requester_id}"
-    row = model.NotificationIncident.query.get(issue_key)
+    row = model.get(model.NotificationIncident, issue_key)
     assert row is not None
     assert row.state == "open"
     assert row.active is True

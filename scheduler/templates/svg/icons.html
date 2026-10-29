@@ -175,6 +175,38 @@
       d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-.5a.5.5 0 0 0-.319.115L8 8.723l6.319-5.108A.5.5 0 0 0 14 3.5H2zm13 1.247-4.932 3.984L15 12.692V4.747zm-.034 8.198-5.603-4.525L8 9.417l-1.363-.997-5.603 4.525A.5.5 0 0 0 2 13.5h12a.5.5 0 0 0 .966-.555zM1 12.692l4.932-3.96L1 4.747v7.945z"
     />
   </svg>
+  {% endmacro %} {% macro mri_scanner(lbl) %}
+  <svg
+    width="1em"
+    height="1em"
+    viewBox="0 0 16 16"
+    class="icon-home-mri"
+    {{
+    label_icon(lbl)
+    }}
+  >
+    <rect
+      x="1.2"
+      y="1.6"
+      width="8.7"
+      height="12.8"
+      rx="1.7"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.3"
+    />
+    <circle
+      cx="5.55"
+      cy="7.95"
+      r="2.15"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.2"
+    />
+    <rect x="9.9" y="7.2" width="5.1" height="1.5" rx="0.75" />
+    <rect x="12.25" y="8.85" width="2.75" height="3.3" rx="0.55" />
+    <circle cx="13.35" cy="7.95" r="0.45" fill="var(--bg)" />
+  </svg>
   {% endmacro %} {% macro person_circle(lbl) %}
   <svg width="1em" height="1em" viewBox="0 0 16 16" {{ label_icon(lbl) }}>
     <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />

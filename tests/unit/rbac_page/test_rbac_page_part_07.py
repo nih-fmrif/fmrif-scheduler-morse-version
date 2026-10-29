@@ -20,6 +20,7 @@ from route_seed import (
     ensure_active_user,
     ensure_admin_user,
     ensure_group,
+    ensure_group_pi_user,
     extract_csrf_token,
     seeded_scanner_id,
     set_admin_session,
@@ -131,7 +132,7 @@ def test_rbac_mutate_batch_updates_user_profile_email(route_client, route_app_co
     assert payload is not None
     assert payload["ok"] is True
     assert payload["applied"] == 1
-    row = model.User.query.get(user_id)
+    row = model.get(model.User, user_id)
     assert row is not None
     assert row.addr == f"{user_id}@new.example.com"
 
@@ -200,7 +201,7 @@ def test_rbac_mutate_batch_group_membership_sent_resends_notification(
             assert payload is not None
             assert payload["ok"] is True
             assert payload["applied"] == 1
-            row = model.GroupMember.query.get((group_id, user_id))
+            row = model.get(model.GroupMember, (group_id, user_id))
             assert row is not None
             assert row.email_status == "sent"
             resolution = (
@@ -228,6 +229,109 @@ def test_rbac_mutate_batch_group_membership_sent_resends_notification(
             assert isinstance(recipients, list)
             assert any(
                 str(recipient.get("Address", "")).lower() == f"{pi_id}@example.com"
+                for recipient in recipients
+                if isinstance(recipient, dict)
+            )
+        finally:
+            clear_mailpit_messages(cfg)
+
+
+@pytest.mark.parametrize(
+    ("member", "approved", "outcome"),
+    [
+        (True, True, "approved"),
+        (False, False, "denied"),
+    ],
+)
+@pytest.mark.covers_route("/json/v1/rbac/mutate", "POST")
+def test_rbac_mutate_batch_group_membership_outcome_notifies_requester(
+    route_app,
+    route_client,
+    route_app_context,
+    member,
+    approved,
+    outcome,
+):
+    cfg = _require_mailpit()
+    ensure_admin_user()
+    set_admin_session(route_client)
+
+    group_id = create_group()
+    requester_id = f"group-outcome-{uuid.uuid4().hex[:6]}"
+    requester_email = f"{requester_id}@example.com"
+    ensure_active_user(requester_id, requester_email, requester_id)
+    ensure_group_pi_user(group_id, user_id=f"group-pi-{uuid.uuid4().hex[:6]}")
+    model.db.session.add(
+        model.GroupMember(
+            group=group_id,
+            user=requester_id,
+            approved=None,
+            email_status=logic.EMAIL_STATUS_NONE,
+        )
+    )
+    model.db.session.flush()
+
+    with _route_mail_config(
+        route_app,
+        MAIL_SERVER=cfg.smtp_host,
+        MAIL_PORT=cfg.smtp_port,
+        MAIL_USE_TLS=False,
+        MAIL_USE_SSL=False,
+        MAIL_SUPPRESS_SEND=False,
+    ):
+        clear_mailpit_messages(cfg)
+        try:
+            csrf_token = extract_csrf_token(
+                route_client.get("/rbac").get_data(as_text=True)
+            )
+            response = route_client.post(
+                "/json/v1/rbac/mutate",
+                data={
+                    "csrf_token": csrf_token,
+                    "mode": "batch",
+                    "scope": "group",
+                    "entity": group_id,
+                    "operations": json.dumps(
+                        [
+                            {
+                                "kind": "group.membership.set",
+                                "group": group_id,
+                                "user": requester_id,
+                                "member": member,
+                                "approved": approved,
+                            }
+                        ]
+                    ),
+                },
+            )
+
+            assert response.status_code == 200
+            payload = response.get_json()
+            assert payload is not None
+            assert payload["ok"] is True
+            assert payload["applied"] == 1
+            row = model.get(model.GroupMember, (group_id, requester_id))
+            if approved:
+                assert row is not None
+                assert row.approved is not None
+            else:
+                assert row is None
+
+            group = model.get(model.Group, group_id)
+            group_name = group.label if group and group.label else group_id
+            subject = f"your request to join {group_name} was {outcome}"
+            summary = wait_for_mailpit_message(
+                cfg,
+                lambda item: item.get("Subject") == subject,
+                timeout_seconds=8.0,
+                poll_interval_seconds=0.2,
+            )
+            assert summary is not None
+            detail = get_mailpit_message(cfg, str(summary["ID"]))
+            recipients = detail.get("To", [])
+            assert isinstance(recipients, list)
+            assert any(
+                str(recipient.get("Address", "")).lower() == requester_email
                 for recipient in recipients
                 if isinstance(recipient, dict)
             )
@@ -301,7 +405,7 @@ def test_rbac_mutate_batch_technologist_sent_resends_notification(
             assert payload is not None
             assert payload["ok"] is True
             assert payload["applied"] == 1
-            row = model.Technologist.query.get(user_id)
+            row = model.get(model.Technologist, user_id)
             assert row is not None
             assert row.approved_on is None
             assert row.email_status == "sent"

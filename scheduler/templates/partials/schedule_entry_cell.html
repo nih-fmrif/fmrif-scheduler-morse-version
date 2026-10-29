@@ -10,7 +10,18 @@ r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
   data-old="{% if x.date < cur_date or (x.date == cur_date and x.hour <= cur_hour) %}true{% else %}false{% endif %}"
   data-can-edit="false"
   data-changed="false"
-  data-error="false"
+  data-error="{% if x.error %}true{% else %}false{% endif %}"
+  {%
+  if
+  x.errors
+  is
+  defined
+  and
+  x.errors
+  %}data-server-errors="{{ x.errors|tojson }}"
+  {%
+  endif
+  %}
   data-summary-kind="schedule"
 >
   <entry-summary
@@ -91,7 +102,7 @@ r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
         </input-widget>
         <label for="{{ 'tech-' ~ kind ~ '-' ~ id }}">{{ lbl }}</label>
       </input-set>
-      {% endmacro %} {% if support.tech or sr.tech %}
+      {% endmacro %}
       <fieldset
         data-sr="tech"
         data-new="{% if sr.tech %}false{% else %}true{% endif %}"
@@ -108,7 +119,6 @@ r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
         </fieldset>
         {{ handler("tech-handler-" ~ x.id, "tech", sr.tech) }}
       </fieldset>
-      {% endif %} {% if support.training or sr.train %}
       <fieldset
         data-sr="train"
         data-new="{% if sr.train %}false{% else %}true{% endif %}"
@@ -119,7 +129,6 @@ r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
         sr.train.approved is not sameas false) }} {{ handler("train-handler-" ~
         x.id, "train", sr.train) }}
       </fieldset>
-      {% endif %} {% if support.medical or sr.medical %}
       <fieldset
         data-sr="med"
         data-new="{% if sr.medical %}false{% else %}true{% endif %}"
@@ -130,7 +139,6 @@ r.supportkind == 3 %} {% set sr.tech = r %} {% endif %} {% endfor %}
         sr.medical.approved is not sameas false) }} {{ handler("med-handler-" ~
         x.id, "med", sr.medical) }}
       </fieldset>
-      {% endif %}
     </entry-support>
     <entry-buttons>
       <button type="button" disabled data-reset>reset</button>

@@ -21,8 +21,8 @@ For local port wiring, prefer these canonical values:
 
 To keep multiple local stacks isolated, also set:
 
-- `COMPOSE_PROJECT_NAME`: unique compose resource prefix per worktree/job.
-  If omitted, `run-compose.sh` derives `<workdir>-<APP_PORT>`.
+- `COMPOSE_PROJECT_NAME`: unique compose resource prefix per scope.
+  If omitted, `run-compose.sh` derives one from the base project name plus `FMRIF_RUNTIME_SCOPE`.
   `setup-dotenv.sh` derives this and related values automatically.
 
 Other local URL settings should normally be unset unless intentionally overriding.
@@ -108,8 +108,8 @@ resolved through that container network:
 2. **Compose resource isolation**
    - For concurrent stacks, use a unique `COMPOSE_PROJECT_NAME` so container/volume
      names do not collide.
-   - In multi-worktree workflows, regenerate `.env` with `setup-dotenv.sh` so
-     compose project name, DB names, session cookie names, and Mailpit ports stay isolated.
+- In multi-scope runs, use consistent `FMRIF_RUNTIME_SCOPE` values and regenerate `.env` with `setup-dotenv.sh` so
+ compose project name, DB names, session cookie names, and Mailpit ports stay isolated.
 3. **`$` in values**
    - `run-compose.sh` avoids compose interpolation by using a generated env file.
    - Running `docker compose` directly is not supported for this stack: compose now requires

@@ -13,7 +13,7 @@ The RBAC surface is exposed as a single page:
 - `POST /json/v1/rbac/mutate` (admins and delegated PI roles + CSRF): atomic batch RBAC writes
 - `GET /json/v1/rbac/audit` (admin only): RBAC audit timeline feed
 - `GET /json/v1/email/audit` (admin only): email delivery + issue lifecycle feed
-- `GET /app/issues` (admin only): Potential issues page (warnings + RBAC/email audit)
+- `GET /app/issues` (admin only): Potential issues page (warnings + email audit)
 
 ## Enforcement Points
 
@@ -45,7 +45,8 @@ The RBAC surface is exposed as a single page:
 `scheduler/logic.py:get_dev_perms(user, device)` resolves device capability:
 
 1. Inactive user: read-only.
-2. Admin or DEV PI: full device capability.
+2. Admin or DEV PI: full active-device capability (RBAC model behavior; not
+   restricted to device-group links).
 3. Otherwise:
    - edit access from approved membership in any group linked to the device.
    - extra capability from `userdevice` flags.
@@ -85,14 +86,72 @@ The `/rbac` page is entity-focused and progressively loaded.
 
 Delegated RBAC behavior:
 
-- Group PI users get constrained `group` scope for PI-managed active groups.
-- DEV PI users get constrained `device` scope and can manage device links and
-  DEV-user device flags.
+- Group PI users for non-`DEV` groups are constrained to `group` scope for
+  PI-managed active groups only.
+- DEV PI users get delegated `device` scope over active devices (broad active-device scope)
+  and can manage device links and DEV-user device flags.
+- Group PI role for non-`DEV` groups does not expand into linked-device RBAC
+  explorer scope.
 - Non-admin delegated users cannot create groups/devices, cannot toggle
   active/inactive entity state, and cannot access audit feeds.
+- RBAC UI does not render audit tabs/panels for non-admin delegated users.
 - Non-admin delegated users can create pending membership requests, but cannot
   approve membership escalation from the RBAC matrix.
 - Server-side batch authorization enforces these constraints atomically.
+
+### Admin vs DEV PI (RBAC model split)
+
+- Admin: user with approved active membership in `admin`.
+- DEV PI: approved active PI assignment on group `DEV` (`Group PI of DEV`).
+- DEV PI is not equivalent to admin.
+- DEV PI capability is broad across active devices (not constrained by
+  `devicegroup` links), but remains delegated/non-admin.
+- Admin-only capabilities include:
+  - create groups/devices
+  - inactive-entity admin views/edit paths
+  - active/inactive state toggles
+  - RBAC/email audit feed access
+
+### Role delineation (RBAC model)
+
+- `PI`: a user assigned as PI for a specific group.
+- `Group PI`: PI for a non-`DEV` group.
+- `DEV PI`: PI for the `DEV` group (`Group PI of DEV` is the same role).
+- Single-PI rule: each group has one PI at a time, including `DEV`.
+- One user can be PI for multiple groups.
+- A user can be a DEV member and PI of some other group while not being Group
+  PI of `DEV` (DEV PI).
+- A DEV member who is not Group PI of `DEV` may get schedule edit rights via
+  group/device linkage, but does not get delegated PI management scope.
+- Devices are not typed as DEV/non-DEV in this model; DEV PI active-device
+  capability is global across active devices.
+
+### Role-change flows
+
+- PI assignment is group-scoped and replaces the previous PI for that group.
+- For `DEV`, the same PI-assignment flow determines DEV PI.
+- Group membership workflows are group-scoped; delegated Group PI manages those
+  workflows for managed active groups.
+- Device-management workflows remain admin/DEV-PI delegated actions.
+- In general app UI, DEV PI should be presented as Group PI of `DEV`; the
+  additional active-device capability is a behavior/capability distinction, not
+  a separate user-facing role label.
+
+### Test-only mock auth note
+
+Route tests and Playwright mock-auth tests use a test-only session bootstrap
+endpoint that now requires a scoped `session_key`.
+
+- Mock users are resolved to session-scoped usernames/emails.
+- For non-test authorization, PI authority remains database-backed.
+- For scoped mock `DEV` PI sessions, PI authority is carried in session-local
+  test state so parallel test sessions do not compete over the single
+  `PrimaryGroupMember` row for `DEV`.
+
+This is a test-isolation mechanism, not a production authorization design.
+
+If that boundary starts to spread, the intended cleanup direction is documented in
+`docs/auth-adapter-refactor-note.md`.
 
 ### UI Consolidation
 
@@ -118,9 +177,7 @@ RBAC events are also persisted in `rbac_audit_log` (created by
 `sql/205-rbac-audit-log-ip.sql`) and exposed via:
 
 - `GET /json/v1/rbac/audit`
-- `GET /app/issues` (global page with potential-issue warnings and full RBAC log)
-  - includes top-priority failed-notification issues for pending group and
-    technologist requests so admins can fix PI email + resend or approve directly
+- `GET /rbac` (RBAC page audit module; admin-visible only)
 
 Email events are persisted in `email_audit_log` (created by
 `sql/207-email-audit-log.sql`) and exposed via:
@@ -128,6 +185,10 @@ Email events are persisted in `email_audit_log` (created by
 - `GET /json/v1/email/audit`
 - `GET /app/issues` (email audit section with status/issue-state/search filters,
   including resolved issue history lookup)
+
+`GET /app/issues` also includes top-priority failed-notification issues for
+pending group and technologist requests so admins can fix PI email + resend or
+approve directly.
 
 Timeline filtering:
 
@@ -142,10 +203,11 @@ an empty feed instead of failing the page.
 ## Notes for Tests
 
 - Route contracts include:
-  - `GET /json/v1/rbac/explorer` (admin only)
-  - `POST /json/v1/rbac/mutate` (admin only mutating + CSRF)
+  - `GET /json/v1/rbac/explorer` (admin + delegated PI scope fixtures; baseline mock-role matrix remains admin-only because PI role is fixture-driven)
+  - `POST /json/v1/rbac/mutate` (admin + delegated PI scope-limited mutating + CSRF)
   - `GET /json/v1/rbac/audit` (admin only)
   - `GET /json/v1/email/audit` (admin only)
   - `GET /app/issues` (admin only)
 - Seed writes for membership should target `groupmembers` and
   `primarygroupmember` (the `membership` view is read-only).
+- `/join/tech` now auto-approves eligible DEV submissions and should be tested as immediate technologist approval (not pending queue creation).

@@ -35,6 +35,10 @@ fi
 suite_raw="$1"
 shift
 
+if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
+  shift
+fi
+
 case "${suite_raw}" in
   unit)
     suite="unit"
@@ -58,6 +62,38 @@ esac
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 env_file="${ENVFILE:-${repo_root}/.env}"
+source "${script_dir}/runtime-scope.sh"
+
+runtime_scope_current_worktree_root() {
+  if command -v git >/dev/null 2>&1; then
+    git -C "$repo_root" rev-parse --show-toplevel 2>/dev/null || true
+  else
+    printf ''
+  fi
+}
+
+ensure_scope_worktree_match() {
+  local scope="$1"
+  local file_worktree="$2"
+  local current_worktree=""
+  if [ -z "$file_worktree" ]; then
+    return 0
+  fi
+
+  current_worktree="$(runtime_scope_current_worktree_root)"
+  if [ -z "$current_worktree" ]; then
+    return 0
+  fi
+
+  if [ "$file_worktree" != "$current_worktree" ]; then
+    echo "ERROR: scope '${scope}' is owned by a different worktree."
+    echo "  scope metadata worktree: ${file_worktree}"
+    echo "  current worktree: ${current_worktree}"
+    echo "  Set FMRIF_RUNTIME_SCOPE to a different scope, or run from the owning worktree."
+    return 1
+  fi
+  return 0
+}
 
 trim() {
   local value=$1
@@ -245,17 +281,6 @@ sanitize_scope_tag() {
   printf '%s-%s' "${normalized:0:prefix_len}" "$hash"
 }
 
-scope_hash_offset() {
-  local raw=$1
-  local hash
-  if [ "$raw" = "default" ]; then
-    printf '0'
-    return 0
-  fi
-  hash="$(printf '%s' "$raw" | cksum | awk '{print $1}')"
-  printf '%s' $((hash % 2000))
-}
-
 scope_hash_int31() {
   local raw=$1
   local hash
@@ -274,101 +299,88 @@ append_db_suffix_once() {
 }
 
 scope_source="runtime-scope"
-runtime_scope_raw="${FMRIF_RUNTIME_SCOPE:-default}"
-runtime_scope="$(sanitize_name "$runtime_scope_raw")"
+runtime_scope_derive
+runtime_scope_load_metadata "$RUNTIME_SCOPE_FILE" || true
+if [ "${RUNTIME_SCOPE_SOURCE:-runtime-scope}" = "runtime-scope-file" ]; then
+  scope_source="runtime-scope-file"
+fi
+if ! ensure_scope_worktree_match "$RUNTIME_SCOPE" "$(runtime_scope_get_metadata WORKTREE_ROOT "")"; then
+  exit 1
+fi
+
+runtime_scope="${RUNTIME_SCOPE}"
 if [ -z "$runtime_scope" ]; then
   runtime_scope="default"
 fi
 export FMRIF_RUNTIME_SCOPE="$runtime_scope"
 
-raw_scope="$runtime_scope"
-
+raw_scope="${runtime_scope}"
 test_scope_tag="$(sanitize_scope_tag "${raw_scope}")"
 if [ -z "$test_scope_tag" ]; then
   echo "ERROR: failed to derive a non-empty scope tag." >&2
   exit 1
 fi
-scope_offset="$(scope_hash_offset "$test_scope_tag")"
+scope_offset="$(parse_int_or_default "${FMRIF_RUNTIME_SCOPE_OFFSET:-$(runtime_scope_get_metadata FMRIF_RUNTIME_SCOPE_OFFSET 0)}" 0)"
 
 extra_offset="$(parse_int_or_default "${FMRIF_TEST_SUITE_PORT_OFFSET:-}" 0)"
 suite_port_offset=$((suite_port_offset + extra_offset))
 
-runtime_scope_file="/tmp/fmrif-scheduler-runtimes/${runtime_scope}"
-scope_file_pgport=""
-scope_file_app_port=""
-scope_file_mailpit_app_port=""
-scope_file_mailpit_app_smtp_port=""
-scope_file_mailpit_unit_port=""
-scope_file_mailpit_unit_smtp_port=""
-scope_file_mailpit_routes_port=""
-scope_file_mailpit_routes_smtp_port=""
-scope_file_mailpit_integration_port=""
-scope_file_mailpit_integration_smtp_port=""
+scope_file_pgport="$(runtime_scope_get_metadata PGPORT "")"
+scope_file_app_port="$(runtime_scope_get_metadata APP_PORT "")"
+scope_file_mailpit_app_port="$(runtime_scope_get_metadata MAILPIT_APP_PORT "")"
+scope_file_mailpit_app_smtp_port="$(runtime_scope_get_metadata MAILPIT_APP_SMTP_PORT "")"
+scope_file_mailpit_unit_port="$(runtime_scope_get_metadata MAILPIT_UNIT_PORT "")"
+scope_file_mailpit_unit_smtp_port="$(runtime_scope_get_metadata MAILPIT_UNIT_SMTP_PORT "")"
+scope_file_mailpit_routes_port="$(runtime_scope_get_metadata MAILPIT_ROUTES_PORT "")"
+scope_file_mailpit_routes_smtp_port="$(runtime_scope_get_metadata MAILPIT_ROUTES_SMTP_PORT "")"
+scope_file_mailpit_integration_port="$(runtime_scope_get_metadata MAILPIT_INTEGRATION_PORT "")"
+scope_file_mailpit_integration_smtp_port="$(runtime_scope_get_metadata MAILPIT_INTEGRATION_SMTP_PORT "")"
 
-load_runtime_scope_file() {
-  local line key value
-  if [ ! -f "$runtime_scope_file" ]; then
-    return 0
-  fi
-  scope_source="runtime-scope-file"
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [ -z "$line" ] && continue
-    case "$line" in
-      \#*)
-        continue
-        ;;
-      *=*)
-        ;;
-      *)
-        continue
-        ;;
-    esac
-    key="${line%%=*}"
-    value="${line#*=}"
-    case "$key" in
-      PGPORT) scope_file_pgport="$(parse_int_or_default "$value" "")" ;;
-      APP_PORT) scope_file_app_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_APP_PORT) scope_file_mailpit_app_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_APP_SMTP_PORT) scope_file_mailpit_app_smtp_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_UNIT_PORT) scope_file_mailpit_unit_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_UNIT_SMTP_PORT) scope_file_mailpit_unit_smtp_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_ROUTES_PORT) scope_file_mailpit_routes_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_ROUTES_SMTP_PORT) scope_file_mailpit_routes_smtp_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_INTEGRATION_PORT) scope_file_mailpit_integration_port="$(parse_int_or_default "$value" "")" ;;
-      MAILPIT_INTEGRATION_SMTP_PORT) scope_file_mailpit_integration_smtp_port="$(parse_int_or_default "$value" "")" ;;
-    esac
-  done < "$runtime_scope_file"
-}
-
-load_runtime_scope_file
-
-base_pgport_raw="$(parse_int_or_default "${PGPORT:-}" 5444)"
 if [ -n "$scope_file_pgport" ]; then
-  base_pgport="$scope_file_pgport"
+  base_pgport_raw="$(parse_int_or_default "$scope_file_pgport" "")"
+  if [ -z "$base_pgport_raw" ]; then
+    echo "ERROR: invalid PGPORT in runtime scope metadata: ${scope_file_pgport}" >&2
+    exit 1
+  fi
 else
-  base_pgport=$((base_pgport_raw + scope_offset))
+  base_pgport_raw="$(parse_int_or_default "${PGPORT:-}" 5444)"
 fi
+base_pgport=$((base_pgport_raw + scope_offset))
 validate_port "$base_pgport" "PGPORT"
 export PGPORT="$base_pgport"
 
-base_mailpit_ui_raw="$(parse_int_or_default "${MAILPIT__PORT:-}" $((base_pgport_raw + 1)))"
-base_mailpit_smtp_raw="$(parse_int_or_default "${MAILPIT__SMTP_PORT:-}" $((base_pgport_raw + 2)))"
 if [ -n "$scope_file_mailpit_app_port" ]; then
-  base_mailpit_ui="$scope_file_mailpit_app_port"
+  base_mailpit_ui_raw="$(parse_int_or_default "$scope_file_mailpit_app_port" "")"
+  if [ -z "$base_mailpit_ui_raw" ]; then
+    echo "ERROR: invalid MAILPIT_APP_PORT in runtime scope metadata: ${scope_file_mailpit_app_port}" >&2
+    exit 1
+  fi
 else
-  base_mailpit_ui=$((base_mailpit_ui_raw + scope_offset))
+  base_mailpit_ui_raw="$(parse_int_or_default "${MAILPIT__PORT:-}" $((base_pgport_raw + 1)))"
 fi
 if [ -n "$scope_file_mailpit_app_smtp_port" ]; then
-  base_mailpit_smtp="$scope_file_mailpit_app_smtp_port"
+  base_mailpit_smtp_raw="$(parse_int_or_default "$scope_file_mailpit_app_smtp_port" "")"
+  if [ -z "$base_mailpit_smtp_raw" ]; then
+    echo "ERROR: invalid MAILPIT_APP_SMTP_PORT in runtime scope metadata: ${scope_file_mailpit_app_smtp_port}" >&2
+    exit 1
+  fi
 else
-  base_mailpit_smtp=$((base_mailpit_smtp_raw + scope_offset))
+  base_mailpit_smtp_raw="$(parse_int_or_default "${MAILPIT__SMTP_PORT:-}" $((base_pgport_raw + 2)))"
 fi
+base_mailpit_ui=$((base_mailpit_ui_raw + scope_offset))
+base_mailpit_smtp=$((base_mailpit_smtp_raw + scope_offset))
 
 case "$suite" in
   unit)
     if [ "$extra_offset" -eq 0 ] && [ -n "$scope_file_mailpit_unit_port" ] && [ -n "$scope_file_mailpit_unit_smtp_port" ]; then
-      mailpit_port="$scope_file_mailpit_unit_port"
-      mailpit_smtp_port="$scope_file_mailpit_unit_smtp_port"
+      mailpit_port_raw="$(parse_int_or_default "$scope_file_mailpit_unit_port" "")"
+      mailpit_smtp_port_raw="$(parse_int_or_default "$scope_file_mailpit_unit_smtp_port" "")"
+      if [ -z "$mailpit_port_raw" ] || [ -z "$mailpit_smtp_port_raw" ]; then
+        echo "ERROR: invalid unit Mailpit ports in runtime scope metadata." >&2
+        exit 1
+      fi
+      mailpit_port=$((mailpit_port_raw + scope_offset))
+      mailpit_smtp_port=$((mailpit_smtp_port_raw + scope_offset))
     else
       mailpit_port=$((base_mailpit_ui + suite_port_offset))
       mailpit_smtp_port=$((base_mailpit_smtp + suite_port_offset))
@@ -376,8 +388,14 @@ case "$suite" in
     ;;
   routes)
     if [ "$extra_offset" -eq 0 ] && [ -n "$scope_file_mailpit_routes_port" ] && [ -n "$scope_file_mailpit_routes_smtp_port" ]; then
-      mailpit_port="$scope_file_mailpit_routes_port"
-      mailpit_smtp_port="$scope_file_mailpit_routes_smtp_port"
+      mailpit_port_raw="$(parse_int_or_default "$scope_file_mailpit_routes_port" "")"
+      mailpit_smtp_port_raw="$(parse_int_or_default "$scope_file_mailpit_routes_smtp_port" "")"
+      if [ -z "$mailpit_port_raw" ] || [ -z "$mailpit_smtp_port_raw" ]; then
+        echo "ERROR: invalid routes Mailpit ports in runtime scope metadata." >&2
+        exit 1
+      fi
+      mailpit_port=$((mailpit_port_raw + scope_offset))
+      mailpit_smtp_port=$((mailpit_smtp_port_raw + scope_offset))
     else
       mailpit_port=$((base_mailpit_ui + suite_port_offset))
       mailpit_smtp_port=$((base_mailpit_smtp + suite_port_offset))
@@ -385,8 +403,14 @@ case "$suite" in
     ;;
   integration)
     if [ "$extra_offset" -eq 0 ] && [ -n "$scope_file_mailpit_integration_port" ] && [ -n "$scope_file_mailpit_integration_smtp_port" ]; then
-      mailpit_port="$scope_file_mailpit_integration_port"
-      mailpit_smtp_port="$scope_file_mailpit_integration_smtp_port"
+      mailpit_port_raw="$(parse_int_or_default "$scope_file_mailpit_integration_port" "")"
+      mailpit_smtp_port_raw="$(parse_int_or_default "$scope_file_mailpit_integration_smtp_port" "")"
+      if [ -z "$mailpit_port_raw" ] || [ -z "$mailpit_smtp_port_raw" ]; then
+        echo "ERROR: invalid integration Mailpit ports in runtime scope metadata." >&2
+        exit 1
+      fi
+      mailpit_port=$((mailpit_port_raw + scope_offset))
+      mailpit_smtp_port=$((mailpit_smtp_port_raw + scope_offset))
     else
       mailpit_port=$((base_mailpit_ui + suite_port_offset))
       mailpit_smtp_port=$((base_mailpit_smtp + suite_port_offset))
@@ -459,13 +483,17 @@ if [ "$suite" = "integration" ]; then
   export PGDATABASE="$suite_runtime_db"
   should_check_integration_port=true
   if [ -n "${FMRIF_TEST_APP_PORT:-}" ]; then
-    base_app_port="$(parse_int_or_default "${FMRIF_TEST_APP_PORT}" 5051)"
+    base_app_port_raw="$(parse_int_or_default "${FMRIF_TEST_APP_PORT}" 5051)"
   elif [ -n "$scope_file_app_port" ]; then
-    base_app_port="$scope_file_app_port"
+    base_app_port_raw="$(parse_int_or_default "$scope_file_app_port" "")"
+    if [ -z "$base_app_port_raw" ]; then
+      echo "ERROR: invalid APP_PORT in runtime scope metadata: ${scope_file_app_port}" >&2
+      exit 1
+    fi
   else
     base_app_port_raw="$(parse_int_or_default "${APP_PORT:-5051}" 5051)"
-    base_app_port=$((base_app_port_raw + scope_offset))
   fi
+  base_app_port=$((base_app_port_raw + scope_offset))
   isolated_app_port=$((base_app_port + suite_port_offset))
   validate_port "$isolated_app_port" "APP_PORT"
   export APP_PORT="$isolated_app_port"
@@ -734,16 +762,48 @@ integration_template_fingerprint() {
 pg_admin_query() {
   local sql_text=$1
   shift || true
-  PGPASSWORD="${PGPASSWORD:-}" psql \
-    --no-psqlrc \
-    -v ON_ERROR_STOP=1 \
-    -h "${PGHOST:-localhost}" \
-    -p "${PGPORT:-5444}" \
-    -U "${PGUSER:-postgres}" \
-    -d postgres \
-    -Atq \
-    "$@" \
-    -c "$sql_text"
+  local max_attempts="${FMRIF_PG_ADMIN_QUERY_MAX_ATTEMPTS:-6}"
+  local retry_delay_seconds="${FMRIF_PG_ADMIN_QUERY_RETRY_DELAY_SECONDS:-1}"
+  local attempt=1
+  local query_output=""
+  local status=0
+
+  while true; do
+    if query_output="$(
+      PGPASSWORD="${PGPASSWORD:-}" psql \
+        --no-psqlrc \
+        -v ON_ERROR_STOP=1 \
+        -h "${PGHOST:-localhost}" \
+        -p "${PGPORT:-5444}" \
+        -U "${PGUSER:-postgres}" \
+        -d postgres \
+        -Atq \
+        "$@" \
+        -c "$sql_text" 2>&1
+    )"; then
+      if [ -n "$query_output" ]; then
+        printf '%s\n' "$query_output"
+      fi
+      return 0
+    fi
+    status=$?
+
+    if ! printf '%s\n' "$query_output" | grep -Eiq \
+      'server closed the connection unexpectedly|terminating connection because of crash of another server process|the database system is starting up|the database system is in recovery mode|could not connect to server|connection refused|no route to host|connection timed out'; then
+      printf '%s\n' "$query_output" >&2
+      return "$status"
+    fi
+
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      printf '%s\n' "$query_output" >&2
+      echo "ERROR: postgres admin query did not recover after ${max_attempts} attempts." >&2
+      return "$status"
+    fi
+
+    echo "Postgres transient admin-query failure (attempt ${attempt}/${max_attempts}); retrying in ${retry_delay_seconds}s..." >&2
+    sleep "$retry_delay_seconds"
+    attempt=$((attempt + 1))
+  done
 }
 
 pg_db_exists() {

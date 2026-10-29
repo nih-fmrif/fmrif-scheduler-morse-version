@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import datetime
 import re
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from flask import abort, current_app, g, jsonify, request, url_for
@@ -10,6 +12,11 @@ from flask.templating import render_template
 from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import logic, model
+from scheduler.scheduler_save_error_attribution import (
+    build_scheduler_diff_context,
+    select_scheduler_error_client_ids,
+)
+from scheduler.scheduler_save_error_policy import explain_scheduler_save_error
 
 BreadcrumbLinks = Dict[str, List[Tuple[str, str]]]
 SubpageLinks = Dict[str, Dict[str, Union[str, List[Tuple[str, str]]]]]
@@ -20,6 +27,27 @@ _breadcrumb_fn: Optional[Callable[..., BreadcrumbLinks]] = None
 _subpage_nav_fn: Optional[
     Callable[[str, List[Tuple[bool, str, str]]], SubpageLinks]
 ] = None
+_SYNTHETIC_SLOT_ID = re.compile(r"^new-(\d{4}-\d{2}-\d{2})-(\d{1,2})$")
+DB_CLOCK_WARNING = "Database time unavailable. Unable to refresh ET date right now."
+
+
+class SlotSaveNormalizationError(Exception):
+    def __init__(self, slot_id: str, source: str, code: str, message: str):
+        super().__init__(message)
+        self.slot_id = slot_id
+        self.source = source
+        self.code = code
+        self.message = message
+
+
+def _db_clock_date() -> Tuple[Optional[datetime.date], Optional[str]]:
+    try:
+        return logic.db_now()[0], None
+    except SQLAlchemyError:
+        current_app.logger.exception(
+            "unable to resolve DB ET clock for scheduler date defaults"
+        )
+        return None, DB_CLOCK_WARNING
 
 
 def _require_helper(
@@ -92,15 +120,19 @@ def device_breadcrumb(device: model.Device) -> BreadcrumbLinks:
     return breadcrumb((device.label, url_for("device", the_device=device.id)))
 
 
-def schedule_window_from_request() -> tuple:
-    # get the date, defaulting to today
+def schedule_window_from_request(device: Optional[model.Device] = None) -> tuple:
+    # get the date, defaulting to DB clock
     date = None
     the_date = request.args.get("start")
     if the_date is not None:
         date = logic.parse_date(the_date)
         if date is None:
             abort(400, f"invalid start: {the_date} (must be YYYY-MM-DD date)")
-    date = logic.date_or_today(date)
+    clock_warning = None
+    if date is None:
+        date, clock_warning = _db_clock_date()
+    if date is None:
+        abort(503, DB_CLOCK_WARNING)
 
     # get the number of days to show, defaulting to 7
     days = 7
@@ -113,7 +145,160 @@ def schedule_window_from_request() -> tuple:
     # day windows are inclusive of the start date, so subtract one day here.
     end_date = logic.end_date(date, days - 1)
 
-    return date, days, end_date
+    return date, days, end_date, clock_warning
+
+
+def _slot_stub(day, hour: int) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=f"new-{logic.fmt_date(day)}-{hour:02d}",
+        hour=hour,
+        date=day,
+        group="",
+        user="",
+        requests=[],
+        error=False,
+        template=None,
+        used=None,
+        errors=[],
+    )
+
+
+def _db_weekday_for(date_value) -> int:
+    # DB schema expects 0=Sunday,1=Monday,...,6=Saturday
+    return int(date_value.isoweekday()) % 7
+
+
+def _slot_error_row(
+    source: str, code: str, message: str, blocking: bool = True
+) -> Dict[str, Union[str, bool]]:
+    return {
+        "source": source,
+        "code": code,
+        "message": message,
+        "blocking": blocking,
+        "origin": "server",
+    }
+
+
+def _log_scheduler_save_database_error(
+    err: SQLAlchemyError, *, phase: str
+) -> Dict[str, Union[str, bool]]:
+    decision = explain_scheduler_save_error(err)
+    logger = current_app.logger if current_app else None
+    if logger:
+        if decision.notify_admin:
+            logger.exception(
+                "Scheduler save %s hit an unmapped database error policy path",
+                phase,
+            )
+        else:
+            logger.warning(
+                "Scheduler save %s rejected by approved database policy "
+                "(code=%s, source=%s)",
+                phase,
+                decision.code,
+                decision.source,
+            )
+    return _slot_error_row(
+        decision.source,
+        decision.code,
+        decision.message,
+        blocking=True,
+    )
+
+
+def _map_server_errors_to_client_ids(errors, synthetic_map):
+    mapped_errors = {}
+    for entry_id, rows in errors.items():
+        key = synthetic_map.get(str(entry_id), str(entry_id))
+        mapped_errors[key] = rows
+    return mapped_errors
+
+
+def _build_error_map_for_client_ids(client_ids, row):
+    mapped = {}
+    for client_id in client_ids:
+        key = str(client_id)
+        mapped.setdefault(key, []).append(dict(row))
+    if len(mapped) == 0:
+        mapped["slot"] = [dict(row)]
+    return mapped
+
+
+def _normalize_schedule_diffs_for_save(diffs, entries, device, user):
+    by_slot = {(entry.date, int(entry.hour)): entry for entry in entries}
+    normalized = []
+    server_to_client = {}
+    diff_contexts = {}
+    for raw in diffs:
+        diff = dict(raw)
+        raw_id = diff.get("id")
+        client_id = str(raw_id)
+        if isinstance(raw_id, str):
+            match = _SYNTHETIC_SLOT_ID.fullmatch(raw_id.strip())
+            if match is not None:
+                slot_date = logic.parse_date(match.group(1))
+                slot_hour = int(match.group(2))
+                if diff.get("date") is not None:
+                    parsed = logic.parse_date(str(diff.get("date")))
+                    if parsed is not None:
+                        slot_date = parsed
+                if diff.get("hour") is not None:
+                    try:
+                        slot_hour = int(diff.get("hour"))
+                    except (TypeError, ValueError):
+                        raise SlotSaveNormalizationError(
+                            raw_id,
+                            "hour",
+                            "invalid_hour",
+                            f"invalid hour for synthetic slot id: {raw_id}",
+                        )
+                if slot_date is None or slot_hour < 0 or slot_hour > 23:
+                    raise SlotSaveNormalizationError(
+                        raw_id,
+                        "slot",
+                        "invalid_slot",
+                        f"invalid synthetic slot id: {raw_id}",
+                    )
+                slot = (slot_date, slot_hour)
+                entry = by_slot.get(slot)
+                if entry is None:
+                    entry = model.ScheduleEntry()
+                    entry.device = device.id
+                    entry.date = slot_date
+                    entry.dow = _db_weekday_for(slot_date)
+                    entry.hour = slot_hour
+                    entry.group = None
+                    entry.user = None
+                    entry.orig_group = None
+                    entry.orig_inst = None
+                    entry.template = None
+                    entry.used = None
+                    entry.modified_by = user.id
+                    model.db.session.add(entry)
+                    try:
+                        model.db.session.flush()
+                    except SQLAlchemyError as err:
+                        row = _log_scheduler_save_database_error(
+                            err, phase="synthetic slot normalization"
+                        )
+                        raise SlotSaveNormalizationError(
+                            raw_id,
+                            str(row["source"]),
+                            str(row["code"]),
+                            str(row["message"]),
+                        ) from err
+                    entries.append(entry)
+                    by_slot[slot] = entry
+                diff["id"] = entry.id
+                server_to_client[str(entry.id)] = raw_id
+        server_ref = f"d{len(normalized)}"
+        diff["_server_ref"] = server_ref
+        diff_contexts[server_ref] = build_scheduler_diff_context(
+            server_ref, client_id, diff
+        )
+        normalized.append(diff)
+    return normalized, server_to_client, diff_contexts
 
 
 def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> SubpageLinks:
@@ -140,7 +325,7 @@ def device(the_device):
     if not (device.active or perms.admin):
         abort(403)
 
-    date, days, end_date = schedule_window_from_request()
+    date, days, end_date, clock_warning = schedule_window_from_request(device)
 
     min, max = logic.device_schedule_extreme_dates(device)
 
@@ -198,12 +383,43 @@ def device(the_device):
     groups_json = [id for (id, _) in groups]
     device_groups_json = [id for (id, _) in device_groups]
 
+    header_weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    header_months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
     top_row = [
-        logic.fmt_date(date + timedelta(days=n), with_day=True) for n in range(days)
+        (
+            f"{(date + timedelta(days=n)).year} "
+            f"{header_weekdays[(date + timedelta(days=n)).weekday()]} "
+            f"({header_months[(date + timedelta(days=n)).month - 1]}-{(date + timedelta(days=n)).day:02d})"
+            if n == 0
+            else f"{header_weekdays[(date + timedelta(days=n)).weekday()]} ({header_months[(date + timedelta(days=n)).month - 1]}-{(date + timedelta(days=n)).day:02d})"
+        )
+        for n in range(days)
     ]
 
     hours = logic.fmt_hours()
-    cur_date, cur_hour, cur_minute = logic.db_now()
+    cur_date = date
+    cur_hour = -1
+    cur_minute = 0
+    try:
+        cur_date, cur_hour, cur_minute = logic.db_now()
+    except SQLAlchemyError:
+        current_app.logger.exception(
+            "unable to resolve DB ET clock for scheduler operations"
+        )
+        clock_warning = clock_warning or DB_CLOCK_WARNING
 
     form = logic.JsonForm()
     if request.method == "POST":
@@ -218,6 +434,23 @@ def device(the_device):
         diffs = data["diffs"]
         send_notifications = data["notify"]
         entries = logic.schedule_for(device, date, end_date)
+        try:
+            diffs, synthetic_map, diff_contexts = _normalize_schedule_diffs_for_save(
+                diffs, entries, device, g.user
+            )
+        except SlotSaveNormalizationError as err:
+            model.db.session.rollback()
+            return jsonify(
+                {
+                    "errors": {
+                        str(err.slot_id): [
+                            _slot_error_row(
+                                err.source, err.code, err.message, blocking=True
+                            )
+                        ]
+                    }
+                }
+            )
 
         xs, srs, when, errors = logic.verify_scheduler_diffs(
             diffs,
@@ -232,7 +465,9 @@ def device(the_device):
             g.user,
         )
         if errors is not None:
-            return jsonify({"errors": errors})
+            mapped_errors = _map_server_errors_to_client_ids(errors, synthetic_map)
+            model.db.session.rollback()
+            return jsonify({"errors": mapped_errors})
 
         # update models
         staged = logic.apply_scheduler_diffs(g.user, xs)
@@ -246,8 +481,18 @@ def device(the_device):
 
         # apply the changes then send notifications once they're committed
         for s in staged:
-            model.db.session.add(s)
-        model.db.session.commit()
+            model.db.session.add(s.entry)
+        try:
+            model.db.session.commit()
+        except SQLAlchemyError as err:
+            model.db.session.rollback()
+            row = _log_scheduler_save_database_error(err, phase="commit")
+            client_ids = select_scheduler_error_client_ids(
+                err,
+                diff_contexts,
+                candidate_refs=[stage.server_ref for stage in staged],
+            )
+            return jsonify({"errors": _build_error_map_for_client_ids(client_ids, row)})
         notification_results = logic.send_scheduler_notifications(device, notifications)
         try:
             model.db.session.commit()
@@ -257,7 +502,16 @@ def device(the_device):
                 "Failed to commit email audit records for scheduler notifications"
             )
 
-        return jsonify({"saved": len(staged), "notifications": notification_results})
+        id_map = {}
+        for server_id, client_id in synthetic_map.items():
+            id_map[client_id] = int(server_id)
+        return jsonify(
+            {
+                "saved": len(staged),
+                "notifications": notification_results,
+                "id_map": id_map,
+            }
+        )
 
     return {
         "device": device,
@@ -267,6 +521,7 @@ def device(the_device):
         "end_date": fmt_end_date,
         "days": days,
         "top_row": top_row,
+        "clock_warning": clock_warning,
         "min": fmt_min,
         "max": fmt_max,
         "never_entries": never_entries,
@@ -284,6 +539,7 @@ def device(the_device):
             "endpoint": url_for("device_schedule_rows", the_device=device.id),
             "start": fmt_start_date,
             "days": days,
+            "slotMinutes": 60,
         },
         "cur_date": cur_date,
         "cur_hour": cur_hour,
@@ -302,7 +558,7 @@ def device_schedule_rows(the_device):
     if not (device.active or perms.admin):
         abort(403)
 
-    date, days, end_date = schedule_window_from_request()
+    date, days, end_date, _ = schedule_window_from_request(device)
 
     hour_arg = request.args.get("hours", "")
     parsed_hours = []
@@ -330,7 +586,14 @@ def device_schedule_rows(the_device):
     by_slot = {(e.hour, e.date): e for e in entries}
     days_seq = [date + timedelta(days=n) for n in range(days)]
 
-    cur_date, cur_hour, _ = logic.db_now()
+    cur_date = date
+    cur_hour = -1
+    try:
+        cur_date, cur_hour, _ = logic.db_now()
+    except SQLAlchemyError:
+        current_app.logger.exception(
+            "unable to resolve DB ET clock for scheduler row hydration"
+        )
 
     rows = []
     for hour in hours:
@@ -338,7 +601,15 @@ def device_schedule_rows(the_device):
         for day in days_seq:
             entry = by_slot.get((hour, day))
             if entry is None:
-                row_cells.append("")
+                row_cells.append(
+                    render_template(
+                        "partials/schedule_entry_cell.html",
+                        x=_slot_stub(day, hour),
+                        support=support,
+                        cur_date=cur_date,
+                        cur_hour=cur_hour,
+                    )
+                )
                 continue
             row_cells.append(
                 render_template(
@@ -369,7 +640,9 @@ def device_schedule_next_day(the_device):
         if start is None:
             abort(400, f"invalid start: {the_start} (must be YYYY-MM-DD date)")
     else:
-        start = logic.date_or_today(None)
+        start, _ = _db_clock_date()
+        if start is None:
+            abort(503, DB_CLOCK_WARNING)
 
     direction = request.args.get("direction")
     if direction is None:
@@ -430,13 +703,36 @@ def device_tmpl(the_device):
     device, _ = check_device_tmpl_perms(the_device)
 
     templates = logic.templates_of_device(device, archived=False)
+    reports = logic.inspect_template_compatibility(device, [t.id for t in templates])
+    for template in templates:
+        template.compatibility = reports.get(
+            template.id,
+            {
+                "blocking": False,
+                "can_apply": True,
+                "can_save": True,
+                "summary": [],
+                "issues": [],
+            },
+        )
     codes = [t.id for t in templates]
-    start = logic.get_start_day_of(device)
+    raw_start = logic.get_start_day_of(device)
     chg_by = f"user {g.user.id}"
     warn = ""
-    if start is None:
+    if raw_start is None:
         start = logic.next_sunday()
-        warn = f"no templates have been published to {device.label} before, so the start date will be {start}"
+        warn = (
+            f"no templates have been published to {device.label} before, "
+            f"so the first template week will begin on Sunday {start}"
+        )
+    else:
+        start = logic.next_sunday_on_or_after(raw_start)
+        if start != raw_start:
+            warn = (
+                f"the next unscheduled day on {device.label} is {raw_start}, "
+                f"but template weeks always begin on Sunday, so template application "
+                f"will begin on Sunday {start}"
+            )
     no_templates = ""
     if len(templates) == 0:
         no_templates = f"no templates have been created for {device.label} yet"
@@ -505,6 +801,18 @@ def template_subpage_nav(device: model.Device) -> SubpageLinks:
 def device_tmpl_list(the_device):
     device, _ = check_device_tmpl_perms(the_device)
     templates = logic.templates_of_device(device, archived=False)
+    reports = logic.inspect_template_compatibility(device, [t.id for t in templates])
+    for template in templates:
+        template.compatibility = reports.get(
+            template.id,
+            {
+                "blocking": False,
+                "can_apply": True,
+                "can_save": True,
+                "summary": [],
+                "issues": [],
+            },
+        )
     return {
         "title": f"templates of {device.label}",
         "device": device,
@@ -517,6 +825,18 @@ def device_tmpl_list(the_device):
 def device_tmpl_archive(the_device):
     device, _ = check_device_tmpl_perms(the_device)
     templates = logic.templates_of_device(device, archived=True)
+    reports = logic.inspect_template_compatibility(device, [t.id for t in templates])
+    for template in templates:
+        template.compatibility = reports.get(
+            template.id,
+            {
+                "blocking": False,
+                "can_apply": False,
+                "can_save": True,
+                "summary": [],
+                "issues": [],
+            },
+        )
     return {
         "title": f"archived templates of {device.label}",
         "device": device,
@@ -583,11 +903,16 @@ def device_tmpl_schedule_edit(the_device, the_template):
         abort(404)
 
     entries = logic.get_template_entries(device, tmpl)
+    compatibility = logic.inspect_template_compatibility(
+        device, [tmpl.id], entries=entries
+    )[tmpl.id]
     institutes = logic.get_institutes_datalist()
     members_of_groups = logic.all_member_datalists_by_group(device)
     groups = logic.all_groups_of_device(device)
     device_groups_json = [id for (id, _) in groups]
-    grouped_entries = logic.group_template_entries(entries)
+    grouped_entries = logic.group_template_entries(
+        logic.display_template_entries(entries)
+    )
     colors = logic.all_group_colors()
     hours = logic.fmt_hours()
 
@@ -604,6 +929,18 @@ def device_tmpl_schedule_edit(the_device, the_template):
         if errors is not None:
             return jsonify({"errors": errors})
 
+        compatibility = logic.inspect_template_compatibility(
+            device, [tmpl.id], entries=entries
+        )[tmpl.id]
+        if compatibility["blocking"]:
+            model.db.session.rollback()
+            return jsonify(
+                {
+                    "errors": compatibility["entry_errors"],
+                    "template_errors": compatibility["summary"],
+                }
+            )
+
         for s in staged:
             model.db.session.add(s)
         model.db.session.commit()
@@ -619,6 +956,7 @@ def device_tmpl_schedule_edit(the_device, the_template):
         "colors": colors,
         "hours": hours,
         "form": form,
+        "template_compatibility": compatibility,
         **template_breadcrumb(device, tmpl),
         **template_single_subpage_nav(device, tmpl),
     }

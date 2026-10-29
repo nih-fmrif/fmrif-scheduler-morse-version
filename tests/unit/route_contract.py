@@ -193,6 +193,13 @@ ROUTE_EXPECTATIONS: Dict[str, RouteExpectation] = {
     "/app/issues/notifications/state": protected_route(
         "/app/issues/notifications/state", ["POST"]
     ),
+    "/app/issues/config": protected_route("/app/issues/config", ["POST"]),
+    "/app/issues/mapping/import": protected_route(
+        "/app/issues/mapping/import", ["POST"]
+    ),
+    "/app/issues/mapping/export/<mapping_kind>": protected_route(
+        "/app/issues/mapping/export/user-dept", ["GET"]
+    ),
     "/device/<the_device>": protected_route("/device/test-device", ["GET", "POST"]),
     "/device/<the_device>/templates": protected_route(
         "/device/test-device/templates", ["GET", "POST"]
@@ -262,6 +269,9 @@ RBAC_GET_EXPECTATIONS: Dict[str, RbacRouteExpectation] = {
         "/rbac", admin=200, member=403, dev=403, tech=403, inactive=403
     ),
     "/app/issues": rbac_admin_only("/app/issues"),
+    "/app/issues/mapping/export/<mapping_kind>": rbac_admin_only(
+        "/app/issues/mapping/export/user-dept"
+    ),
     "/group/<the_group>": rbac_custom(
         "/group/DEV", admin=200, member=403, dev=200, tech=200, inactive=403
     ),
@@ -306,7 +316,8 @@ RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
         "/device/TEST",
         admin=True,
         member=False,
-        dev=True,
+        # Baseline dev mock profile has no seeded per-device edit grant.
+        dev=False,
         tech=False,
         inactive=False,
     ),
@@ -333,6 +344,11 @@ RBAC_MUTATING_EXPECTATIONS: Dict[tuple[str, str], RbacMutatingExpectation] = {
     ("/app/issues/notifications/state", "POST"): rbac_mutating_admin_only(
         "/app/issues/notifications/state"
     ),
+    ("/app/issues/config", "POST"): rbac_mutating_admin_only("/app/issues/config"),
+    (
+        "/app/issues/mapping/import",
+        "POST",
+    ): rbac_mutating_admin_only("/app/issues/mapping/import"),
     ("/mailing-lists", "POST"): rbac_mutating_login_required("/mailing-lists"),
 }
 
@@ -391,6 +407,14 @@ BEHAVIOR_TEST_REQUIREMENTS: Dict[tuple[str, str], str] = {
         "POST",
     ): "Admin issues panel state updates must require CSRF and mandatory notes.",
     (
+        "/app/issues/config",
+        "POST",
+    ): "Admin configuration changes must validate values and persist when valid.",
+    (
+        "/app/issues/mapping/import",
+        "POST",
+    ): "Admin mapping import must validate CSV payload before replacing mappings.",
+    (
         "/device/<the_device>",
         "POST",
     ): "Scheduler route must process JSON diff submissions safely.",
@@ -421,7 +445,7 @@ BEHAVIOR_TEST_REQUIREMENTS: Dict[tuple[str, str], str] = {
     (
         "/join/tech",
         "POST",
-    ): "Technologist join form must persist a pending technologist application for eligible users.",
+    ): "Technologist join form must auto-approve technologist access for eligible users.",
 }
 
 # Route methods intentionally not required in no-browser route tests yet.

@@ -92,7 +92,7 @@ def test_home_hides_groups_link_for_inactive_user(route_client, route_app_contex
     user_id = f"home-inactive-{uuid.uuid4().hex[:6]}"
     email = f"{user_id}@example.com"
     ensure_active_user(user_id, email, "Home Inactive User")
-    user = model.User.query.get(user_id)
+    user = model.get(model.User, user_id)
     assert user is not None
     user.active = False
     model.db.session.add(user)
@@ -135,6 +135,30 @@ def test_header_shows_global_home_button(route_client):
     assert body.index('class="menu-action home-link"') < body.index(
         '<section class="login-info"'
     )
+
+
+def test_header_home_button_uses_local_mri_icon_and_accessible_label(route_client):
+    user_id = f"home-icon-{uuid.uuid4().hex[:6]}"
+    email = f"{user_id}@example.com"
+    ensure_active_user(user_id, email, "Home Icon User")
+
+    set_session_user(
+        route_client,
+        username=user_id,
+        email=email,
+        display_name="Home Icon User",
+    )
+
+    response = route_client.get("/")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+
+    assert re.search(
+        r'<a[^>]*class="menu-action home-link"[^>]*aria-label="Home"',
+        body,
+    )
+    assert 'class="icon-home-mri"' in body
+    assert 'class="home-link-label-compact"' in body
 
 
 def test_home_shows_rbac_link_for_admin(route_client):
@@ -200,7 +224,7 @@ def test_device_subpage_nav_escapes_device_label_html(route_client):
     email = f"{user_id}@example.com"
     device_id, _ = create_device()
     evil_label = "<svg/onload=1>"
-    device = model.Device.query.get(device_id)
+    device = model.get(model.Device, device_id)
     assert device is not None
     device.label = evil_label
     model.db.session.add(device)
@@ -421,6 +445,31 @@ def test_home_hides_read_only_devices_by_default(route_client):
     assert editable_item is not None
     editable_html = editable_item.group(0)
     assert 'data-home-readonly-device="true"' not in editable_html
+
+
+def test_home_exposes_filter_and_show_more_configuration(route_client):
+    ensure_admin_user()
+    set_session_user(
+        route_client,
+        username="test-admin",
+        email="test-admin@example.com",
+        display_name="RBAC Admin User",
+    )
+
+    response = route_client.get("/")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+
+    assert 'id="home-device-search"' in body
+    assert 'id="home-group-search"' in body
+    assert 'id="home-devices-show-more"' in body
+    assert 'id="home-groups-show-more"' in body
+    assert 'data-home-filter-debounce-ms="200"' in body
+    assert 'data-home-default-visible="5"' in body
+    assert 'data-home-show-more-increment="10"' in body
+    assert 'data-home-show-more-delay-ms="2000"' in body
+
+    assert re.search(r'data-home-item-name="[^"]+"', body) is not None
 
 
 def test_group_pi_probe_is_request_cached(monkeypatch, route_app_context):

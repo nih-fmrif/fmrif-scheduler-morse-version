@@ -230,6 +230,8 @@ def test_app_config_maps_mail_default_sender():
     settings = make_settings(mail={"default_sender": "scheduler@example.com"})
     app_config = AppConfig(settings)
     assert app_config["MAIL_DEFAULT_SENDER"] == "scheduler@example.com"
+    assert "nih_listserv" not in app_config
+    assert "nih_mailing_lists" not in app_config
 
 
 def test_proxy_count_validation(clean_env):

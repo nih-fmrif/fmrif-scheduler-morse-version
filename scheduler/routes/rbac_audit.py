@@ -147,7 +147,7 @@ def _rbac_audit_rows(
         if logic.rbac_audit_ip_column_available()
         else "null as ip_addr"
     )
-    rows = model.db.session.execute(
+    rows = model.execute(
         sql_text(
             f"""
             select

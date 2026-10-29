@@ -19,10 +19,10 @@ Bootstrap dataflow uses three stable stages:
 - Snapshot data import (client-provided dump via `SQL_SEED_DUMP_FILE`)
 - Relationship hydration import (CSV mappings into auth/relationship tables)
 
-Running `setup-dotenv.sh` will create an `.env` file (from `.env.sample.local`)
-in the root of the project with generated, worktree-specific defaults. It
-auto-derives a unique worktree scope from the absolute path, and optionally
-accepts `APP_PORT`/`PGPORT`, to derive:
+Running `setup-dotenv.sh` updates `.env` (from `.env.sample.local`)
+in the root of the project with scope-aware defaults. It uses
+`FMRIF_RUNTIME_SCOPE` (or defaults to `default`) and optionally accepts `APP_PORT`/`PGPORT`,
+to derive:
 - `COMPOSE_PROJECT_NAME`
 - `PGDATABASE` / `SCHEDULER_TEST_DB_NAME`
 - `MAILPIT__PORT` (defaults to `PGPORT + 1`, with collision fallback)
@@ -30,8 +30,8 @@ accepts `APP_PORT`/`PGPORT`, to derive:
 - `SESSION__COOKIE_NAME` (and `SESSION__COOKIE_SECURE` is profile-driven by `APP_ENV`)
 - `AUTH_TEST__SHARED_SECRET` (randomized token)
 
-This is the preferred local strategy for avoiding port/DB/cookie collisions in concurrent
-worktrees; update values in `.env` manually after generation if you need custom overrides.
+This is the preferred local strategy for avoiding port/DB/cookie collisions across scopes.
+`setup-dotenv.sh` rewrites only managed keys, so unrelated entries are preserved.
 
 Run `./run-compose.sh --check` to validate env and compose inputs before starting containers.
 For network/port semantics when the app runs inside or outside containers, see
@@ -76,8 +76,8 @@ Profile behavior:
 APP_PORT=5051
 # Optional: usually leave unset in local workflows to use request-based hosts.
 # Set this when you need a fixed server name.
-# Optional: isolate docker-compose resources across worktrees.
-# COMPOSE_PROJECT_NAME=scheduler-worktree-name
+# Optional: isolate docker-compose resources across scopes.
+# COMPOSE_PROJECT_NAME=scheduler-scope-name
 SERVER__APPLICATION_ROOT=
 ```
 
@@ -100,11 +100,11 @@ which then sets the image-required `POSTGRES_*` variables.
 
 To run multiple compose stacks on the same host, set `COMPOSE_PROJECT_NAME` so
 compose resource names (`scheduler` service containers, volumes, network) stay
-isolated. If you leave it unset, `run-compose.sh` derives a default project
-name from `<workdir>-<APP_PORT>`.
+isolated. If you leave it unset, `run-compose.sh` appends the scope to a stable base project
+prefix.
 
 ```env
-COMPOSE_PROJECT_NAME=scheduler-worktree-01
+COMPOSE_PROJECT_NAME=scheduler-<scope>
 ```
 
 For Playwright integration tests, local `PLAYWRIGHT_BASE_URL` is optional.
@@ -116,7 +116,7 @@ If unset (recommended), local runs derive/sync the port from `APP_PORT`.
 SCHEDULER_TEST_DB_NAME=fmrif_scheduler_test
 ```
 
-Use a unique value per worktree or CI job when running suites in parallel.
+Use `FMRIF_RUNTIME_SCOPE` to isolate suites per run.
 
 #### Mail Settings
 ```env
@@ -130,6 +130,12 @@ MAILPIT__SMTP_PORT=5446
 ```
 
 `MAIL__DEFAULT_SENDER` is required. Startup fails fast when it is missing or invalid.
+The Admin Panel now owns the runtime-editable mail content settings:
+- listserv target
+- effective default sender override
+- mailing-list catalog
+
+SMTP transport and credentials remain environment-driven.
 
 In compose mode (`run-compose.sh`), scheduler is auto-configured to use Mailpit
 without extra developer setup:
@@ -148,7 +154,7 @@ For host-mode app runs (`run-compose.sh --no-app` + `pixi run serve`), generated
 ### Deployment Specific Configuration
 
 1. **Docker Environment**
-   - Uses `.env` (or a copied variant per worktree)
+   - Uses `.env` (or a copied variant when scope-specific settings are managed separately)
    - Services communicate via Docker network
    - Database host is `postgres`
 

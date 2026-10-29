@@ -103,7 +103,7 @@ def test_join_request_decision_post_rejects_missing_csrf(
     )
     assert response.status_code == 400
 
-    req = model.GroupMember.query.get((group_id, candidate_id))
+    req = model.get(model.GroupMember, (group_id, candidate_id))
     assert req is not None
     assert req.approved is None
 
@@ -128,7 +128,7 @@ def test_join_request_decision_post_with_csrf_applies_update(
     )
     assert post_response.status_code == 302
 
-    req = model.GroupMember.query.get((group_id, candidate_id))
+    req = model.get(model.GroupMember, (group_id, candidate_id))
     assert req is not None
     assert req.approved is not None
     assert len(events) == 1
@@ -161,7 +161,7 @@ def test_join_request_deny_post_with_csrf_deletes_request(
     )
     assert post_response.status_code == 302
 
-    req = model.GroupMember.query.get((group_id, candidate_id))
+    req = model.get(model.GroupMember, (group_id, candidate_id))
     assert req is None
     assert len(events) == 1
     action, actor, where, how, what = events[0]
@@ -207,7 +207,7 @@ def test_join_tech_request_approve_post_with_csrf_applies_update(
     )
     assert post_response.status_code == 302
 
-    req = model.Technologist.query.get(candidate_id)
+    req = model.get(model.Technologist, candidate_id)
     assert req is not None
     assert req.approved_on is not None
     assert len(events) == 1
@@ -240,7 +240,7 @@ def test_join_tech_request_deny_post_with_csrf_deletes_request(
     )
     assert post_response.status_code == 302
 
-    req = model.Technologist.query.get(candidate_id)
+    req = model.get(model.Technologist, candidate_id)
     assert req is None
     assert len(events) == 1
     action, actor, where, how, what = events[0]

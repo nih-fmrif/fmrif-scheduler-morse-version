@@ -137,7 +137,7 @@ def test_mailing_lists_post_delivers_to_mailpit_api(route_app, route_client):
             assert isinstance(recipients, list)
             assert any(
                 str(recipient.get("Address", "")).lower()
-                == route_app.config["nih_listserv"].lower()
+                == logic.get_admin_listserv().lower()
                 for recipient in recipients
                 if isinstance(recipient, dict)
             )
@@ -207,7 +207,7 @@ def test_join_post_creates_pending_membership_request(
 
             assert post_response.status_code == 302
             assert post_response.headers["Location"].endswith("/")
-            req = model.GroupMember.query.get((group_id, requester_id))
+            req = model.get(model.GroupMember, (group_id, requester_id))
             assert req is not None
             assert req.approved is None
             assert req.email_status == "sent"
@@ -305,7 +305,7 @@ def test_join_post_survives_mail_transport_failure(
 
         assert post_response.status_code == 302
         assert post_response.headers["Location"].endswith("/")
-        req = model.GroupMember.query.get((group_id, requester_id))
+        req = model.get(model.GroupMember, (group_id, requester_id))
         assert req is not None
         assert req.approved is None
         assert req.email_status == "failed"
@@ -371,7 +371,7 @@ def test_join_post_without_group_pi_does_not_crash(
 
     assert post_response.status_code == 302
     assert post_response.headers["Location"].endswith("/")
-    req = model.GroupMember.query.get((group_id, requester_id))
+    req = model.get(model.GroupMember, (group_id, requester_id))
     assert req is not None
     assert req.approved is None
     assert req.email_status == "failed"
@@ -393,7 +393,7 @@ def test_join_post_without_group_pi_does_not_crash(
 
 
 @pytest.mark.covers_route("/join/tech", "POST")
-def test_join_tech_post_creates_pending_technologist_request(
+def test_join_tech_post_autoapproves_technologist_request(
     monkeypatch, route_app, route_client, route_app_context
 ):
     cfg = _require_mailpit()
@@ -411,11 +411,6 @@ def test_join_tech_post_creates_pending_technologist_request(
         has_membership=True,
     )
     set_group_membership("DEV", user_id, approved=True, pi=False)
-
-    dev_pi_id = f"dev-pi-{uuid.uuid4().hex[:6]}"
-    dev_pi_email = f"{dev_pi_id}@example.com"
-    ensure_active_user(dev_pi_id, dev_pi_email, "Dev PI")
-    set_group_membership("DEV", dev_pi_id, approved=True, pi=True)
 
     set_session_user(
         route_client,
@@ -446,32 +441,34 @@ def test_join_tech_post_creates_pending_technologist_request(
 
             assert post_response.status_code == 302
             assert post_response.headers["Location"].endswith("/")
-            req = model.Technologist.query.get(user_id)
+            req = model.get(model.Technologist, user_id)
             assert req is not None
-            assert req.approved_on is None
-            assert req.email_status == "sent"
+            assert req.approved_on is not None
+            assert req.email_status == logic.EMAIL_STATUS_NONE
             assert len(events) == 1
             action, actor, where, how, what = events[0]
-            assert action == "group.join.tech.request"
+            assert action == "group.join.tech.autoapprove"
             assert actor == user_id
             assert where == "/join/tech"
-            assert how == "email"
+            assert how == "form"
             assert f"user={user_id}" in what
+            assert "approved=true" in what
 
             audit_row = (
                 model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.join.tech.notify-dev-pi"
+                    model.EmailAuditLog.action == "email.join.tech.outcome"
                 )
-                .filter(model.EmailAuditLog.requester == user_id)
+                .filter(model.EmailAuditLog.actor == user_id)
                 .order_by(model.EmailAuditLog.id.desc())
                 .first()
             )
             assert audit_row is not None
             assert audit_row.status == logic.EMAIL_AUDIT_STATUS_SENT
             assert audit_row.issue_state == logic.EMAIL_AUDIT_ISSUE_NONE
-            assert audit_row.issue_key == f"join-tech:DEV:{user_id}"
+            assert audit_row.issue_key in (None, "")
+            assert audit_row.recipient.lower() == email.lower()
 
-            expected_subject = f"{user_id} has requested technologist access"
+            expected_subject = "your request for technologist access was approved"
             summary = wait_for_mailpit_message(
                 cfg,
                 lambda row: row.get("Subject") == expected_subject,
@@ -483,7 +480,7 @@ def test_join_tech_post_creates_pending_technologist_request(
             recipients = detail.get("To", [])
             assert isinstance(recipients, list)
             assert any(
-                str(recipient.get("Address", "")).lower() == dev_pi_email.lower()
+                str(recipient.get("Address", "")).lower() == email.lower()
                 for recipient in recipients
                 if isinstance(recipient, dict)
             )
@@ -492,7 +489,7 @@ def test_join_tech_post_creates_pending_technologist_request(
 
 
 @pytest.mark.covers_route("/join/tech", "POST")
-def test_join_tech_post_without_dev_pi_does_not_crash(
+def test_join_tech_post_without_dev_pi_still_autoapproves(
     monkeypatch, route_client, route_app_context
 ):
     user_id = f"tech-user-{uuid.uuid4().hex[:6]}"
@@ -509,7 +506,7 @@ def test_join_tech_post_without_dev_pi_does_not_crash(
     )
     set_group_membership("DEV", user_id, approved=True, pi=False)
 
-    model.db.session.execute(
+    model.execute(
         "delete from primarygroupmember where deptcode = :group_id",
         {"group_id": "DEV"},
     )
@@ -534,22 +531,38 @@ def test_join_tech_post_without_dev_pi_does_not_crash(
 
     assert post_response.status_code == 302
     assert post_response.headers["Location"].endswith("/")
-    req = model.Technologist.query.get(user_id)
+    req = model.get(model.Technologist, user_id)
     assert req is not None
-    assert req.approved_on is None
-    assert req.email_status == "failed"
+    assert req.approved_on is not None
+    assert req.email_status == logic.EMAIL_STATUS_NONE
     assert len(events) == 1
     action, actor, where, how, what = events[0]
-    assert action == "group.join.tech.request"
+    assert action == "group.join.tech.autoapprove"
     assert actor == user_id
     assert where == "/join/tech"
-    assert how == "email"
+    assert how == "form"
     assert f"user={user_id}" in what
-    audit_row = (
+    assert "approved=true" in what
+
+    requester_outcome = (
+        model.EmailAuditLog.query.filter(
+            model.EmailAuditLog.action == "email.join.tech.outcome"
+        )
+        .filter(model.EmailAuditLog.actor == user_id)
+        .order_by(model.EmailAuditLog.id.desc())
+        .first()
+    )
+    assert requester_outcome is not None
+    assert requester_outcome.status in {
+        logic.EMAIL_AUDIT_STATUS_SENT,
+        logic.EMAIL_AUDIT_STATUS_FAILED,
+    }
+
+    stale_dev_pi_notify = (
         model.EmailAuditLog.query.filter(
             model.EmailAuditLog.action == "email.join.tech.notify-dev-pi"
         )
         .filter(model.EmailAuditLog.requester == user_id)
         .first()
     )
-    assert audit_row is None
+    assert stale_dev_pi_notify is None

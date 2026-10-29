@@ -36,15 +36,6 @@ def _rbac_restrict_detail_for_actor(
                         field = str(row.get("field", ""))
                         if field in {"inst", "active"}:
                             row["editable"] = False
-            if matrix_id == "group-membership-matrix":
-                rows = matrix.get("rows", [])
-                if isinstance(rows, list):
-                    for row in rows:
-                        if not isinstance(row, dict):
-                            continue
-                        editable = row.get("editable", {})
-                        if isinstance(editable, dict):
-                            editable["approved"] = False
             restricted.append(matrix)
             continue
 

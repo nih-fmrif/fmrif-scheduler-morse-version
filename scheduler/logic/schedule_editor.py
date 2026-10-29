@@ -2,6 +2,7 @@
 
 import datetime
 from collections import defaultdict
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import DefaultDict, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple
 
@@ -25,6 +26,12 @@ for _i in range(1, 24):
     _FMT_HOURS[_i] = f"{_hour}{_meridiem}m"
 
 Datalist = List[Tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class SchedulerStagedEntry:
+    entry: model.ScheduleEntry
+    server_ref: str
 
 
 def schedule_for(
@@ -129,7 +136,7 @@ def next_schedule_day(
 
 def date_or_today(date: Optional[datetime.date]) -> datetime.date:
     if date is None:
-        return datetime.date.today()
+        return db_now()[0]
     return date
 
 
@@ -178,11 +185,11 @@ def get_device_from_schedid(entry_id) -> Optional[model.Device]:
     ).first()
     if entry is None:
         return None
-    return model.Device.query.get(entry.device)
+    return model.get(model.Device, entry.device)
 
 
 def get_sched_log_entry(entry_id: int):
-    log_entry = model.SchedLogEntry.query.get(entry_id)
+    log_entry = model.get(model.SchedLogEntry, entry_id)
 
     if log_entry is None:
         return None
@@ -197,7 +204,7 @@ class SupportRequestDatalists(NamedTuple):
 
 
 def support_request_datalists(device: model.Device) -> SupportRequestDatalists:
-    query = model.db.session.execute(
+    query = model.execute(
         """
             select r.researchercode, r.name, ud.tech, ud.medical, ud.training
             from userdevice ud
@@ -227,7 +234,7 @@ def support_request_datalists(device: model.Device) -> SupportRequestDatalists:
 
 def all_member_datalists_by_group(device: model.Device) -> Dict[str, Datalist]:
     """For each department of device get a datalist of its members."""
-    query = model.db.session.execute(
+    query = model.execute(
         """
             select dg.deptcode, gm.researchercode, r.name
             from devicegroup dg
@@ -254,7 +261,7 @@ def member_datalists_by_group_for(
     device: model.Device, user: model.User
 ) -> Dict[str, Datalist]:
     """For each device group a user belongs to, get a member datalist."""
-    query = model.db.session.execute(
+    query = model.execute(
         """
             with users_departments as (
                     select d.deptcode
@@ -292,7 +299,7 @@ def all_group_colors() -> Dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _cached_group_colors() -> Tuple[Tuple[str, str], ...]:
-    query = model.db.session.execute(
+    query = model.execute(
         """
             select d.deptcode, d.color
             from tlkpdept d
@@ -306,7 +313,7 @@ def _clear_reference_data_cache() -> None:
 
 
 def all_groups_of_device(device: model.Device) -> Datalist:
-    query = model.db.session.execute(
+    query = model.execute(
         """
             select g.deptcode, g.dept_short
             from devicegroup dg
@@ -331,7 +338,7 @@ def all_groups_of_device(device: model.Device) -> Datalist:
 
 
 def groups_of_device_for(device: model.Device, user: model.User) -> Datalist:
-    query = model.db.session.execute(
+    query = model.execute(
         """
             with users_departments as (
                 select d.deptcode, d.dept_short
@@ -420,12 +427,16 @@ def fmt_hours() -> Dict[int, str]:
 
 def db_now() -> Tuple[datetime.date, int, int]:
     """Get current day, hour, and minute from the DB transaction."""
-    query = model.db.session.execute(
+    query = model.execute(
         """
         select
-            current_date,
-            extract(hour from current_timestamp)::integer as hour,
-            extract(minute from current_timestamp)::integer as minute
+            (current_timestamp AT TIME ZONE 'America/New_York')::date,
+            extract(
+                hour from (current_timestamp AT TIME ZONE 'America/New_York')
+            )::integer as hour,
+            extract(
+                minute from (current_timestamp AT TIME ZONE 'America/New_York')
+            )::integer as minute
         """
     )
     return query.first()
@@ -676,6 +687,7 @@ def verify_scheduler_diffs(
         sr = model.SupportRequest()
         sr.supportkind = kind
         sr.filed_by = user.id
+        sr.modified_by = user.id
         entry.requests.append(sr)
         return sr, True
 
@@ -743,7 +755,12 @@ def apply_scheduler_diffs(user: model.User, xs):
             entry.group = diff["group"][1] or None
         if "member" in diff:
             entry.user = diff["member"][1] or None
-        stage.append(entry)
+        stage.append(
+            SchedulerStagedEntry(
+                entry=entry,
+                server_ref=str(diff.get("_server_ref") or entry.id),
+            )
+        )
     return stage
 
 

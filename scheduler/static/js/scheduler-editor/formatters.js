@@ -283,41 +283,7 @@ function fmt_editor_diffs(human_hours, templateEditor, diffs) {
   return [!templateEditor && notifications > 0, out];
 }
 
-function fmt_save_results(data, cells, human_hours) {
-  if (data.saved > 0) {
-    const out = document.createDocumentFragment();
-    let s = "entry";
-    if (data.saved > 1) {
-      s = "entries";
-    }
-    out.append(`${data.saved} ${s} updated`);
-    if ("notifications" in data) {
-      const list = document.createElement("ul");
-      for (const n of data["notifications"]) {
-        const item = document.createElement("li");
-        const key = String(n.key);
-        switch (n.msg) {
-          case "address":
-            item.append(`no address in database to send ${key} notification`);
-            break;
-
-          case "failed":
-            item.append(
-              `${key} notification failed to send, check server logs`,
-            );
-            break;
-
-          case "success":
-            item.append(`${key} notification sent`);
-            break;
-        }
-        list.append(item);
-      }
-      out.append(list);
-    }
-    return out;
-  }
-
+function fmt_save_errors(data, cells, human_hours) {
   const errors = Object.entries(data.errors ?? []);
   if (errors.length == 0) {
     // serious bug if this ever happens but better to let the user
@@ -330,15 +296,11 @@ function fmt_save_results(data, cells, human_hours) {
   const out = document.createDocumentFragment();
   const intro = document.createElement("p");
   if (errors.length > 1) {
-    intro.append(
-      `${errors.length} irreconcilable errors. Affected entries will be reset and locked, `,
-    );
+    intro.append(`${errors.length} errors prevented this save. `);
   } else {
-    intro.append(
-      "Irreconcilable error. The affected entry will be reset and locked, ",
-    );
+    intro.append("Save failed for the selected entry. ");
   }
-  intro.append("please review before resubmitting");
+  intro.append("please review and retry.");
   out.append(intro);
   const list = document.createElement("dl");
   const appendBold = (parent, value) => {
@@ -352,20 +314,26 @@ function fmt_save_results(data, cells, human_hours) {
     if (cell == null) {
       dt.textContent = `entry ${id}`;
       const dd = document.createElement("dd");
-      dd.textContent =
-        "this entry was not loaded in the current view; refresh and retry";
+      dd.textContent = "entry not loaded in current view; refresh and retry";
       list.append(dt, dd);
       continue;
     }
-    // prevent future edits to this cell
-    cell.resetAndLock();
     dt.textContent = `${humanize_date_if_needed(cell.date)}: ${
       human_hours[cell.hour]
     }`;
     list.append(dt);
     for (const err of errs) {
-      const key = String(err.key);
+      const key = err.key != null ? String(err.key) : "";
       const dd = document.createElement("dd");
+      if (err.source || err.message) {
+        const source = String(err.source || key || "slot");
+        const message = String(
+          err.message ?? err.msg ?? err.value ?? "validation error",
+        );
+        dd.append(`${source}: ${message}`);
+        list.append(dd);
+        continue;
+      }
       switch (err.type) {
         case "revocation":
           dd.append("you no longer have access to edit this device");
@@ -402,12 +370,70 @@ function fmt_save_results(data, cells, human_hours) {
           }
           break;
         }
+        case "invalid":
+          if (err.value) {
+            dd.append(String(err.value));
+          } else if (err.msg) {
+            dd.append(String(err.msg));
+          } else {
+            dd.append(`${key || "slot"} is invalid`);
+          }
+          break;
+        default:
+          if (err.msg) {
+            dd.append(String(err.msg));
+          } else {
+            dd.append(`${key || "slot"} failed validation`);
+          }
+          break;
       }
       list.append(dd);
     }
   }
   out.append(list);
   return out;
+}
+
+function fmt_save_results(data, cells, human_hours) {
+  const errors = Object.entries(data.errors ?? []);
+  if (data.saved > 0) {
+    const out = document.createDocumentFragment();
+    let s = "entry";
+    if (data.saved > 1) {
+      s = "entries";
+    }
+    out.append(`${data.saved} ${s} updated`);
+    if ("notifications" in data) {
+      const list = document.createElement("ul");
+      for (const n of data["notifications"]) {
+        const item = document.createElement("li");
+        const key = String(n.key);
+        switch (n.msg) {
+          case "address":
+            item.append(`no address in database to send ${key} notification`);
+            break;
+
+          case "failed":
+            item.append(
+              `${key} notification failed to send, check server logs`,
+            );
+            break;
+
+          case "success":
+            item.append(`${key} notification sent`);
+            break;
+        }
+        list.append(item);
+      }
+      out.append(list);
+    }
+    if (errors.length > 0) {
+      out.append(fmt_save_errors(data, cells, human_hours));
+    }
+    return out;
+  }
+
+  return fmt_save_errors(data, cells, human_hours);
 }
 
 function parse_schedule_cell_markup(markup) {
