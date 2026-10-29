@@ -29,7 +29,7 @@ Create a `.env` file in the project root with these variables:
 PGHOST=localhost
 PGPORT=5050
 PGUSER=postgres
-PGPASSWORD=FMRIF-postgres-123
+PGPASSWORD=replace-with-pgpassword
 PGDATABASE=fmrif_scheduler
 ```
 
@@ -39,7 +39,7 @@ If you prefer to set environment variables directly (which will override .env va
 export PGHOST=localhost
 export PGPORT=5050
 export PGUSER=postgres
-export PGPASSWORD=FMRIF-postgres-123
+export PGPASSWORD=replace-with-pgpassword
 export PGDATABASE=fmrif_scheduler
 ```
 

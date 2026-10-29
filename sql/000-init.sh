@@ -6,7 +6,7 @@
 # You can set these by either:
 # 1. Using your .env file (the application will load it)
 # 2. Explicitly exporting variables before running:
-#    export PGHOST=localhost PGPORT=5050 ... then run this script
+#    export PGHOST=localhost PGPORT=5444 ... then run this script
 
 set -euo pipefail
 
@@ -90,9 +90,33 @@ execute_sql_file() {
     local file=$1
     local output
 
+    local user_dept_csv=${SQL_USER_DEPT_CSV:-}
+    local dev_dept_csv=${SQL_DEV_DEPT_CSV:-}
+    local devperm_csv=${SQL_DEVPERM_CSV:-}
+    local psql_cmd=(
+        psql
+        -v ON_ERROR_STOP=1
+        -U "$PGUSER"
+        -d "$PGDATABASE"
+        -v "USER_DEPT_CSV='$user_dept_csv'"
+        -v "DEV_DEPT_CSV='$dev_dept_csv'"
+        -v "DEVPERM_CSV='$devperm_csv'"
+    )
+
     log "Executing $file..."
-    # Redirect stderr to stdout to capture all output
-    output=$(PGPASSWORD="$PGPASSWORD" psql -U "$PGUSER" -d "$PGDATABASE" -v ON_ERROR_STOP=1 -f "$file" 2>&1)
+    # Load the canonical seed dump with FK/trigger checks relaxed because
+    # data-only dumps rely on this when loading into an already-constrained schema.
+    if [ "${file}" = "${SEED_DUMP_FILE}" ]; then
+        output=$(PGPASSWORD="$PGPASSWORD" "${psql_cmd[@]}" <<SQL 2>&1
+SET session_replication_role = replica;
+\i '${file}'
+SET session_replication_role = DEFAULT;
+SQL
+        )
+    else
+        # Redirect stderr to stdout to capture all output
+        output=$(PGPASSWORD="$PGPASSWORD" "${psql_cmd[@]}" -f "$file" 2>&1)
+    fi
     local status=$?
 
     if [ $status -ne 0 ]; then
@@ -125,6 +149,20 @@ missing_vars=()
 for var in "${essential_vars[@]}"; do
     if [[ -z "${!var:-}" ]]; then
         missing_vars+=("$var")
+    fi
+done
+
+# Seed file locations (defaults point to repo-tracked synthetic equivalents)
+SCRIPT_DIR_ABS=$(cd "$SCRIPT_DIR" && pwd)
+SEED_DUMP_FILE=${SQL_SEED_DUMP_FILE:-"$SCRIPT_DIR_ABS/003-import-data.sql"}
+SQL_USER_DEPT_CSV=${SQL_USER_DEPT_CSV:-"$SCRIPT_DIR_ABS/user-dept.sample.csv"}
+SQL_DEV_DEPT_CSV=${SQL_DEV_DEPT_CSV:-"$SCRIPT_DIR_ABS/dev-dept.sample.csv"}
+SQL_DEVPERM_CSV=${SQL_DEVPERM_CSV:-"$SCRIPT_DIR_ABS/devperm.sample.csv"}
+
+for seed_file in "$SEED_DUMP_FILE" "$SQL_USER_DEPT_CSV" "$SQL_DEV_DEPT_CSV" "$SQL_DEVPERM_CSV"; do
+    if [ ! -f "$seed_file" ]; then
+        log_error "Missing required seed file: $seed_file"
+        exit 1
     fi
 done
 
@@ -213,10 +251,16 @@ else
     exit 1
 fi
 
-# Then execute all other numbered migration files in order
+# Then execute the legacy-style seed dump (or replacement from environment)
+if [ -f "$SEED_DUMP_FILE" ]; then
+    execute_sql_file "$SEED_DUMP_FILE"
+fi
+
+# Then execute all remaining numbered migration files in order
 for sql in $(ls [0-9][0-9][0-9]-*.sql | sort); do
-    # Skip schema file as it's already executed
-    if [ "$sql" = "001-schema.sql" ]; then
+    # Skip schema and seed files because base schema is already explicit and
+    # seed dump is applied above from a configurable source.
+    if [ "$sql" = "001-schema.sql" ] || [ "$sql" = "003-import-data.sql" ] || [ "$sql" = "900-import-new-data.sql" ]; then
         log "Skipping $sql..."
         continue
     fi
@@ -225,6 +269,28 @@ for sql in $(ls [0-9][0-9][0-9]-*.sql | sort); do
         execute_sql_file "$sql"
     fi
 done
+
+# Optional additive data layers run after core schema/data migration.
+if [ -n "${SQL_ADDITIVE_LAYER_FILES:-}" ]; then
+    log "Running additive data layers: ${SQL_ADDITIVE_LAYER_FILES}"
+    OLDIFS="$IFS"
+    IFS=','
+    read -r -a additive_layers <<< "${SQL_ADDITIVE_LAYER_FILES}"
+    IFS="$OLDIFS"
+    for layer in "${additive_layers[@]}"; do
+        layer="$(echo "$layer" | xargs)"
+        if [ -z "$layer" ]; then
+            continue
+        fi
+        if [ ! -f "$layer" ]; then
+            log_error "Additive layer not found: $layer"
+            exit 1
+        fi
+        execute_sql_file "$layer"
+    done
+else
+    log "No additive data layers configured (set SQL_ADDITIVE_LAYER_FILES to run any)."
+fi
 
 log "All migrations completed successfully"
 

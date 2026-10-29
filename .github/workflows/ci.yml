@@ -12,32 +12,31 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-         python-version: '3.11'
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-
-    - name: Install Python dependencies
+    - name: Install pixi
       run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        uv sync --all-extras
+        curl -fsSL https://pixi.sh/install.sh | bash
+        echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+
+    - name: Verify pixi
+      run: pixi --version
 
     - name: Setup environment
       run: |
         bash setup-dotenv.sh
-        docker compose up --build -d
+        {
+          echo "AUTH_TEST__ENABLED=true"
+          echo "AUTH_TEST__SHARED_SECRET=ci-shared-secret"
+        } >> .env
+        docker compose up --build -d --wait
 
-    - name: Run Python tests
-      run: |
-        uv run pytest tests/python/
+    - name: Run Python unit tests
+      env:
+        AUTH_TEST__ENABLED: "true"
+        AUTH_TEST__SHARED_SECRET: "ci-shared-secret"
+      run: pixi run test-unit
 
     - name: Install Node.js dependencies
-      run: npm ci --no-optional
+      run: pixi run install-js
 
     - name: Cache Playwright browsers
       id: playwright-cache
@@ -50,21 +49,30 @@ jobs:
 
     - name: Install Playwright browsers
       if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: npx playwright install --with-deps
+      run: pixi run install-playwright
 
-    - name: Run Playwright tests
+    - name: Run Playwright integration tests
+      env:
+        BASE_URL: "http://localhost:5051"
+        PLAYWRIGHT_AUTH_MODE: "mock"
+        AUTH_TEST__ENABLED: "true"
+        AUTH_TEST__SHARED_SECRET: "ci-shared-secret"
       run: |
         # Ensure clean state
         docker compose down
 
         # Setup environment files
         bash setup-dotenv.sh
+        {
+          echo "AUTH_TEST__ENABLED=true"
+          echo "AUTH_TEST__SHARED_SECRET=ci-shared-secret"
+        } >> .env
 
         # Copy .env file to scheduler directory for container mounting
         cp .env scheduler/.env
 
         # Start fresh containers
-        docker compose up -d
+        docker compose up -d --wait
 
         # Wait for services to be ready
         echo "Waiting for services to be ready..."
@@ -75,7 +83,7 @@ jobs:
         docker logs scheduler
 
         # Run tests
-        npm run test
+        pixi run test-integration-ci
 
     # Update to v4 of upload-artifact
     - uses: actions/upload-artifact@v4

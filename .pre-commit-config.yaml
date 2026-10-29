@@ -28,7 +28,17 @@ repos:
         - id: eslint
           name: eslint
           files: "scheduler/static/.*\\.(js|jsx|ts|tsx)$"
+          exclude: "scheduler/static/(a11y-dialog|scroll-lock)/"
           args: ["--fix"]
+
+    - repo: local
+      hooks:
+        - id: csp-inline-style-nonce
+          name: csp inline style nonce
+          entry: bash scripts/check-csp-inline-style-nonce.sh
+          language: system
+          pass_filenames: false
+          files: "^scheduler/templates/.*\\.html$"
 
     - repo: https://github.com/pre-commit/pre-commit-hooks
       rev: v4.6.0

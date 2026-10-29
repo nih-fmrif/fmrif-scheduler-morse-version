@@ -1,5 +1,6 @@
 import datetime
-import secrets
+import hashlib
+import re
 from collections import defaultdict
 from typing import (
     Any,
@@ -27,53 +28,8 @@ from wtforms import Form, fields, validators, widgets
 
 from . import message, model
 
-# -------------------------------------------------------------------------------------------------------
-"""
-    DEVELOPMENT ONLY: Create or get a superuser account with all permissions.
-
-    This is a development/testing hack that should NOT be used in production.
-    It creates a superuser with full system access for local development and testing.
-
-    ToDo: Remove this function before deploying to production.
-    In production, proper user authentication and authorization should be handled
-    via SiteMinder and the regular permission system.
-    """
-
-
-# For Superuser mode
-def get_or_create_superuser():
-    """Create or get a superuser account with all permissions"""
-    superuser_id = "superuser"
-    user = get_user(superuser_id)
-    if user is None:
-        user = model.User(
-            id=superuser_id,
-            label="Superuser",  # Changed from name to label
-            addr="superuser@example.com",  # Changed from email to addr
-            active=True,
-            modified=func.now(),  # Set the chg_at timestamp
-        )
-        model.db.session.add(user)
-
-        # Add to admin group
-        admin_group = get_group("admin")
-        if admin_group:
-            member = model.GroupMember(
-                group=admin_group.id,
-                user=user.id,
-                approved=func.now(),  # Add approved timestamp
-            )
-            model.db.session.add(member)
-
-            # Make superuser the PI
-            pi = model.PrimaryGroupMember(group=admin_group.id, user=user.id)
-            model.db.session.add(pi)
-
-        model.db.session.commit()
-    return user
-
-
-# -------------------------------------------------------------------------------------------------------
+_MAX_USER_ID_LENGTH = 20
+_USER_ID_PATTERN = re.compile(r"[^a-z0-9_-]+")
 
 
 def constraint_of(ex: IntegrityError) -> Tuple[str, str]:
@@ -362,30 +318,89 @@ def get_user(user: str) -> Optional[model.User]:
     return model.User.query.get(user)
 
 
+def _normalize_user_id(value: str) -> str:
+    token = _USER_ID_PATTERN.sub("-", (value or "").strip().lower()).strip("-")
+    return token[:_MAX_USER_ID_LENGTH]
+
+
+def _scoped_user_id_from_email(email: str) -> str:
+    normalized_email = (email or "").strip().lower()
+    local_part = normalized_email.split("@", 1)[0]
+    local_token = _normalize_user_id(local_part) or "user"
+    digest = hashlib.sha256(normalized_email.encode("utf-8")).hexdigest()[:6]
+    max_local_len = _MAX_USER_ID_LENGTH - len(digest) - 1
+    if max_local_len <= 0:
+        return digest[:_MAX_USER_ID_LENGTH]
+    return f"{local_token[:max_local_len]}-{digest}"
+
+
 def upsert_user(user: str, mail: str, name: str) -> model.User:
-    # upsert the user to ensure the record exists
-    model.db.session.execute(
-        "insert into tlkpresearcher(researchercode) values (:user) on conflict do nothing",
-        {
-            "user": user,
-        },
-    )
-    # load the user
-    u = model.User.query.get(user)
+    normalized_mail = (mail or "").strip().lower()
+    normalized_name = (name or "").strip()
+    requested_id = _normalize_user_id(user)
+    if not requested_id:
+        requested_id = _scoped_user_id_from_email(normalized_mail)
 
-    # if the mail and/or display name have changed, update them
-    # as long as the new values are not empty.
-    add = False
-    if mail != "" and u.addr != mail:
-        u.addr = mail
-        add = True
-    if name != "" and u.label != name:
-        u.label = name
-        add = True
-    if add:
-        model.db.session.add(u)
+    # Email is authoritative when present. Reuse any existing record for it.
+    if normalized_mail:
+        existing_by_mail = model.User.query.filter(
+            func.lower(model.User.addr) == normalized_mail
+        ).first()
+        if existing_by_mail is not None:
+            changed = False
+            if existing_by_mail.addr != normalized_mail:
+                existing_by_mail.addr = normalized_mail
+                changed = True
+            if normalized_name and existing_by_mail.label != normalized_name:
+                existing_by_mail.label = normalized_name
+                changed = True
+            if changed:
+                model.db.session.add(existing_by_mail)
+            return existing_by_mail
 
-    return u
+    resolved_id = requested_id
+    existing_by_id = model.User.query.get(resolved_id)
+    if (
+        existing_by_id is not None
+        and normalized_mail
+        and existing_by_id.addr
+        and existing_by_id.addr.strip().lower() != normalized_mail
+    ):
+        # Existing id belongs to another email; derive a stable scoped id.
+        resolved_id = _scoped_user_id_from_email(normalized_mail)
+        existing_by_id = model.User.query.get(resolved_id)
+
+    if existing_by_id is None:
+        model.db.session.execute(
+            """
+            insert into tlkpresearcher(researchercode, name, email, active, chg_at)
+            values (:user, :name, :mail, :active, :chg_at)
+            on conflict (researchercode) do nothing
+            """,
+            {
+                "user": resolved_id,
+                "name": normalized_name or resolved_id,
+                "mail": normalized_mail,
+                "active": True,
+                "chg_at": datetime.datetime.utcnow(),
+            },
+        )
+        existing_by_id = model.User.query.get(resolved_id)
+
+    if existing_by_id is None:
+        raise RuntimeError(f"Failed to upsert user record for {resolved_id}")
+
+    changed = False
+    if normalized_mail and existing_by_id.addr != normalized_mail:
+        existing_by_id.addr = normalized_mail
+        changed = True
+    if normalized_name and existing_by_id.label != normalized_name:
+        existing_by_id.label = normalized_name
+        changed = True
+    if changed:
+        model.db.session.add(existing_by_id)
+
+    return existing_by_id
 
 
 def is_admin(user: model.User) -> bool:
@@ -395,36 +410,6 @@ def is_admin(user: model.User) -> bool:
     q = q.filter(model.Membership.user_active)
     q = q.filter(model.Membership.approved)
     return q.first() is not None
-
-
-def create_reset_token_for(user: str) -> str:
-    token = secrets.token_urlsafe(64)
-    # delete any previous tokens for user
-    model.ResetTokens.query.filter(model.ResetTokens.for_user == user).delete()
-    t = model.ResetTokens(token=token, for_user=user)
-    # this can technically fail if we happen to generate the same token twice
-    # but the odds against that are so great that it would actually be cool
-    # if it happened
-    model.db.session.add(t)
-    # this is only expected to be called from cli so save it now
-    # let any fk errors bubble up
-    model.db.session.commit()
-    return token
-
-
-def get_user_from_token(token: str) -> Optional[model.User]:
-    # delete all old tokens before we check
-    yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    model.ResetTokens.query.filter(model.ResetTokens.issued < yesterday).delete()
-    # see if the token exists
-    rt = model.ResetTokens.query.get(token)
-    if rt is None:
-        return None
-    # if it does grab the user and delete the token
-    user = rt.user
-    model.db.session.delete(rt)
-    model.db.session.commit()
-    return user
 
 
 def get_memberships(user: model.User) -> List[str]:
@@ -866,6 +851,7 @@ class DevicePerms(object):
 
     @property
     def template(self) -> bool:
+        # TODO: templates flag in DB/UI is currently not what gates template access
         return self._slot or self.doa
 
     @property
@@ -1224,8 +1210,8 @@ class DeviceUserForm(FlaskForm):
         else:
             return ""
 
-    def validate(self) -> bool:
-        if not FlaskForm.validate(self):
+    def validate(self, extra_validators=None) -> bool:
+        if not FlaskForm.validate(self, extra_validators=extra_validators):
             return False
 
         action = self.action()
@@ -1603,7 +1589,7 @@ def schedule_for(
     M = model.ScheduleEntry
     q = M.query.filter(M.device == device.id)
     q = q.filter(M.date.between(start, end))
-    q = q.order_by(M.hour, M.date)
+    q = q.order_by(M.date, M.hour)
     return q.all()
 
 
@@ -1847,7 +1833,7 @@ def groups_of_device_for(device: model.Device, user: model.User) -> Datalist:
     q = model.db.session.execute(
         """
             with users_departments as (
-                select d.deptcode
+                select d.deptcode, d.dept_short
                 from tlkpdept d
                 inner join groupmembers gm using(deptcode)
                 where d.department and d.iscurrent
@@ -1979,6 +1965,12 @@ class JsonForm(FlaskForm):
     """
 
     payload = fields.TextAreaField(validators=[validators.InputRequired()])
+
+
+class CsrfOnlyForm(FlaskForm):
+    """Use when a route needs CSRF validation without additional fields."""
+
+    pass
 
 
 def verify_and_prep_template_diffs(

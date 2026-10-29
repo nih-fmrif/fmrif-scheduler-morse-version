@@ -1,13 +1,12 @@
 #!/bin/bash
-# change variables so that sqldocker works
-# Copy all .env.sample files to .env.docker
-for f in $(find . -name .env.sample); do
-  cp "$f" "${f%.sample}.docker"
-  echo "Copied $f to ${f%.sample}.docker"
-done
+set -euo pipefail
 
-# Copy all .env.sample.local files to .env
-for f in $(find . -name .env.sample.local); do
-  cp "$f" "${f%.sample.local}"
-  echo "Copied $f to ${f%.sample.local}"
-done
+sample_file=".env.sample.local"
+
+if [ ! -f "$sample_file" ]; then
+  echo "ERROR: $sample_file was not found. Create it or copy from the template." >&2
+  exit 1
+fi
+
+cp "$sample_file" .env
+echo "Copied $sample_file to .env"

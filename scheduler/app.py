@@ -1,34 +1,59 @@
-import ipaddress
+import re
+import secrets
 from datetime import timedelta
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union
 
 import click
-from flask import Flask, abort, current_app, g, jsonify, redirect, request, session
+from flask import Flask, abort, g, jsonify, redirect, request
 from flask.helpers import flash, url_for
 from flask.templating import render_template
 from flask.wrappers import Response
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 
-from scheduler.auth.session import get_user_from_session
+from scheduler.auth.session import (
+    authenticate_bearer_token,
+    get_user_from_session,
+    require_jwt,
+)
 from scheduler.auth.views import auth
 
 from . import logic, message, model
 from .config import app_config, settings
+from .logging import configure_app_logging
+
+
+def css_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9_-]+", "-", (value or "").strip().lower()).strip("-")
+    return token or "none"
+
+
+def current_csp_nonce() -> str:
+    """Return request-scoped CSP nonce for templates, if available."""
+    try:
+        return getattr(g, "csp_nonce", "")
+    except RuntimeError:
+        return ""
+
 
 ## Configuration
 app = Flask(__name__)
 
 # Load configuration from settings
 app.config.update(**app_config)
+configure_app_logging(app)
+
+# Ensure cookie path is always valid, even when APPLICATION_ROOT is empty
+if not app.config.get("SESSION_COOKIE_PATH"):
+    app.config["SESSION_COOKIE_PATH"] = app.config.get("APPLICATION_ROOT") or "/"
 
 # Add session security settings
 app.config.update(
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Strict",
-    PERMANENT_SESSION_LIFETIME=timedelta(seconds=settings.ldap.token_lifetime),
+    SESSION_COOKIE_SECURE=settings.session.cookie_secure,
+    SESSION_COOKIE_HTTPONLY=settings.session.cookie_httponly,
+    SESSION_COOKIE_SAMESITE=settings.session.cookie_samesite,
+    PERMANENT_SESSION_LIFETIME=timedelta(seconds=settings.session.permanent_lifetime),
 )
 
 
@@ -44,6 +69,8 @@ proxy_fix(app)
 
 # Initialize extensions
 model.db.init_app(app)
+# Ensure Flask-Session uses the same SQLAlchemy instance as the app models
+app.config.setdefault("SESSION_SQLALCHEMY", model.db)
 Session(app)
 message.mailer.init_app(app)
 signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
@@ -58,6 +85,8 @@ app.register_blueprint(auth, url_prefix="/auth")
 @app.before_request
 def setup_user():
     """Load user from session if available"""
+    g.csp_nonce = secrets.token_urlsafe(16) if settings.security.enable_csp else ""
+
     # user already loaded
     if "user" in g:
         return
@@ -69,43 +98,73 @@ def setup_user():
     if request.endpoint == "static":
         return
 
-    # DEVELOPMENT ONLY: Superuser mode for testing
-    # ToDo: Remove this block in production. This is a development hack for testing purposes.
-    # In production, always use proper authentication via LDAP.
-    if current_app.config.get("SUPERUSER_MODE", False):
-        g.user = get_user_from_session() or logic.get_or_create_superuser()
+    # Try bearer token first (stateless API calls)
+    bearer_user = authenticate_bearer_token(request.headers.get("Authorization"))
+    if bearer_user:
+        g.user = bearer_user
         return
 
     # Try to get user from session
     g.user = get_user_from_session()
 
 
+@app.context_processor
+def inject_logout_form():
+    """Provide shared template context values."""
+    return {
+        "logout_form": logic.CsrfOnlyForm(),
+        "csp_nonce": getattr(g, "csp_nonce", ""),
+    }
+
+
+@app.after_request
+def apply_security_headers(response: Response):
+    """Apply baseline security headers without changing page behavior."""
+    response.headers["X-Content-Type-Options"] = settings.security.content_type_options
+    response.headers["X-Frame-Options"] = settings.security.frame_options
+    response.headers["Referrer-Policy"] = settings.security.referrer_policy
+
+    if settings.security.enable_csp:
+        policy = settings.security.csp_policy
+        nonce = getattr(g, "csp_nonce", "")
+        if "{nonce}" in policy:
+            policy = policy.replace("{nonce}", nonce)
+        csp_header = (
+            "Content-Security-Policy-Report-Only"
+            if settings.security.csp_report_only
+            else "Content-Security-Policy"
+        )
+        response.headers[csp_header] = policy
+        if settings.security.csp_report_only:
+            response.headers.pop("Content-Security-Policy", None)
+        else:
+            response.headers.pop("Content-Security-Policy-Report-Only", None)
+
+    if settings.security.enable_hsts and request.is_secure:
+        hsts_parts = [f"max-age={settings.security.hsts_max_age}"]
+        if settings.security.hsts_include_subdomains:
+            hsts_parts.append("includeSubDomains")
+        if settings.security.hsts_preload:
+            hsts_parts.append("preload")
+        response.headers["Strict-Transport-Security"] = "; ".join(hsts_parts)
+
+    return response
+
+
 def login_required(f):
-    @wraps(f)
-    def protect(*args, **kwargs):
-        if g.user is None:
-            abort(403, "Access denied: Authentication required")
-        return f(*args, **kwargs)
-
-    return protect
+    return require_jwt(f)
 
 
-def in_network_required(f):
-    @wraps(f)
-    def protect(*args, **kwargs):
-        ip = ipaddress.ip_address(request.access_route[-1])
-        if not any(ip in network for network in app.config["NIH_NETWORKS"]):
-            abort(403, "Access denied: this page is limited to the NIH network")
-        return f(*args, **kwargs)
-
-    return protect
+app.jinja_env.filters["css_token"] = css_token
+# Keep nonce access import-mode agnostic: macros imported without context
+# can still read the request-scoped CSP nonce through this helper.
+app.jinja_env.globals["current_csp_nonce"] = current_csp_nonce
 
 
 def active_user_required(f):
     @wraps(f)
+    @require_jwt
     def protect(*args, **kwargs):
-        if g.user is None:
-            abort(403, "Access denied: Authentication required")
         if not g.user.active:
             abort(403, "Access denied: this page is limited to active users")
         return f(*args, **kwargs)
@@ -115,6 +174,7 @@ def active_user_required(f):
 
 def admin_only(f):
     @wraps(f)
+    @require_jwt
     def protect(*args, **kwargs):
         if not (g.user is not None and g.user.active and logic.is_admin(g.user)):
             abort(403, "Access denied: this page is admin only")
@@ -135,6 +195,24 @@ def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[st
     return render_template("error.html", **data), code
 
 
+def wants_html_response() -> bool:
+    accept = request.accept_mimetypes
+    if not accept:
+        return False
+    return (
+        accept.best_match(["text/html", "application/json"]) == "text/html"
+        and accept["text/html"] > accept["application/json"]
+    )
+
+
+@app.errorhandler(401)
+def unauthorized(e):
+    # Redirect browser clients to login for unauthenticated requests
+    if g.user is None and wants_html_response():
+        return redirect(url_for("auth.login"))
+    return render_error_page(401, "Unauthorized")
+
+
 @app.errorhandler(403)
 def access_denied(e):
     # Redirect to login page if user is not authenticated
@@ -149,18 +227,6 @@ def not_found(e):
 
 
 ## CLI commands
-
-
-@app.cli.command("force-login")
-@click.argument("user")
-def force_login_cli(user):
-    """Create a login link for USER"""
-    u = logic.get_user(user)
-    if u is None:
-        click.echo(f"no such user {user}")
-        return
-    token = logic.create_reset_token_for(user)
-    click.echo(url_for("force_login", token=token))
 
 
 @app.cli.command("deactivate-user")
@@ -298,16 +364,6 @@ def robots():
     return Response("User-agent: *\nDisallow: /", mimetype="text/plain")
 
 
-@app.route("/force-login/<token>")
-def force_login(token):
-    user = logic.get_user_from_token(token)
-    if user is None:
-        abort(400)
-    session["user_name"] = user.id
-    g.user = user
-    return redirect("/")
-
-
 @app.route("/")
 @login_required
 @render_to("index")
@@ -365,7 +421,6 @@ def join_form_breadcrumb() -> Breadcrumb_links:
 
 
 @app.route("/join", methods=["GET", "POST"])
-@in_network_required
 @active_user_required
 @render_to("join")
 def join_form():
@@ -389,7 +444,6 @@ def join_form():
 
 
 @app.route("/join/tech", methods=["GET", "POST"])
-@in_network_required
 @active_user_required
 @render_to("join_tech")
 def join_form_tech():
@@ -398,23 +452,28 @@ def join_form_tech():
             403,
             "Only DEV members who have not become technologists already may access this form",
         )
+    form = logic.CsrfOnlyForm()
     # we only need to show the form on GET and there's nothing to validate on post:
     # if the browser allowed the form to be submitted, it's good
-    if request.method == "POST":
+    if form.validate_on_submit():
         logic.record_tech_join(g.user)
         model.db.session.commit()
         logic.notify_dev_pi_of_tech_join_form(g.user)
         flash("you are now a technologist")
         return to("home")
     return {
+        "form": form,
         **join_form_subnav(g.user),
         **join_form_breadcrumb(),
     }
 
 
-@app.route("/join/approve/<token>", endpoint="join-group-approve")
-@app.route("/join/deny/<token>", endpoint="join-group-deny")
+@app.route(
+    "/join/approve/<token>", methods=["GET", "POST"], endpoint="join-group-approve"
+)
+@app.route("/join/deny/<token>", methods=["GET", "POST"], endpoint="join-group-deny")
 @active_user_required
+@render_to("join_group_decision")
 def handle_join_group(token):
     req = logic.read_signed_message(token)
 
@@ -447,17 +506,32 @@ def handle_join_group(token):
         abort(403, f"only the PI of {grp.label} can approve or deny this request")
 
     approve = request.endpoint == "join-group-approve"
+    form = logic.CsrfOnlyForm()
 
-    logic.handle_join_request(approve, req)
-    model.db.session.commit()
+    if request.method == "POST":
+        if not form.validate_on_submit():
+            abort(400, "invalid form submission")
 
-    if approve:
-        flash(f"you have approved {u.id} to be a member of {grp.label}")
-    else:
-        flash(f"you have denied {u.id} from becoming a member {grp.label}")
-    logic.notify_user_of_join_request_outcome(approve, u, grp.label)
+        logic.handle_join_request(approve, req)
+        model.db.session.commit()
 
-    return to("home")
+        if approve:
+            flash(f"you have approved {u.id} to be a member of {grp.label}")
+        else:
+            flash(f"you have denied {u.id} from becoming a member {grp.label}")
+        logic.notify_user_of_join_request_outcome(approve, u, grp.label)
+        return to("home")
+
+    action = "approve" if approve else "deny"
+    return {
+        "form": form,
+        "action": action,
+        "user_id": u.id,
+        "group_label": grp.label,
+        "action_url": my_url(),
+        "cancel_url": url_for("home"),
+        **breadcrumb("join request review"),
+    }
 
 
 def groups_subpage_nav(is_admin: bool) -> Subpage_links:
@@ -1006,10 +1080,8 @@ def device(the_device):
 
 
 @app.route("/json/v1/log/<id>")
+@login_required
 def entry_log(id):
-    if g.user is None:
-        abort(403)
-
     eid, _, templateid = id.partition("-")
     device = logic.get_device_from_schedid(eid)
     if device is None:

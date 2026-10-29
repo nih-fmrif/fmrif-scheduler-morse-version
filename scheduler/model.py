@@ -361,18 +361,21 @@ class SchedLogEntry(Model):
     entries: Any = db.Column("entries", db.JSON(), nullable=True)
 
 
-class ResetTokens(Model):
-    __tablename__ = "reset_tokens"
+class OAuthState(Model):
+    """Temporary OAuth state storage for server-side login flow."""
 
-    token: str = db.Column("token", db.String(), primary_key=True)
-    for_user: str = db.Column(
-        "for_user",
-        db.String(20),
-        db.ForeignKey("tlkpresearcher.researchercode"),
+    __tablename__ = "oauth_state"
+
+    state: str = db.Column("state", db.String(128), primary_key=True)
+    nonce: str = db.Column("nonce", db.String(128), nullable=False)
+    redirect_next: Optional[str] = db.Column("redirect_next", db.Text(), nullable=True)
+    code_verifier: Optional[str] = db.Column(
+        "code_verifier", db.String(128), nullable=True
+    )
+    created_at: Any = db.Column(
+        "created_at",
+        db.DateTime(timezone=True),
+        db.FetchedValue(for_update=False),
         nullable=False,
+        server_default=func.now(),
     )
-    issued: Any = db.Column(
-        "issued", db.DateTime(), db.FetchedValue(for_update=False), nullable=False
-    )
-
-    user: User = db.relationship("User", lazy="joined")

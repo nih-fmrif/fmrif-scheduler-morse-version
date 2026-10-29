@@ -3,6 +3,7 @@ basehead %} {% block head %}
 <script id="app-root" type="application/json">
   {{ config.APPLICATION_ROOT }}
 </script>
+<script src="{{ url_for('static', filename='js/api-client.js') }}"></script>
 <script
   type="module"
   src="{{ url_for('static', filename='script.js') }}"
@@ -18,13 +19,14 @@ basehead %} {% block head %}
         {% for (name, url) in breadcrumb %}
         <li>
           <a
-            href="{{url}}"
+            href="{{ url }}"
             {%
             if
-            request.path=""
-            ="url"
-            %}
-            aria-current="page{%"
+            request.path
+            is
+            equalto(url)
+            %}aria-current="page"
+            {%
             endif
             %}
             >{{name}}</a
@@ -38,6 +40,12 @@ basehead %} {% block head %}
         {% if user %}logged in as {{user.id}}{% if not user.active %}
         (inactive){% endif %}{% else %}not logged in{% endif %}
       </p>
+      {% if user %}
+      <form method="post" action="{{ url_for('auth.logout') }}">
+        {{ logout_form.csrf_token }}
+        <button id="logout-btn" type="submit">Logout</button>
+      </form>
+      {% endif %}
     </section>
   </div>
 </div>
@@ -66,10 +74,11 @@ basehead %} {% block head %}
             href="{{ href }}"
             {%
             if
-            request.path=""
-            ="href"
-            %}
-            aria-current="page{%"
+            request.path
+            is
+            equalto(href)
+            %}aria-current="page"
+            {%
             endif
             %}
             >{{ link | safe}}</a

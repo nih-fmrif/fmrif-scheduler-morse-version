@@ -23,7 +23,7 @@ CREATE EXTENSION IF NOT EXISTS plpgsql;
 SET search_path = public, pg_catalog;
 
 --
--- Name: foof(); Type: FUNCTION; Schema: public; Owner: jburton
+-- Name: foof(); Type: FUNCTION; Schema: public; Owner: person0078
 --
 
 CREATE FUNCTION foof() RETURNS record
@@ -32,7 +32,7 @@ CREATE FUNCTION foof() RETURNS record
 
 
 --
--- Name: template_default_fill(character varying, character varying); Type: FUNCTION; Schema: public; Owner: jburton
+-- Name: template_default_fill(character varying, character varying); Type: FUNCTION; Schema: public; Owner: person0078
 --
 
 CREATE FUNCTION template_default_fill(character varying, character varying) RETURNS boolean
@@ -41,7 +41,7 @@ CREATE FUNCTION template_default_fill(character varying, character varying) RETU
 
 
 --
--- Name: template_to_sched(character varying, character varying, date, date); Type: FUNCTION; Schema: public; Owner: jburton
+-- Name: template_to_sched(character varying, character varying, date, date); Type: FUNCTION; Schema: public; Owner: person0078
 --
 
 CREATE FUNCTION template_to_sched(character varying, character varying, date, date) RETURNS boolean
@@ -75,7 +75,7 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: tlkpdept; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpdept (
@@ -99,91 +99,91 @@ CREATE TABLE tlkpdept (
 
 
 --
--- Name: TABLE tlkpdept; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlkpdept; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlkpdept IS 'List of departments';
 
 
 --
--- Name: COLUMN tlkpdept.grp; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.grp; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.grp IS 'Group this falls in (ie, top-level department)';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkday_day; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkday_day; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkday_day IS 'Color for dept (for all times, despite name!)';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkday_eve; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkday_eve; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkday_eve IS 'UNUSED LEGACY';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkend_day; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkend_day; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkend_day IS 'UNUSED LEGACY';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkend_eve; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkend_eve; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkend_eve IS 'UNUSED LEGACY';
 
 
 --
--- Name: COLUMN tlkpdept.ismain; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.ismain; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.ismain IS 'Should this appear as "top-level" department (in legend, etc.)';
 
 
 --
--- Name: COLUMN tlkpdept.iscurrent; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.iscurrent; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.iscurrent IS 'Is this department active';
 
 
 --
--- Name: COLUMN tlkpdept.inst; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.inst; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.inst IS 'Institute (NIMH, NINDS, NCI, etc)';
 
 
 --
--- Name: COLUMN tlkpdept.prog; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.prog; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.prog IS 'Program and Branch';
 
 
 --
--- Name: COLUMN tlkpdept.link; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.link; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.link IS 'Link to the Unit/Section''s home page';
 
 
 --
--- Name: COLUMN tlkpdept.pi; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.pi; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.pi IS 'Name of the primary investigatior in charge of the lab';
 
 
 --
--- Name: departments; Type: VIEW; Schema: public; Owner: jburton
+-- Name: departments; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW departments AS
@@ -191,7 +191,7 @@ CREATE VIEW departments AS
 
 
 --
--- Name: VIEW departments; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: VIEW departments; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON VIEW departments IS 'Current, real departments';
@@ -206,7 +206,7 @@ CREATE VIEW departments_agt AS
 
 
 --
--- Name: tblsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tblsched; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tblsched (
@@ -231,14 +231,14 @@ CREATE TABLE tblsched (
 
 
 --
--- Name: TABLE tblsched; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tblsched; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tblsched IS 'Schedule assignments';
 
 
 --
--- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpresearcher (
@@ -254,21 +254,21 @@ CREATE TABLE tlkpresearcher (
 
 
 --
--- Name: TABLE tlkpresearcher; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlkpresearcher; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlkpresearcher IS 'List of researchers';
 
 
 --
--- Name: COLUMN tlkpresearcher.lose_to; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpresearcher.lose_to; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpresearcher.lose_to IS 'Researcher code this loses to after reservation period';
 
 
 --
--- Name: schedule; Type: VIEW; Schema: public; Owner: jburton
+-- Name: schedule; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW schedule AS
@@ -284,7 +284,7 @@ CREATE VIEW schedule_agt AS
 
 
 --
--- Name: tblsched_schedid_seq; Type: SEQUENCE; Schema: public; Owner: jburton
+-- Name: tblsched_schedid_seq; Type: SEQUENCE; Schema: public; Owner: person0078
 --
 
 CREATE SEQUENCE tblsched_schedid_seq
@@ -295,7 +295,7 @@ CREATE SEQUENCE tblsched_schedid_seq
 
 
 --
--- Name: tbltemplate; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tbltemplate (
@@ -313,14 +313,14 @@ CREATE TABLE tbltemplate (
 
 
 --
--- Name: TABLE tbltemplate; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tbltemplate; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tbltemplate IS 'Templated times for scanner use';
 
 
 --
--- Name: tbltemplate_templateid_seq; Type: SEQUENCE; Schema: public; Owner: jburton
+-- Name: tbltemplate_templateid_seq; Type: SEQUENCE; Schema: public; Owner: person0078
 --
 
 CREATE SEQUENCE tbltemplate_templateid_seq
@@ -331,7 +331,7 @@ CREATE SEQUENCE tbltemplate_templateid_seq
 
 
 --
--- Name: tbltemplates; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplates; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tbltemplates (
@@ -344,7 +344,7 @@ CREATE TABLE tbltemplates (
 
 
 --
--- Name: TABLE tbltemplates; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tbltemplates; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tbltemplates IS 'List of scanner templates';
@@ -353,7 +353,7 @@ COMMENT ON TABLE tbltemplates IS 'List of scanner templates';
 SET default_with_oids = false;
 
 --
--- Name: technicalscans; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: technicalscans; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE technicalscans (
@@ -385,7 +385,7 @@ CREATE TABLE temp_timelapse (
 SET default_with_oids = false;
 
 --
--- Name: tlkpinst; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpinst; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpinst (
@@ -396,7 +396,7 @@ CREATE TABLE tlkpinst (
 
 
 --
--- Name: template; Type: VIEW; Schema: public; Owner: jburton
+-- Name: template; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW "template" AS
@@ -404,7 +404,7 @@ CREATE VIEW "template" AS
 
 
 --
--- Name: tlkpscanner; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpscanner; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpscanner (
@@ -417,14 +417,14 @@ CREATE TABLE tlkpscanner (
 
 
 --
--- Name: TABLE tlkpscanner; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlkpscanner; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlkpscanner IS 'List of scanners';
 
 
 --
--- Name: tlogresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlogresearcher; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlogresearcher (
@@ -445,7 +445,7 @@ CREATE TABLE tlogresearcher (
 
 
 --
--- Name: tlogsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlogsched; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlogsched (
@@ -469,14 +469,14 @@ CREATE TABLE tlogsched (
 
 
 --
--- Name: TABLE tlogsched; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlogsched; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlogsched IS 'Logging of changes. DOES NOT USE referential integrity!';
 
 
 --
--- Name: vlogsched; Type: VIEW; Schema: public; Owner: jburton
+-- Name: vlogsched; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW vlogsched AS
@@ -484,14 +484,14 @@ CREATE VIEW vlogsched AS
 
 
 --
--- Name: VIEW vlogsched; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: VIEW vlogsched; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON VIEW vlogsched IS 'Friendly view of loggig of changes';
 
 
 --
--- Name: vlogsched_auditlapse; Type: VIEW; Schema: public; Owner: jburton
+-- Name: vlogsched_auditlapse; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW vlogsched_auditlapse AS
@@ -499,7 +499,7 @@ CREATE VIEW vlogsched_auditlapse AS
 
 
 --
--- Name: vtblsched_audit; Type: VIEW; Schema: public; Owner: jburton
+-- Name: vtblsched_audit; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW vtblsched_audit AS
@@ -530,7 +530,7 @@ COMMENT ON VIEW vtblsched_audit_total IS 'Used to determine total allocated time
 
 
 --
--- Name: tblsched_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tblsched_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tblsched
@@ -538,7 +538,7 @@ ALTER TABLE ONLY tblsched
 
 
 --
--- Name: tbltemplate_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -546,7 +546,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplate_scannercode_key1; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate_scannercode_key1; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -554,7 +554,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplates_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplates_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplates
@@ -562,7 +562,7 @@ ALTER TABLE ONLY tbltemplates
 
 
 --
--- Name: technicalscans_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: technicalscans_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY technicalscans
@@ -570,7 +570,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: technicalscans_scantime_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: technicalscans_scantime_key; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY technicalscans
@@ -578,7 +578,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: tlkpdept_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpdept
@@ -586,7 +586,7 @@ ALTER TABLE ONLY tlkpdept
 
 
 --
--- Name: tlkpinst_instshort_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpinst_instshort_key; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpinst
@@ -594,7 +594,7 @@ ALTER TABLE ONLY tlkpinst
 
 
 --
--- Name: tlkpinst_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpinst_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpinst
@@ -602,7 +602,7 @@ ALTER TABLE ONLY tlkpinst
 
 
 --
--- Name: tlkpresearcher_dept_code_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpresearcher_dept_code_key; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -610,7 +610,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -618,7 +618,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpscanner_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpscanner_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpscanner
@@ -626,7 +626,7 @@ ALTER TABLE ONLY tlkpscanner
 
 
 --
--- Name: tlogresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlogresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlogresearcher
@@ -634,7 +634,7 @@ ALTER TABLE ONLY tlogresearcher
 
 
 --
--- Name: scann_template; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: scann_template; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE INDEX scann_template ON tbltemplates USING btree (scannercode, templatecode);
@@ -643,84 +643,84 @@ ALTER TABLE tbltemplates CLUSTER ON scann_template;
 
 
 --
--- Name: tblsched_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tblsched_scannercode_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tblsched_scannercode_key ON tblsched USING btree (scannercode, scheddate, schedhour);
 
 
 --
--- Name: tbltemplate_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate_scannercode_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE INDEX tbltemplate_scannercode_key ON tbltemplate USING btree (scannercode, templatecode, dow, "hour");
 
 
 --
--- Name: tlkpdept_dept_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept_dept_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpdept_dept_key ON tlkpdept USING btree (dept);
 
 
 --
--- Name: tlkpdept_dept_short_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept_dept_short_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpdept_dept_short_key ON tlkpdept USING btree (dept_short);
 
 
 --
--- Name: tlkpscanner_scanner_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpscanner_scanner_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpscanner_scanner_key ON tlkpscanner USING btree (scanner);
 
 
 --
--- Name: tblsched_ins; Type: RULE; Schema: public; Owner: jburton
+-- Name: tblsched_ins; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tblsched_ins AS ON INSERT TO tblsched DO INSERT INTO tlogsched (schedid, scannercode, scheddate, schedhour, deptcode, researchercode, time_used, chg_by) VALUES (new.schedid, new.scannercode, new.scheddate, new.schedhour, new.deptcode, new.researchercode, new.time_used, new.chg_by);
 
 
 --
--- Name: tblsched_updateon; Type: RULE; Schema: public; Owner: jburton
+-- Name: tblsched_updateon; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tblsched_updateon AS ON UPDATE TO tblsched DO INSERT INTO tlogsched (schedid, scannercode, scheddate, schedhour, deptcode, researchercode, time_used, scannercode_old, scheddate_old, schedhour_old, deptcode_old, researchercode_old, time_used_old, chg_at, chg_by) VALUES (new.schedid, new.scannercode, new.scheddate, new.schedhour, new.deptcode, new.researchercode, new.time_used, old.scannercode, old.scheddate, old.schedhour, old.deptcode, old.researchercode, old.time_used, ('now'::text)::timestamp(6) with time zone, new.chg_by);
 
 
 --
--- Name: template_fill; Type: RULE; Schema: public; Owner: jburton
+-- Name: template_fill; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE template_fill AS ON INSERT TO tbltemplates DO SELECT template_default_fill(new.scannercode, new.templatecode) AS template_default_fill;
 
 
 --
--- Name: tlkpresearcher_del; Type: RULE; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_del; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tlkpresearcher_del AS ON DELETE TO tlkpresearcher DO INSERT INTO tlogresearcher (chg_at, chg_by, researchercode_old, lname_old, fname_old, researchershort_old, dept_code__old) VALUES (('now'::text)::timestamp(6) with time zone, "current_user"(), old.researchercode, old.lname, old.fname, old.researchershort, old.dept_code);
 
 
 --
--- Name: tlkpresearcher_ins; Type: RULE; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_ins; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tlkpresearcher_ins AS ON INSERT TO tlkpresearcher DO INSERT INTO tlogresearcher (researchercode, lname, fname, researchershort, dept_code, chg_at, chg_by) VALUES (new.researchercode, new.lname, new.fname, new.researchershort, new.dept_code, ('now'::text)::timestamp(6) with time zone, "current_user"());
 
 
 --
--- Name: tlkpresearcher_upd; Type: RULE; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_upd; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tlkpresearcher_upd AS ON UPDATE TO tlkpresearcher DO INSERT INTO tlogresearcher (researchercode, lname, fname, researchershort, dept_code, chg_at, chg_by, researchercode_old, lname_old, fname_old, researchershort_old, dept_code__old) VALUES (new.researchercode, new.lname, new.fname, new.researchershort, new.dept_code, ('now'::text)::timestamp(6) with time zone, "current_user"(), old.researchercode, old.lname, old.fname, old.researchershort, old.dept_code);
 
 
 --
--- Name: tblsched_billdeptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tblsched_billdeptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tblsched
@@ -728,7 +728,7 @@ ALTER TABLE ONLY tblsched
 
 
 --
--- Name: tblsched_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tblsched_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tblsched
@@ -736,7 +736,7 @@ ALTER TABLE ONLY tblsched
 
 
 --
--- Name: tbltemplate_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplate_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -744,7 +744,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplate_instcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplate_instcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -752,7 +752,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplate_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplate_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -760,7 +760,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplates_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplates_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplates
@@ -768,7 +768,7 @@ ALTER TABLE ONLY tbltemplates
 
 
 --
--- Name: technicalscans_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: technicalscans_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY technicalscans
@@ -776,7 +776,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: technicalscans_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: technicalscans_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY technicalscans
@@ -784,7 +784,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: tlkpresearcher_dept_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_dept_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -792,7 +792,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpresearcher_lose_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_lose_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tlkpresearcher

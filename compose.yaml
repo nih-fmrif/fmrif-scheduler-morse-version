@@ -21,14 +21,6 @@ services:
       - ./sql/000-init.sh:/docker-entrypoint-initdb.d/000-init.sh:ro
       - scheduler_pgdata:/var/lib/postgresql/data
 
-  ldap:
-    container_name: ldap
-    image: bitnami/openldap:latest
-    env_file:
-      - .env
-    ports:
-      - "1389:1389"
-
   scheduler:
     container_name: scheduler
     build:
@@ -41,7 +33,7 @@ services:
 
     volumes:
       - ./scheduler:/app/scheduler
-      - ./.env.docker:/app/.env:ro
+      - ./.env:/app/.env:ro
     depends_on:
       postgres:
         condition: service_healthy

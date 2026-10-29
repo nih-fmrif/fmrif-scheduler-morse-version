@@ -1,5 +1,6 @@
 {% extends "page.html" %} {% import "macros.html" as macros %} {% block title
-%}{{ title }}{% endblock %} {% block body %}
+%}{{ title }}{% endblock %} {% block head %} {{ super() }} {{
+macros.swatch_styles(colors) }} {% endblock %} {% block body %}
 <script id="device-groups" type="application/json">
   {{ device_groups_json|tojson }}
 </script>
@@ -48,7 +49,7 @@ member of " ~ k) }} {% endfor %}
                 data-changed="false"
                 data-error="false"
               >
-                {{ macros.entry_legend(colors[x.group] if x.group) }}
+                {{ macros.entry_legend(x.group) }}
                 <entry-editor>
                   {{ macros.entry_text("ins-" ~ x.id, "institute", "institutes",
                   x.inst) }} {{ macros.entry_text("grp-" ~ x.id, "group",

@@ -17,66 +17,71 @@ Pydantic-settings is used to load the environment variables from the .env file.
   nested config class instance)
 """
 
-import ipaddress
 import logging
 import os
 from typing import Dict, List, Optional
 from urllib.parse import quote
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from scheduler.find_env_file import find_envfile
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
 env_file = find_envfile()
+logger.info(f"Loading .env from: {env_file}")
+
+PLACEHOLDER_UUID = "00000000-0000-0000-0000-000000000000"
 
 
-class LDAPConfig(BaseModel):
-    """LDAP connection and authentication settings for NIH"""
+class EntraConfig(BaseModel):
+    """Microsoft Entra / Azure AD application configuration."""
 
-    # Required settings for NIH LDAP
-    host: str = "NIHIAMANON2.nih.gov"  # Primary LDAP server
-    base_dn: str = "OU=Users,DC=nih,DC=gov"
-    bind_dn: str = ""  # Anonymous bind
-    bind_password: str = ""  # Anonymous bind
+    client_id: str = ""
+    tenant_id: str = ""
+    client_secret: str = (
+        ""  # For confidential client token exchange (optional for PKCE public clients)
+    )
+    discovery_url: str = ""
+    redirect_uri: str = ""
+    allowed_audiences: List[str] = Field(default_factory=list)
+    allowed_algorithms: List[str] = Field(default_factory=lambda: ["RS256"])
+    scope: str = "openid profile email offline_access"  # OAuth 2.0 OIDC scopes + offline_access for refresh tokens
+    jwks_cache_ttl: int = 60 * 60  # seconds
 
-    # Add this line for user DN template
-    user_dn_template: str = "CN={username}.NIH,OU=Users,DC=nih,DC=gov"
+    @field_validator("allowed_algorithms")
+    @classmethod
+    def validate_allowed_algorithms(cls, value: List[str]) -> List[str]:
+        normalized: List[str] = []
+        for alg in value:
+            token = str(alg).strip().upper()
+            if token and token not in normalized:
+                normalized.append(token)
+        if not normalized:
+            raise ValueError(
+                "ENTRA__ALLOWED_ALGORITHMS must include at least one value"
+            )
+        return normalized
 
-    # NIH LDAP specific settings
-    port: int = 5636
-    use_ssl: bool = True
-    user_search_filter: str = "(samaccountname={username})"
-    required_user_attrs: List[str] = [
-        "mail",  # For notifications
-        "department",  # For basic user info
-    ]
-    user_id_attribute: str = "sAMAccountName"
-    user_object_class: str = "user"
+    @property
+    def issuer(self) -> str:
+        """Expected issuer for tokens from this tenant."""
+        if not self.tenant_id:
+            return ""
+        return f"https://login.microsoftonline.com/{self.tenant_id}/v2.0"
 
-    # SSL/TLS settings
-    tls_reqcert: str = "never"
-    tls_cacertdir: str = "/etc/openldap/cacerts"
-
-    # NIH LDAP behavior settings
-    force_upper_case_realm: bool = True
-    id_mapping: bool = False
-    referrals: bool = False
-
-    # Session settings
-    token_lifetime: int = 28800  # 8 hours
-
-    # All NIH LDAP servers for redundancy
-    backup_hosts: List[str] = [
-        "NIHIAMANON1.nih.gov",
-        "NIHIAMANON3.nih.gov",
-        "NIHIAMANON4.nih.gov",
-    ]
+    @property
+    def audiences(self) -> List[str]:
+        """Compute the set of acceptable audiences for JWT validation."""
+        audiences = [aud for aud in self.allowed_audiences if aud]
+        if self.client_id and self.client_id not in audiences:
+            audiences.append(self.client_id)
+        api_audience = f"api://{self.client_id}" if self.client_id else ""
+        if api_audience and api_audience not in audiences:
+            audiences.append(api_audience)
+        return audiences
 
 
 class DatabaseConfig(BaseModel):
@@ -92,30 +97,14 @@ class CoreConfig(BaseModel):
     secret_key: str = "dev-key-change-in-prod"
     site_sender: EmailStr = "noreply@example.com"
     listserv: str = "listserv@example.com"
-    nih_networks: List[str] = [
-        "127.0.0.1/32",
-        "::1/128",
-        "192.168.0.0/16",
-        "10.10.0.0/16",
-        "172.16.0.0/12",
-    ]
-
-    @field_validator("nih_networks")
-    @classmethod
-    def validate_networks(cls, networks: List[str]) -> List[str]:
-        """Validate that each network is a valid IP network"""
-        for network in networks:
-            try:
-                ipaddress.ip_network(network)
-            except ValueError as e:
-                raise ValueError(f"Invalid network format: {network}") from e
-        return networks
 
 
 class ServerConfig(BaseModel):
     """Server configuration settings"""
 
-    server_name: str = "localhost:5051"
+    server_name: str = (
+        ""  # Empty allows Flask to work with reverse proxies (nginx, etc.)
+    )
     application_root: str = ""
 
 
@@ -139,29 +128,143 @@ class SessionConfig(BaseModel):
     """Flask session configuration"""
 
     cookie_name: str = "dsid"
+    cookie_secure: bool = True
+    cookie_httponly: bool = True
+    cookie_samesite: str = "Strict"
     permanent_lifetime: int = 8 * 60 * 60  # 8 hours
     type: str = "sqlalchemy"
     use_signer: bool = True
     sqlalchemy_table: str = "site_sessions"
 
+    @field_validator("cookie_samesite")
+    @classmethod
+    def validate_cookie_samesite(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        allowed = {"strict", "lax", "none"}
+        if normalized not in allowed:
+            raise ValueError(
+                "SESSION__COOKIE_SAMESITE must be one of: Strict, Lax, None"
+            )
+        return normalized.capitalize()
 
-class RBACConfig(BaseModel):
-    superuser_mode: bool = False
-    device_departments: Dict[str, List[str]] = {"TEST": ["TEST", "DEV"]}
-    user_departments: Dict[str, Dict[str, bool]] = {
-        "testuser": {"TEST": False, "DEV": True}
+
+class SecurityConfig(BaseModel):
+    """Baseline HTTP response header settings."""
+
+    enable_hsts: bool = True
+    hsts_max_age: int = 63072000  # 2 years
+    hsts_include_subdomains: bool = True
+    hsts_preload: bool = False
+    frame_options: str = "DENY"
+    content_type_options: str = "nosniff"
+    referrer_policy: str = "strict-origin-when-cross-origin"
+    enable_csp: bool = True
+    csp_report_only: bool = False
+    csp_policy: str = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'nonce-{nonce}'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    auth_rate_limit_enabled: bool = True
+    auth_rate_limit_window_seconds: int = 60
+    auth_rate_limit_max_requests: int = 30
+
+
+class LoggingConfig(BaseModel):
+    """Application logging controls."""
+
+    level: str = "INFO"
+    reveal_sensitive_data: bool = False
+    redaction_text: str = "[REDACTED]"
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        allowed = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
+        if normalized not in allowed:
+            raise ValueError(
+                "LOGGING__LEVEL must be one of: CRITICAL, ERROR, WARNING, INFO, DEBUG"
+            )
+        return normalized
+
+
+class AuthTestProfile(BaseModel):
+    """Test-only auth profile for CI/playwright integration."""
+
+    username: str
+    email: EmailStr
+    display_name: str = ""
+    active: bool = True
+    admin: bool = False
+    groups: List[str] = Field(default_factory=list)
+    technologist: bool = False
+    test_scanner_tech: bool = False
+
+
+def _default_auth_test_profiles() -> Dict[str, AuthTestProfile]:
+    return {
+        "admin": AuthTestProfile(
+            username="test-admin",
+            email="test-admin@example.com",
+            display_name="Test Admin",
+            active=True,
+            admin=True,
+            groups=["admin"],
+        ),
+        "member": AuthTestProfile(
+            username="test-member",
+            email="test-member@example.com",
+            display_name="Test Member",
+            active=True,
+            admin=False,
+            groups=[],
+        ),
+        "dev": AuthTestProfile(
+            username="test-dev",
+            email="test-dev@example.com",
+            display_name="Test Dev",
+            active=True,
+            admin=False,
+            groups=["DEV"],
+        ),
+        "tech": AuthTestProfile(
+            username="test-tech",
+            email="test-tech@example.com",
+            display_name="Test Tech",
+            active=True,
+            admin=False,
+            groups=["DEV"],
+            technologist=True,
+            test_scanner_tech=True,
+        ),
+        "inactive": AuthTestProfile(
+            username="test-inactive",
+            email="test-inactive@example.com",
+            display_name="Test Inactive",
+            active=False,
+            admin=False,
+            groups=[],
+        ),
     }
-    device_permissions: Dict[str, Dict[str, Dict[str, bool]]] = {
-        "testuser": {
-            "TEST": {
-                "templates": True,
-                "slot": True,
-                "tech": False,
-                "medical": False,
-                "training": False,
-            }
-        }
-    }
+
+
+class AuthTestConfig(BaseModel):
+    """Test-only auth settings used for CI/local integration suites."""
+
+    enabled: bool = False
+    shared_secret: str = ""
+    seed_groups: str = "DEV"
+    profiles: Dict[str, AuthTestProfile] = Field(
+        default_factory=_default_auth_test_profiles
+    )
 
 
 class ProxyConfig(BaseModel):
@@ -198,8 +301,10 @@ class Settings(BaseSettings):
     database: DatabaseConfig = DatabaseConfig()
     mail: MailConfig = MailConfig()
     session: SessionConfig = SessionConfig()
-    ldap: LDAPConfig = LDAPConfig()
-    rbac: RBACConfig = RBACConfig()
+    security: SecurityConfig = SecurityConfig()
+    logging: LoggingConfig = LoggingConfig()
+    entra: EntraConfig = EntraConfig()
+    auth_test: AuthTestConfig = AuthTestConfig()
 
     """Database connection settings using standard PG* variables"""
     PGHOST: str = "postgres"
@@ -215,6 +320,57 @@ class Settings(BaseSettings):
             f"postgresql+psycopg2://{quote(self.PGUSER)}:{quote(self.PGPASSWORD)}"
             f"@{self.PGHOST}:{self.PGPORT}/{quote(self.PGDATABASE)}"
         )
+
+    @model_validator(mode="after")
+    def validate_required_settings(self) -> "Settings":
+        # SERVER_NAME can be empty (recommended for reverse proxy setups)
+        # When empty, Flask accepts requests from any host
+
+        if not self.auth_test.enabled:
+            missing = []
+            if (
+                not self.entra.client_id.strip()
+                or self.entra.client_id == PLACEHOLDER_UUID
+            ):
+                missing.append("ENTRA__CLIENT_ID")
+            if (
+                not self.entra.tenant_id.strip()
+                or self.entra.tenant_id == PLACEHOLDER_UUID
+            ):
+                missing.append("ENTRA__TENANT_ID")
+            if not self.entra.discovery_url.strip():
+                missing.append("ENTRA__DISCOVERY_URL")
+            if not self.entra.redirect_uri.strip():
+                missing.append("ENTRA__REDIRECT_URI")
+
+            if missing:
+                raise ValueError(
+                    "Missing required Entra settings when AUTH_TEST__ENABLED is false: "
+                    + ", ".join(missing)
+                )
+            if self.core.debug:
+                raise ValueError(
+                    "CORE__DEBUG must be false when AUTH_TEST__ENABLED is false"
+                )
+            if (
+                not self.core.secret_key.strip()
+                or self.core.secret_key == "dev-key-change-in-prod"
+            ):
+                raise ValueError(
+                    "CORE__SECRET_KEY must be set to a non-default value "
+                    "when AUTH_TEST__ENABLED is false"
+                )
+            if not self.session.cookie_secure:
+                raise ValueError(
+                    "SESSION__COOKIE_SECURE must be true when AUTH_TEST__ENABLED is false"
+                )
+
+        if self.auth_test.enabled and not self.auth_test.shared_secret.strip():
+            raise ValueError(
+                "AUTH_TEST__SHARED_SECRET is required when AUTH_TEST__ENABLED is true"
+            )
+
+        return self
 
     def get_proxy_count(self) -> Optional[Dict[str, int]]:
         """Get proxy configuration counts from environment variables"""
@@ -247,32 +403,64 @@ class AppConfig(dict):
 
     def __init__(self, settings: Settings):
         super().__init__()
-        self.update(
-            {
-                "SECRET_KEY": settings.core.secret_key,
-                "SERVER_NAME": settings.server.server_name,
-                "APPLICATION_ROOT": settings.server.application_root,
-                "SQLALCHEMY_DATABASE_URI": settings.database_url,
-                "SQLALCHEMY_TRACK_MODIFICATIONS": settings.database.track_modifications,
-                "MAIL_SERVER": settings.mail.server,
-                "MAIL_PORT": settings.mail.port,
-                "MAIL_USE_TLS": settings.mail.use_tls,
-                "MAIL_USE_SSL": settings.mail.use_ssl,
-                "MAIL_USERNAME": settings.mail.username,
-                "MAIL_PASSWORD": settings.mail.password,
-                "nih_mailing_lists": settings.mail.mailing_lists,
-                "SESSION_COOKIE_NAME": settings.session.cookie_name,
-                "PERMANENT_SESSION_LIFETIME": settings.session.permanent_lifetime,
-                "SESSION_TYPE": settings.session.type,
-                "SESSION_USE_SIGNER": settings.session.use_signer,
-                "SESSION_SQLALCHEMY_TABLE": settings.session.sqlalchemy_table,
-                "SUPERUSER_MODE": settings.rbac.superuser_mode,
-                "NIH_NETWORKS": [
-                    ipaddress.ip_network(net) for net in settings.core.nih_networks
-                ],
-                "SITE_DEFAULT_SENDER": settings.core.site_sender,
-            }
-        )
+        config_dict = {
+            "SECRET_KEY": settings.core.secret_key,
+            "SQLALCHEMY_DATABASE_URI": settings.database_url,
+            "SQLALCHEMY_TRACK_MODIFICATIONS": settings.database.track_modifications,
+            "MAIL_SERVER": settings.mail.server,
+            "MAIL_PORT": settings.mail.port,
+            "MAIL_USE_TLS": settings.mail.use_tls,
+            "MAIL_USE_SSL": settings.mail.use_ssl,
+            "MAIL_USERNAME": settings.mail.username,
+            "MAIL_PASSWORD": settings.mail.password,
+            "MAIL_SUPPRESS_SEND": settings.mail.suppress_send,
+            "nih_mailing_lists": settings.mail.mailing_lists,
+            "SESSION_COOKIE_NAME": settings.session.cookie_name,
+            "SESSION_COOKIE_SECURE": settings.session.cookie_secure,
+            "SESSION_COOKIE_HTTPONLY": settings.session.cookie_httponly,
+            "SESSION_COOKIE_SAMESITE": settings.session.cookie_samesite,
+            "PERMANENT_SESSION_LIFETIME": settings.session.permanent_lifetime,
+            "SESSION_TYPE": settings.session.type,
+            "SESSION_USE_SIGNER": settings.session.use_signer,
+            "SESSION_SQLALCHEMY_TABLE": settings.session.sqlalchemy_table,
+            "SITE_DEFAULT_SENDER": settings.core.site_sender,
+            "nih_listserv": settings.core.listserv,
+            "ENTRA_CLIENT_ID": settings.entra.client_id,
+            "ENTRA_TENANT_ID": settings.entra.tenant_id,
+            "ENTRA_DISCOVERY_URL": settings.entra.discovery_url,
+            "ENTRA_REDIRECT_URI": settings.entra.redirect_uri,
+            "ENTRA_AUDIENCES": settings.entra.audiences,
+            "ENTRA_ALLOWED_ALGORITHMS": settings.entra.allowed_algorithms,
+            "ENTRA_ISSUER": settings.entra.issuer,
+            "ENTRA_JWKS_CACHE_TTL": settings.entra.jwks_cache_ttl,
+            "AUTH_TEST_ENABLED": settings.auth_test.enabled,
+            "AUTH_TEST_SHARED_SECRET": settings.auth_test.shared_secret,
+            "SECURITY_ENABLE_HSTS": settings.security.enable_hsts,
+            "SECURITY_HSTS_MAX_AGE": settings.security.hsts_max_age,
+            "SECURITY_HSTS_INCLUDE_SUBDOMAINS": settings.security.hsts_include_subdomains,
+            "SECURITY_HSTS_PRELOAD": settings.security.hsts_preload,
+            "SECURITY_FRAME_OPTIONS": settings.security.frame_options,
+            "SECURITY_CONTENT_TYPE_OPTIONS": settings.security.content_type_options,
+            "SECURITY_REFERRER_POLICY": settings.security.referrer_policy,
+            "SECURITY_ENABLE_CSP": settings.security.enable_csp,
+            "SECURITY_CSP_REPORT_ONLY": settings.security.csp_report_only,
+            "SECURITY_CSP_POLICY": settings.security.csp_policy,
+            "SECURITY_AUTH_RATE_LIMIT_ENABLED": settings.security.auth_rate_limit_enabled,
+            "SECURITY_AUTH_RATE_LIMIT_WINDOW_SECONDS": settings.security.auth_rate_limit_window_seconds,
+            "SECURITY_AUTH_RATE_LIMIT_MAX_REQUESTS": settings.security.auth_rate_limit_max_requests,
+            "LOG_LEVEL": settings.logging.level,
+            "LOG_REVEAL_SENSITIVE_DATA": settings.logging.reveal_sensitive_data,
+            "LOG_REDACTION_TEXT": settings.logging.redaction_text,
+        }
+
+        # Only set SERVER_NAME if not empty (for reverse proxy compatibility)
+        if settings.server.server_name.strip():
+            config_dict["SERVER_NAME"] = settings.server.server_name
+        # Only set APPLICATION_ROOT if not empty to avoid empty cookie paths
+        if settings.server.application_root.strip():
+            config_dict["APPLICATION_ROOT"] = settings.server.application_root
+
+        self.update(config_dict)
 
     def __getattr__(self, name):
         try:

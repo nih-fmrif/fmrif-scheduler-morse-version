@@ -9,7 +9,7 @@ mailer = Mail()
 
 def send(to: str, subj: str, msg: str, sender: Optional[str] = None) -> bool:
     m = Message()
-    m.subject = to
+    m.subject = subj
     m.body = msg
     addrs = [to]
     if "," in to:
@@ -23,6 +23,8 @@ def send(to: str, subj: str, msg: str, sender: Optional[str] = None) -> bool:
         if current_app.debug:
             current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
         return True
-    except SMTPException as e:
-        current_app.logger.error(e)
+    except (SMTPException, OSError):
+        # SMTP/socket failures should not break request handlers that already
+        # persisted their primary DB-side changes.
+        current_app.logger.exception("failed to send email to %s", to)
         return False

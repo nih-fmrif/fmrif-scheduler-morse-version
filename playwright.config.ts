@@ -1,15 +1,118 @@
 import { PlaywrightTestConfig } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+dotenv.config({ path: path.resolve(__dirname, '.env'), override: false });
+
+const configuredBaseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5051';
+const flaskApp = process.env.FLASK_APP || 'scheduler.app';
+
+function parseBooleanEnv(name: string, fallback: boolean = false): boolean {
+  const value = process.env[name];
+  if (value === undefined) {
+    return fallback;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+function normalizeProxyServer(proxyServer?: string): string | undefined {
+  if (!proxyServer) {
+    return undefined;
+  }
+
+  const trimmed = proxyServer.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  // Playwright expects "socks5://", while many shell tools use "socks5h://".
+  return trimmed.replace(/^socks5h:\/\//i, 'socks5://');
+}
+
+function normalizeBaseURL(urlString: string): string {
+  try {
+    const parsed = new URL(urlString);
+    const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (isLocalhost) {
+      // Local Flask dev server does not terminate TLS; keep local base URLs on HTTP.
+      if (parsed.protocol === 'https:') {
+        parsed.protocol = 'http:';
+      }
+      parsed.hostname = '127.0.0.1';
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return urlString;
+  }
+}
+
+function shouldIgnoreHTTPSErrorsByDefault(urlString: string): boolean {
+  try {
+    const parsed = new URL(urlString);
+    const isHttps = parsed.protocol === 'https:';
+    const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    return isHttps && !isLocalhost;
+  } catch {
+    return false;
+  }
+}
+
+const baseURL = normalizeBaseURL(configuredBaseURL);
+process.env.PLAYWRIGHT_BASE_URL = baseURL;
+const proxyServer = normalizeProxyServer(
+  process.env.PLAYWRIGHT_PROXY_SERVER ||
+  process.env.ALL_PROXY ||
+  process.env.all_proxy ||
+  process.env.HTTPS_PROXY ||
+  process.env.https_proxy ||
+  process.env.HTTP_PROXY ||
+  process.env.http_proxy
+);
+const ignoreHTTPSErrors = parseBooleanEnv(
+  'PLAYWRIGHT_IGNORE_HTTPS_ERRORS',
+  shouldIgnoreHTTPSErrorsByDefault(baseURL)
+);
+
+if (proxyServer) {
+  process.env.PLAYWRIGHT_PROXY_SERVER = proxyServer;
+}
+
+function buildWebServerConfig() {
+  try {
+    const parsedBaseURL = new URL(baseURL);
+    const isLocalTarget = parsedBaseURL.hostname === 'localhost' || parsedBaseURL.hostname === '127.0.0.1';
+    if (!isLocalTarget) {
+      return undefined;
+    }
+
+    const port = parsedBaseURL.port || '5051';
+    const host = parsedBaseURL.hostname;
+    return {
+      command: `FLASK_APP=${flaskApp} flask run --host ${host} --port ${port}`,
+      url: `${parsedBaseURL.protocol}//${host}:${port}`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 const config: PlaywrightTestConfig = {
-  testDir: './tests',
+  testDir: './tests/playwright',
+  testIgnore: ['**/live-incident/**'],
   timeout: 30000,
   expect: {
     timeout: 5000
   },
+  globalSetup: './tests/playwright/support/global-setup.ts',
   use: {
-    baseURL: 'http://localhost:5051',
+    baseURL: baseURL,
     trace: 'on-first-retry',
+    ignoreHTTPSErrors,
+    ...(proxyServer ? { proxy: { server: proxyServer } } : {}),
   },
+  webServer: buildWebServerConfig(),
   projects: [
     {
       name: 'chromium',

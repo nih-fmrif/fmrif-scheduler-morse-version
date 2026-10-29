@@ -38,15 +38,10 @@ body %}
   </button>
 </form>
 
-<script type="module" async>
-  const con = document.querySelector(".apply-helper");
-  const templates = document.querySelector("#templates");
-  con.addEventListener("click", (e) => {
-    e.preventDefault();
-    templates.value += e.target.dataset.tc;
-  });
-  con.classList.add("js-loaded");
-</script>
+<script
+  type="module"
+  src="{{ url_for('static', filename='js/template-apply.js') }}"
+></script>
 {% else %}
 <p class="note">{{ icons.info()}} {{ no_templates }}</p>
 {% endif %} {% endblock %}

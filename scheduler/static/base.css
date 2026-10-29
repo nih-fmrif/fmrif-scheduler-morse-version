@@ -17,6 +17,10 @@ body {
   margin: 0;
 }
 
+body.body-scroll-locked {
+  overflow: hidden;
+}
+
 /* normalizations adapted from
  - https://github.com/csstools/normalize.css
  - https://github.com/csstools/sanitize.css

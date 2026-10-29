@@ -8,6 +8,15 @@ function announce(txt) {
   document.querySelector("#announce").innerText = txt;
 }
 
+function cssToken(value) {
+  const token = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return token || "none";
+}
+
 const setBeforeUnload = (() => {
   // the beforeunload handler is added and removed as needed
   // as otherwise the browser will ignore a host of optimizations
@@ -489,8 +498,9 @@ class Grid {
     this.container = container;
     this.table = table;
     this.cells = cells;
-    this.setRow(this.firstVisibleRow());
-    this.setCol(0);
+    const firstRow = this.firstVisibleRow();
+    this.setRow(firstRow);
+    this.setCol(firstRow >= 0 ? 0 : -1);
     this.setOpen(false);
   }
   row() {
@@ -515,31 +525,59 @@ class Grid {
     this.table.dataset.open = from_bool(v);
   }
   selectedCell() {
-    return this.cells[this.row()][this.col()];
+    const row = this.cells[this.row()];
+    if (row == null) {
+      return null;
+    }
+    return row[this.col()] ?? null;
+  }
+  rowHasCells(r) {
+    const row = parseInt(r, 10);
+    if (Number.isNaN(row)) {
+      return false;
+    }
+    if (row < 0 || row > this.maxRow()) {
+      return false;
+    }
+    return this.cells[row].length > 0;
   }
   rowHidden(r) {
+    const row = parseInt(r, 10);
+    // Rows with no cells are non-focusable and treated as hidden.
+    if (!this.rowHasCells(row)) {
+      return true;
+    }
     // tr hidden when off hours and not toggled open.
-    return this.cells[r][0].parentElement.hidden;
+    return this.cells[row][0].parentElement.hidden;
   }
   maxRow() {
     return this.cells.length - 1;
   }
-  maxCol() {
-    return this.cells[0].length - 1;
+  maxCol(r = this.row()) {
+    const row = parseInt(r, 10);
+    if (Number.isNaN(row)) {
+      return -1;
+    }
+    if (row < 0 || row > this.maxRow()) {
+      return -1;
+    }
+    return this.cells[row].length - 1;
   }
   firstVisibleRow() {
-    let n = 0;
-    while (this.rowHidden(n)) {
-      n++;
+    for (let n = 0; n <= this.maxRow(); n++) {
+      if (!this.rowHidden(n)) {
+        return n;
+      }
     }
-    return n;
+    return -1;
   }
   lastVisibleRow() {
-    let n = this.maxRow();
-    while (this.rowHidden(n)) {
-      n--;
+    for (let n = this.maxRow(); n >= 0; n--) {
+      if (!this.rowHidden(n)) {
+        return n;
+      }
     }
-    return n;
+    return -1;
   }
   rowStart() {
     return this.focus(this.row(), 0);
@@ -548,16 +586,32 @@ class Grid {
     return this.focus(this.row(), this.maxCol());
   }
   colStart() {
-    return this.focus(this.firstVisibleRow(), this.col());
+    const row = this.firstVisibleRow();
+    if (row < 0) {
+      return false;
+    }
+    return this.focus(row, this.col());
   }
   colEnd() {
-    return this.focus(this.lastVisibleRow(), this.col());
+    const row = this.lastVisibleRow();
+    if (row < 0) {
+      return false;
+    }
+    return this.focus(row, this.col());
   }
   first() {
-    return this.focus(this.firstVisibleRow(), 0);
+    const row = this.firstVisibleRow();
+    if (row < 0) {
+      return false;
+    }
+    return this.focus(row, 0);
   }
   last() {
-    return this.focus(this.lastVisibleRow(), this.maxCol());
+    const row = this.lastVisibleRow();
+    if (row < 0) {
+      return false;
+    }
+    return this.focus(row, this.maxCol(row));
   }
   left() {
     let [row, col] = this.pos();
@@ -570,7 +624,7 @@ class Grid {
   right() {
     let [row, col] = this.pos();
     col++;
-    if (col > this.maxCol()) {
+    if (col > this.maxCol(row)) {
       return false;
     }
     return this.focus(row, col);
@@ -605,15 +659,32 @@ class Grid {
     return this.focus(row, col);
   }
   select(row, col) {
-    // out of bounds, ignore
-    if (row < 0 || col < 0 || row > this.maxRow() || col > this.maxCol()) {
+    row = parseInt(row, 10);
+    col = parseInt(col, 10);
+
+    if (Number.isNaN(row) || Number.isNaN(col)) {
       return false;
     }
+
+    // out of bounds, ignore
+    if (row < 0 || row > this.maxRow()) {
+      return false;
+    }
+
     // if we're trying to select a hidden row,
     // arbitrarily select the first row that is not hidden.
     if (this.rowHidden(row)) {
       row = this.firstVisibleRow();
     }
+
+    const maxCol = this.maxCol(row);
+    if (row < 0 || col < 0 || maxCol < 0) {
+      return false;
+    }
+    if (col > maxCol) {
+      col = maxCol;
+    }
+
     this.setRow(row);
     this.setCol(col);
     return true;
@@ -626,6 +697,9 @@ class Grid {
     // skip if the cell already contains the cursor
     // unless force is specified which we use to handle ESC key
     const cell = this.selectedCell();
+    if (cell == null) {
+      return false;
+    }
     if (!force && cell.matches(":focus-within")) {
       return false;
     }
@@ -641,7 +715,11 @@ class Grid {
     if (!this.select(row, col)) {
       return;
     }
-    this.selectedCell().scrollIntoView({
+    const cell = this.selectedCell();
+    if (cell == null) {
+      return;
+    }
+    cell.scrollIntoView({
       block: "center",
       inline: "center",
     });
@@ -777,7 +855,11 @@ function editor_grid() {
         case "Tab": {
           // if we're in a cell, only need to worry about focus exiting the cell
           const t = evt.target;
-          const [first, last] = edge_focusables(grid.selectedCell());
+          const selected = grid.selectedCell();
+          if (selected == null) {
+            return;
+          }
+          const [first, last] = edge_focusables(selected);
           let leaving = false;
           if (evt.shiftKey) {
             // shift+tab on first element
@@ -846,10 +928,18 @@ function editor_grid() {
       case "Enter":
         grid.setOpen(true);
         // focus first focusable in cell (always at least one)
-        grid
-          .selectedCell()
-          .querySelector(":is(input, button):not(:disabled)")
-          .focus();
+        {
+          const selected = grid.selectedCell();
+          if (selected == null) {
+            break;
+          }
+          const first = selected.querySelector(
+            ":is(input, button):not(:disabled)",
+          );
+          if (first != null) {
+            first.focus();
+          }
+        }
         break;
 
       case "Tab":
@@ -1241,10 +1331,16 @@ class Cell {
     }
   }
   update_swatch() {
-    this.legend.style.setProperty(
-      "--swatch",
-      this.colors[this.group.value] ?? "transparent",
-    );
+    const classPrefix = "swatch-group-";
+    for (const cls of [...this.legend.classList]) {
+      if (cls.startsWith(classPrefix)) {
+        this.legend.classList.remove(cls);
+      }
+    }
+    const token = this.colors[this.group.value]
+      ? cssToken(this.group.value)
+      : "none";
+    this.legend.classList.add(`${classPrefix}${token}`);
   }
   fire_change() {
     this.elm.dispatchEvent(

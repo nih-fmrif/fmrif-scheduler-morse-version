@@ -114,8 +114,21 @@
 	{% endif %}
 {% endmacro %}
 
-{% macro entry_legend(color) %}
-	<entry-legend style="--swatch: {{ color or 'transparent' }}"></entry-legend>
+{% macro swatch_styles(colors) %}
+	<style nonce="{{ current_csp_nonce() }}">
+		.swatch-group-none { --swatch: transparent; }
+		{% for group_id, color in colors.items() %}
+		.swatch-group-{{ group_id|css_token }} { --swatch: {{ color or 'transparent' }}; }
+		{% endfor %}
+	</style>
+{% endmacro %}
+
+{% macro entry_legend(group_id) %}
+	{% if group_id %}
+		<entry-legend class="swatch-group-{{ group_id|css_token }}"></entry-legend>
+	{% else %}
+		<entry-legend class="swatch-group-none"></entry-legend>
+	{% endif %}
 {% endmacro %}
 
 {% macro entry_text(id, lbl, list, value) %}

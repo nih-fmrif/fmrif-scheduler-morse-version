@@ -3,7 +3,7 @@ name = "scheduler"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11.2"
+requires-python = ">=3.11"
 dependencies = [
     "blinker==1.9.0",
     "cachelib==0.13.0",
@@ -25,8 +25,9 @@ dependencies = [
     "WTForms==3.2.1",
     "pydantic[email]>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "ldap3==2.9.1",
     "alembic>=1.13.1",
+    "PyJWT[crypto]==2.10.1",
+    "requests==2.32.3",
 ]
 
 [project.optional-dependencies]

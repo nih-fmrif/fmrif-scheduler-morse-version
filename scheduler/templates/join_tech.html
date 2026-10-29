@@ -1,7 +1,8 @@
 {% extends "page.html" %} {% block title %}become a technologist{% endblock %}
 {% block body %}
 <form method="POST">
-  {# content between this and the next comment is user editable #}
+  {{ form.csrf_token }} {# content between this and the next comment is user
+  editable #}
   <p>
     <strong
       >This document addresses policies and procedures applicable to those

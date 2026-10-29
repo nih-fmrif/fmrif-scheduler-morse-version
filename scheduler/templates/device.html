@@ -1,5 +1,6 @@
 {% extends "page.html" %} {% import "svg/icons.html" as icons %} {% import
 "macros.html" as macros %} {% block title %}{{ device.label }}{% endblock %} {%
+block head %} {{ super() }} {{ macros.swatch_styles(colors) }} {% endblock %} {%
 block body %} {% if never_entries %}
 <p class="note">{{ icons.info() }} {{ never_entries }}</p>
 {% else %}
@@ -111,7 +112,7 @@ k, v, "invalid member of " ~ k) }} {% endfor %}
                 data-changed="false"
                 data-error="false"
               >
-                {{ macros.entry_legend(colors[x.group] if x.group) }}
+                {{ macros.entry_legend(x.group) }}
                 <entry-editor>
                   {{ macros.entry_text("grp-" ~ x.id, "group", "groups",
                   x.group) }} {{ macros.entry_text("mem-" ~ x.id, "member",
