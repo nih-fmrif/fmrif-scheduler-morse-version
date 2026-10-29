@@ -13,13 +13,13 @@ from wtforms import fields, validators
 
 from scheduler import model
 
-from .rbac_audit_support import constraint_of
-from .schedule_editor import (
-    Datalist,
+from ._schedule_editor_reference import (
     all_groups_of_device,
     all_member_datalists_by_group,
     support_request_datalists,
 )
+from ._schedule_editor_shared import Datalist
+from .rbac_audit_support import constraint_of
 
 TEMPLATE_CELL_COUNT = 7 * 24
 LEGACY_NONE_GROUP = "(none)"

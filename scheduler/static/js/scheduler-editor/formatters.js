@@ -428,25 +428,33 @@ function fmt_save_results(data, cells, human_hours) {
       const list = document.createElement("ul");
       for (const n of data["notifications"]) {
         const item = document.createElement("li");
-        const key = String(n.key);
-        switch (n.msg) {
-          case "address":
-            item.append(`no address in database to send ${key} notification`);
-            break;
+        const message = String(n.message ?? "").trim();
+        if (message != "") {
+          item.append(message);
+        } else {
+          const key = String(n.key);
+          switch (String(n.status ?? n.msg ?? "")) {
+            case "missing_recipient":
+            case "address":
+              item.append(
+                `${key} notification could not be sent because no recipient address is configured`,
+              );
+              break;
 
-          case "failed":
-            item.append(
-              `${key} notification failed to send, check server logs`,
-            );
-            break;
+            case "failed":
+              item.append(
+                `${key} notification failed to send; review the Admin Panel issue feed`,
+              );
+              break;
 
-          case "skipped":
-            item.append(`${key} notification delivery suppressed`);
-            break;
+            case "skipped":
+              item.append(`${key} notification delivery was suppressed`);
+              break;
 
-          case "success":
-            item.append(`${key} notification sent`);
-            break;
+            case "success":
+              item.append(`${key} notification sent`);
+              break;
+          }
         }
         list.append(item);
       }

@@ -112,10 +112,10 @@ export async function grantDeviceSupportPermission(
   }
 
   await checkbox.check();
-  await Promise.all([
-    page.waitForEvent('dialog').then((dialog) => dialog.accept()),
-    section.getByRole('button', { name: /apply permission updates/i }).click(),
-  ]);
+  await section.getByRole('button', { name: /apply permission updates/i }).click();
+  await expect(page.locator('#app-feedback')).toContainText(
+    /(RBAC updates applied|Applied \d+ of \d+ requested RBAC changes)/i
+  );
   await expect(section.getByRole('button', { name: /apply permission updates/i })).toBeDisabled();
 }
 

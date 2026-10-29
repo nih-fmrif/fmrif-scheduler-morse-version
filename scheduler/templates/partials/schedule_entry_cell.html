@@ -45,7 +45,7 @@ cur_date and x.hour > cur_hour) %}
     </entry-editor>
     <entry-support>
       {# macros for some repeated elements #} {% macro requested(id, checked) %}
-      <input-set is-option>
+      <input-set is-option class="support-card-request">
         <input-widget>
           <input
             id="{{ id }}"
@@ -61,11 +61,11 @@ cur_date and x.hour > cur_hour) %}
             %}
           />
         </input-widget>
-        <label for="{{ id }}">requested</label>
+        <label for="{{ id }}">Request active</label>
       </input-set>
       {% endmacro %} {% macro handler(id, list, sr) %}
-      <input-set label-above shrink>
-        <label for="{{ id }}">handler</label>
+      <input-set label-above shrink class="support-card-handler">
+        <label for="{{ id }}">Assigned handler</label>
         <input-widget>
           <input
             id="{{ id }}"
@@ -106,37 +106,49 @@ cur_date and x.hour > cur_hour) %}
       </input-set>
       {% endmacro %}
       <fieldset
+        class="support-card support-card-tech"
         data-sr="tech"
         data-new="{% if sr.tech %}false{% else %}true{% endif %}"
         disabled
       >
-        <legend>technologist</legend>
+        <legend>Technologist support</legend>
+        <p class="support-card-copy">
+          Use this when the slot needs technologist cover or hands-on support.
+        </p>
         {{ requested("tech-requested-" ~ x.id, sr.tech is defined and
         sr.tech.approved is not sameas false) }} {% set note %}{% if sr.tech
         %}{{ sr.tech.note }}{% else %}cover{% endif %}{% endset %}
-        <fieldset class="sk-sel" data-orig="{{ note }}">
-          <legend><span>kind</span></legend>
+        <fieldset class="sk-sel support-card-subkind" data-orig="{{ note }}">
+          <legend><span>Need</span></legend>
           {{ tech_kind(x.id, "cover", "cover", note != "support") }} {{
           tech_kind(x.id, "support", "support", note == "support") }}
         </fieldset>
         {{ handler("tech-handler-" ~ x.id, "tech", sr.tech) }}
       </fieldset>
       <fieldset
+        class="support-card support-card-train"
         data-sr="train"
         data-new="{% if sr.train %}false{% else %}true{% endif %}"
         disabled
       >
-        <legend>training</legend>
+        <legend>Training support</legend>
+        <p class="support-card-copy">
+          Use this when the slot needs training coverage or shadow support.
+        </p>
         {{ requested("train-requested-" ~ x.id, sr.train is defined and
         sr.train.approved is not sameas false) }} {{ handler("train-handler-" ~
         x.id, "train", sr.train) }}
       </fieldset>
       <fieldset
+        class="support-card support-card-med"
         data-sr="med"
         data-new="{% if sr.medical %}false{% else %}true{% endif %}"
         disabled
       >
-        <legend>medical coverage</legend>
+        <legend>Medical support</legend>
+        <p class="support-card-copy">
+          Use this when the slot needs medical coverage or medical support.
+        </p>
         {{ requested("med-requested-" ~ x.id, sr.medical is defined and
         sr.medical.approved is not sameas false) }} {{ handler("med-handler-" ~
         x.id, "med", sr.medical) }}

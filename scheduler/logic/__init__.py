@@ -8,26 +8,25 @@ from . import notifications as _notifications
 from . import rbac_audit_support as _rbac_audit_support
 from . import schedule_editor as _schedule_editor
 from . import templates as _templates
-from .admin_config import *  # noqa: F401,F403
-from .app_error_events import *  # noqa: F401,F403
-from .core import *  # noqa: F401,F403
-from .csp_violation_events import *  # noqa: F401,F403
-from .notifications import *  # noqa: F401,F403
-from .rbac_audit_support import *  # noqa: F401,F403
-from .schedule_editor import *  # noqa: F401,F403
-from .templates import *  # noqa: F401,F403
+
+
+def _export_public(module: object) -> list[str]:
+    names = list(getattr(module, "__all__", []))
+    globals().update({name: getattr(module, name) for name in names})
+    return names
+
 
 __all__ = list(
     dict.fromkeys(
         [
-            *_admin_config.__all__,
-            *_app_error_events.__all__,
-            *_core.__all__,
-            *_csp_violation_events.__all__,
-            *_notifications.__all__,
-            *_rbac_audit_support.__all__,
-            *_schedule_editor.__all__,
-            *_templates.__all__,
+            *_export_public(_admin_config),
+            *_export_public(_app_error_events),
+            *_export_public(_core),
+            *_export_public(_csp_violation_events),
+            *_export_public(_notifications),
+            *_export_public(_rbac_audit_support),
+            *_export_public(_schedule_editor),
+            *_export_public(_templates),
         ]
     )
 )
@@ -41,4 +40,5 @@ del (
     _rbac_audit_support,
     _schedule_editor,
     _templates,
+    _export_public,
 )

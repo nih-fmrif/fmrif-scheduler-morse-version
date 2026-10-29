@@ -33,7 +33,7 @@ import scheduler.message as scheduler_message
 from scheduler import model
 from scheduler.routes import rbac_routes
 
-pytestmark = pytest.mark.route
+pytestmark = [pytest.mark.route, pytest.mark.xdist_group("mailpit")]
 
 
 def _capture_rbac_events(
@@ -188,6 +188,36 @@ def test_app_issues_page_shows_missing_pi_issue(route_client):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert f"Group {group_id} has no active PI configured" in body
+
+
+def test_app_issues_page_surfaces_live_scheduler_incidents(route_client):
+    ensure_admin_user()
+    set_admin_session(route_client)
+
+    model.db.session.add(
+        model.NotificationIncident(
+            issue_key="scheduler-notification:missing_recipient:d:medical",
+            issue_type="live.scheduler.notification_missing_recipient",
+            category="notifications",
+            severity="warning",
+            title="Medical support notification has no configured recipient",
+            detail="The medical support notification for device d could not be sent because no recipient address is configured.",
+            href="/device/d",
+            link_label="open schedule",
+            active=True,
+            state="open",
+            state_note="Raised automatically by a live application workflow.",
+            state_changed_by="system",
+            occurrence_count=1,
+        )
+    )
+    model.db.session.commit()
+
+    response = route_client.get("/app/issues")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Medical support notification has no configured recipient" in body
+    assert "could not be sent because no recipient address is configured" in body
 
 
 def test_app_issues_page_defaults_audit_limits_to_10(route_client, monkeypatch):

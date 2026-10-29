@@ -90,11 +90,15 @@ def test_fast_pytest_tasks_use_target_aware_wrapper():
     )
     assert (
         tasks["test-unit-xdist"]
-        == 'pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route" -- -n auto'
+        == 'pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route" -- -n auto --dist loadgroup'
     )
     assert (
         tasks["test-routes"]
         == "pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py routes tests/unit route"
+    )
+    assert (
+        tasks["test-routes-xdist"]
+        == "pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py routes tests/unit route -- -n auto --dist loadgroup"
     )
     assert tasks["run-db-backup"] == "python3 scripts/run-db-backup.py"
     assert tasks["run-db-restore-drill"] == "python3 scripts/run-db-restore-drill.py"

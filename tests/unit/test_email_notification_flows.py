@@ -19,6 +19,9 @@ import scheduler.logic.rbac_audit_support as audit_logic
 import scheduler.logic.schedule_editor as schedule_logic
 import scheduler.message as scheduler_message
 from scheduler import model
+from scheduler.logic.admin_issues import scheduler_notification_issue_key
+
+pytestmark = pytest.mark.xdist_group("mailpit")
 
 
 def _require_mailpit():
@@ -37,6 +40,10 @@ def _email_audit_rows(*criteria):
     for criterion in criteria:
         statement = statement.where(criterion)
     return model.db.session.scalars(statement).all()
+
+
+def _notification_incident(issue_key: str) -> model.NotificationIncident | None:
+    return model.db.session.get(model.NotificationIncident, issue_key)
 
 
 def _latest_email_audit(*criteria):
@@ -365,7 +372,8 @@ def test_send_scheduler_notifications_delivers_all_streams_and_audits(app_contex
         try:
             notes = logic.send_scheduler_notifications(device, messages)
             assert len(notes) == 4
-            assert all(note["msg"] == "success" for note in notes)
+            assert all(note["status"] == "success" for note in notes)
+            assert all("notification sent" in note["message"].lower() for note in notes)
             model.db.session.flush()
             _wait_for_mail_count(cfg, expected=4)
 
@@ -405,11 +413,22 @@ def test_send_scheduler_notifications_records_missing_address_notes(app_context)
 
     notes = logic.send_scheduler_notifications(device, messages)
     assert len(notes) == 4
-    assert all(note["msg"] == "address" for note in notes)
+    assert all(note["status"] == "missing_recipient" for note in notes)
+    assert all(
+        "no recipient address is configured" in note["message"].lower()
+        for note in notes
+    )
     audit_rows = _email_audit_rows(
         model.EmailAuditLog.action == "email.scheduler.notification"
     )
     assert audit_rows == []
+    for stream in ("schedule", "training", "medical", "technologist"):
+        row = _notification_incident(
+            scheduler_notification_issue_key(device_id, stream, "missing_recipient")
+        )
+        assert row is not None
+        assert row.active is True
+        assert row.state == "open"
 
 
 def test_send_scheduler_notifications_marks_suppressed_delivery_as_skipped(
@@ -439,7 +458,7 @@ def test_send_scheduler_notifications_marks_suppressed_delivery_as_skipped(
     with _app_mail_config(app_context, MAIL_SUPPRESS_SEND=True):
         notes = logic.send_scheduler_notifications(device, messages)
         assert len(notes) == 4
-        assert all(note["msg"] == "skipped" for note in notes)
+        assert all(note["status"] == "skipped" for note in notes)
         model.db.session.flush()
 
         audit_rows = _email_audit_rows(
@@ -450,6 +469,71 @@ def test_send_scheduler_notifications_marks_suppressed_delivery_as_skipped(
         assert all(
             row.status == audit_logic.EMAIL_AUDIT_STATUS_SKIPPED for row in audit_rows
         )
+
+
+def test_send_scheduler_notifications_resolves_live_missing_recipient_issue(
+    app_context,
+):
+    device_id = f"D{uuid.uuid4().hex[:4]}"
+    device = model.Device(
+        id=device_id,
+        label=f"Device {device_id}",
+        description="Scheduler live issue resolution test device",
+        active=True,
+        addr="",
+        train_addr="",
+        med_addr="",
+        tech_addr="",
+    )
+    model.db.session.add(device)
+    model.db.session.flush()
+
+    messages = {
+        "schedule": "schedule diff",
+        "training": "",
+        "medical": "",
+        "technologist": "",
+    }
+
+    notes = logic.send_scheduler_notifications(device, messages, actor="tester")
+    assert notes[0]["status"] == "missing_recipient"
+    model.db.session.commit()
+
+    issue_key = scheduler_notification_issue_key(
+        device_id, "schedule", "missing_recipient"
+    )
+    row = _notification_incident(issue_key)
+    assert row is not None
+    assert row.active is True
+    assert row.state == "open"
+
+    device.addr = "schedule@example.com"
+    model.db.session.add(device)
+    model.db.session.flush()
+
+    cfg = _require_mailpit()
+    with _app_mail_config(
+        app_context,
+        MAIL_SERVER=cfg.smtp_host,
+        MAIL_PORT=cfg.smtp_port,
+        MAIL_USE_TLS=False,
+        MAIL_USE_SSL=False,
+        MAIL_SUPPRESS_SEND=False,
+    ):
+        clear_mailpit_messages(cfg)
+        try:
+            success_notes = logic.send_scheduler_notifications(
+                device, messages, actor="tester"
+            )
+            assert success_notes[0]["status"] == "success"
+            model.db.session.commit()
+        finally:
+            clear_mailpit_messages(cfg)
+
+    row = _notification_incident(issue_key)
+    assert row is not None
+    assert row.active is False
+    assert row.state == "resolved"
 
 
 def test_prepare_notifications_returns_empty_when_notifications_are_disabled():

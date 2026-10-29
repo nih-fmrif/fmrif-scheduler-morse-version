@@ -87,9 +87,10 @@ def test_scheduler_save_error_policy_keeps_bounded_detail_for_unknown_constraint
 
     assert decision.source == "database"
     assert decision.code == "database_rejected"
-    assert decision.message.startswith("database rejected the change:")
-    assert "tblsched_custom_debug_path" in decision.message
-    assert len(decision.message) <= 260
+    assert decision.message == (
+        "database rejected the change. refresh the schedule and retry. "
+        "if it keeps happening, contact an administrator."
+    )
     assert decision.notify_admin is True
 
 
@@ -98,5 +99,8 @@ def test_scheduler_save_error_policy_handles_non_diagnostic_sqlalchemy_errors():
 
     assert decision.source == "database"
     assert decision.code == "database_rejected"
-    assert decision.message == "database rejected the change: plain database failure"
+    assert decision.message == (
+        "database rejected the change. refresh the schedule and retry. "
+        "if it keeps happening, contact an administrator."
+    )
     assert decision.notify_admin is True

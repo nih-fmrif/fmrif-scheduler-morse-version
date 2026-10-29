@@ -166,29 +166,12 @@ def explain_scheduler_save_error(
     if fallback is not None:
         return fallback
 
-    message = _compact_detail(primary, detail, constraint)
-    if message:
-        return SchedulerSaveErrorPolicyDecision(
-            source="database",
-            code="database_rejected",
-            message=f"database rejected the change: {message}",
-            notify_admin=True,
-        )
-
-    text = str(orig or err).splitlines()[0].strip()
-    if text:
-        if len(text) > MAX_CLIENT_DB_DETAIL_CHARS:
-            text = f"{text[: MAX_CLIENT_DB_DETAIL_CHARS - 3].rstrip()}..."
-        return SchedulerSaveErrorPolicyDecision(
-            source="database",
-            code="database_rejected",
-            message=f"database rejected the change: {text}",
-            notify_admin=True,
-        )
-
     return SchedulerSaveErrorPolicyDecision(
         source="database",
         code="database_rejected",
-        message="database rejected the change. review the edited slot and retry.",
+        message=(
+            "database rejected the change. refresh the schedule and retry. "
+            "if it keeps happening, contact an administrator."
+        ),
         notify_admin=True,
     )

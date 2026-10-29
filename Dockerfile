@@ -2,7 +2,7 @@ FROM python:3.11.2-slim
 SHELL ["/bin/bash", "--login", "-c"]
 WORKDIR /app
 ENV IS_CONTAINER=1
-ARG PIXI_VERSION=0.56.0
+ARG PIXI_VERSION=0.66.0
 ENV PIXI_HOME=/root/.pixi
 ENV PATH="${PIXI_HOME}/bin:/app/.pixi/envs/default/bin:$PATH"
 

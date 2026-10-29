@@ -24,13 +24,15 @@ Targeted pytest runs still go through Pixi tasks:
 pixi run test-unit -- tests/unit/test_some_file.py -q
 pixi run test-unit-xdist -- tests/unit/test_some_file.py -q
 pixi run test-routes -- tests/unit/test_some_route_file.py -q
+pixi run test-routes-xdist -- tests/unit/test_some_route_file.py -q
 ```
 
 When explicit test selectors are supplied, the task drops its default collection
 root instead of widening scope.
-`test-unit-xdist` is opt-in for unit tests only; keep route tests on the default
-serial task unless worker-specific route isolation is being designed and
-validated.
+`test-unit-xdist` and `test-routes-xdist` use `--dist loadgroup` so Mailpit
+tests sharing one inbox stay on a single worker while the rest of the suite can
+parallelize. Prefer `test-routes-xdist` for the fast full route pass and keep
+`test-routes` as the serial fallback when debugging worker-specific behavior.
 
 Reuse existing services/data when iterating:
 

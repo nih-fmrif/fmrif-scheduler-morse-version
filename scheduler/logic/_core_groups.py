@@ -15,8 +15,8 @@ from scheduler.auth.test_session_state import get_auth_test_session_pi_groups
 
 from ._core_shared import Datalist
 from ._core_users import get_user
+from ._schedule_editor_reference import _clear_reference_data_cache
 from .rbac_audit_support import constraint_of
-from .schedule_editor import _clear_reference_data_cache
 
 
 def get_group(which: str) -> Optional[model.Group]:

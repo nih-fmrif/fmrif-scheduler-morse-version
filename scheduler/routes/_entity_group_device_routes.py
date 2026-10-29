@@ -7,6 +7,7 @@ from typing import Any, Callable
 from flask import abort, current_app, g, jsonify, render_template, request, url_for
 from sqlalchemy.exc import SQLAlchemyError
 
+import scheduler.logic.admin_issues as admin_issue_logic
 import scheduler.logic.core as core_logic
 import scheduler.logic.notifications as notification_logic
 import scheduler.logic.schedule_editor as logic
@@ -163,6 +164,14 @@ def device(the_device):
                 selection_groups = groups
 
     perms_json = {
+        "booking_edit": perms.edit,
+        "booking_edit_any": perms.edit_any,
+        "support_fulfillment": {
+            "tech": perms.tech,
+            "medical": perms.medical,
+            "training": perms.training,
+        },
+        # Legacy aliases retained while client code migrates.
         "edit": perms.edit,
         "edit_any": perms.edit_any,
         "tech": perms.tech,
@@ -242,6 +251,10 @@ def device(the_device):
                 }
             )
 
+        if len(diffs) == 0:
+            model.db.session.rollback()
+            return jsonify({"saved": 0, "notifications": [], "id_map": {}})
+
         xs, srs, when, errors = logic.verify_scheduler_diffs(
             diffs,
             entries,
@@ -274,6 +287,23 @@ def device(the_device):
         except SQLAlchemyError as err:
             model.db.session.rollback()
             row = _log_scheduler_save_database_error(err, phase="commit")
+            try:
+                admin_issue_logic.upsert_scheduler_save_failure_issue(
+                    err,
+                    actor=g.user.id,
+                    device_id=device.id,
+                    device_label=device.label,
+                    source=str(row["source"]),
+                    code=str(row["code"]),
+                    client_message=str(row["message"]),
+                    href=url_for("device", the_device=device.id),
+                )
+                model.db.session.commit()
+            except SQLAlchemyError:
+                model.db.session.rollback()
+                current_app.logger.exception(
+                    "Failed to persist admin issue for scheduler database rejection"
+                )
             client_ids = select_scheduler_error_client_ids(
                 err,
                 diff_contexts,
@@ -281,7 +311,7 @@ def device(the_device):
             )
             return jsonify({"errors": _build_error_map_for_client_ids(client_ids, row)})
         notification_results = notification_logic.send_scheduler_notifications(
-            device, notifications
+            device, notifications, actor=g.user.id
         )
         try:
             model.db.session.commit()
@@ -368,7 +398,7 @@ def device_schedule_rows(the_device):
         abort(400, "hours query parameter may include at most 12 rows per request")
 
     support = logic.SupportRequestDatalists([], [], [])
-    if device.active and perms.edit:
+    if device.active and (perms.edit or perms.tech or perms.medical or perms.training):
         support = logic.support_request_datalists(device)
 
     entries = logic.schedule_for_hours(device, date, end_date, hours)

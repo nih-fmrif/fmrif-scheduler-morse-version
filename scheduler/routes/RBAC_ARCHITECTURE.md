@@ -9,6 +9,8 @@ This directory uses a small set of focused modules for RBAC behavior.
   - Thin HTTP orchestration only.
 - `rbac_explorer.py`
   - RBAC explorer actor/scope/entity/detail payload shaping.
+- `_rbac_explorer_payloads.py`
+  - Shared TypedDict payload shapes and row builder helpers for explorer responses.
 - `rbac_audit.py`
   - Audit feed query + payload normalization helpers.
 - `rbac_issues.py`

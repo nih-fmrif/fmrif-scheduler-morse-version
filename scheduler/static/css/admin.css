@@ -572,8 +572,8 @@ entry-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   background-color: color-mix(
@@ -590,8 +590,8 @@ entry-status {
 }
 
 .status-token svg {
-  width: 0.82rem;
-  height: 0.82rem;
+  width: 0.92rem;
+  height: 0.92rem;
 }
 
 .status-token-pending {
@@ -611,16 +611,16 @@ entry-status {
   color: color-mix(in srgb, var(--muted) 78%, var(--fg) 22%);
   background-color: color-mix(
     in srgb,
-    var(--surface-muted) 68%,
-    var(--surface) 32%
+    var(--surface-muted) 76%,
+    var(--surface) 24%
   );
-  border-color: color-mix(in srgb, var(--muted) 34%, var(--border) 66%);
+  border-color: color-mix(in srgb, var(--muted) 44%, var(--border) 56%);
 }
 
 .status-token-support {
   color: color-mix(in srgb, var(--link) 78%, var(--fg) 22%);
-  background-color: color-mix(in srgb, var(--link) 10%, var(--surface) 90%);
-  border-color: color-mix(in srgb, var(--link) 34%, var(--border) 66%);
+  background-color: color-mix(in srgb, var(--link) 18%, var(--surface) 82%);
+  border-color: color-mix(in srgb, var(--link) 46%, var(--border) 54%);
 }
 
 .status-token-used {
@@ -1952,58 +1952,68 @@ nav.jump-form button[type="submit"] {
 }
 
 .legend-toggle-icon svg {
-  width: 0.8rem;
-  height: 0.8rem;
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .legend-content {
-  margin: 0.4rem 0 0;
+  margin: 0.25rem 0 0;
+  display: grid;
+  gap: 1rem;
 }
 
-.legend-content > div {
-  margin-top: 0.6rem;
+.legend-section h2 {
+  margin: 0 0 0.45rem;
+  font-size: 0.98rem;
 }
 
-.legend-content > div:first-of-type {
-  margin-top: 0;
-}
-
-.legend-content dl {
+.legend-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.52rem;
 }
 
-.legend-content dl dl {
-  border-left: 1px solid currentColor;
-  padding-left: 0.4rem;
+.legend-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem;
 }
 
-.legend-content dl dl div {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
+.legend-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem;
 }
 
-.legend-content dl dl dt {
-  flex-grow: 0;
+.legend-item-icon .status-token {
+  width: 1.66rem;
+  height: 1.66rem;
 }
 
-.legend-content dl dl dd {
+.legend-item-icon .status-token svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.legend-item-copy {
   margin: 0;
+  line-height: 1.4;
 }
 
-.legend-content dt {
-  font-weight: bold;
-}
-
-.legend-content dd {
-  margin: 0.05rem 0 0;
+#legend-dialog-container .dialog-box-container {
+  width: min(46rem, calc(100vw - 2rem));
+  max-width: 46rem;
 }
 
 .legend-inline-swatch,
 .legend-inline-band {
   display: inline-block;
-  width: 1rem;
-  height: 1.45rem;
+  width: 1.15rem;
+  height: 1.6rem;
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent 16%);
   border-radius: 0.38rem;
   background-color: var(--surface);
@@ -2357,13 +2367,48 @@ button#expando .detail {
 
 .inspector-slot-editor entry-support > fieldset {
   border: 1px solid var(--border);
-  border-radius: 0.52rem;
-  background-color: var(--surface);
-  padding: 0.42rem 0.54rem;
+  border-radius: 0.72rem;
+  background-color: color-mix(
+    in srgb,
+    var(--surface) 90%,
+    var(--surface-muted) 10%
+  );
+  padding: 0.65rem 0.72rem;
+  display: grid;
+  gap: 0.55rem;
 }
 
 .inspector-slot-editor entry-support > fieldset:disabled {
-  opacity: 0.78;
+  opacity: 0.92;
+}
+
+.inspector-slot-editor .support-card > legend {
+  font-weight: 700;
+}
+
+.inspector-slot-editor .support-card-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.inspector-slot-editor .support-card-request {
+  margin: 0;
+}
+
+.inspector-slot-editor .support-card-subkind {
+  margin: 0;
+  border: 1px dashed color-mix(in srgb, var(--border) 78%, transparent 22%);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.58rem;
+}
+
+.inspector-slot-editor .support-card-subkind legend {
+  font-weight: 700;
+}
+
+.inspector-slot-editor .support-card-handler {
+  margin: 0;
 }
 
 .inspector-slot-editor [type="text"],
@@ -2459,6 +2504,19 @@ nav.jump-form form {
   flex: 1 1 auto;
 }
 
+.jump-nav-pair {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0.42rem;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
+
+.jump-nav-pair > .jump-arrow-button {
+  align-self: stretch;
+}
+
 .jump-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2515,6 +2573,10 @@ nav.jump-form form {
   .editor-inspector-actions {
     margin-left: 0;
     width: 100%;
+  }
+
+  .jump-nav-pair {
+    margin-left: 0;
   }
 
   .template-option-list {

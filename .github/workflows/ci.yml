@@ -39,7 +39,7 @@ jobs:
         run: pixi run test-unit
 
       - name: Run Python route tests
-        run: pixi run test-routes
+        run: pixi run test-routes-xdist
 
       - name: Export coverage XML
         run: pixi run -e dev python -m coverage xml -o coverage.xml

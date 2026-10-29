@@ -1,4 +1,5 @@
 import datetime
+import socket
 import time
 import uuid
 from contextlib import contextmanager
@@ -28,8 +29,15 @@ from sqlalchemy import func, select
 import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
 from scheduler import model
+from scheduler.logic.admin_issues import scheduler_notification_issue_key
 
-pytestmark = pytest.mark.route
+pytestmark = [pytest.mark.route, pytest.mark.xdist_group("mailpit")]
+
+
+def _unused_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def _require_mailpit():
@@ -114,6 +122,10 @@ def _support_request_count(entry_id: int, supportkind: int) -> int:
         )
         or 0
     )
+
+
+def _notification_incident(issue_key: str) -> model.NotificationIncident | None:
+    return model.db.session.get(model.NotificationIncident, issue_key)
 
 
 def _active_inst_id() -> str:
@@ -239,9 +251,11 @@ def test_device_schedule_post_delivers_support_notifications_to_mailpit(
             assert response.status_code == 200
             payload = response.get_json()
             assert payload is not None
-            assert sorted(payload["notifications"], key=lambda note: note["key"]) == [
-                {"key": "medical", "msg": "success"},
-                {"key": "schedule", "msg": "success"},
+            assert sorted(
+                [(note["key"], note["status"]) for note in payload["notifications"]]
+            ) == [
+                ("medical", "success"),
+                ("schedule", "success"),
             ]
             _wait_for_mail_count(cfg, expected=2)
 
@@ -343,9 +357,11 @@ def test_device_schedule_post_formats_medical_handler_state_changes(
             assert response.status_code == 200
             payload = response.get_json()
             assert payload is not None
-            assert sorted(payload["notifications"], key=lambda note: note["key"]) == [
-                {"key": "medical", "msg": "success"},
-                {"key": "schedule", "msg": "success"},
+            assert sorted(
+                [(note["key"], note["status"]) for note in payload["notifications"]]
+            ) == [
+                ("medical", "success"),
+                ("schedule", "success"),
             ]
 
             medical_detail = _mailpit_message_for_recipient(
@@ -412,6 +428,74 @@ def test_device_schedule_post_notify_false_suppresses_support_emails(
 
 
 @pytest.mark.covers_route("/device/<the_device>", "POST")
+def test_device_schedule_post_marks_suppressed_notifications_skipped_without_smtp_network_activity(
+    route_app, route_client, route_app_context
+):
+    cfg = _require_mailpit()
+    ensure_admin_user()
+    set_admin_session(route_client)
+    device_id, _group_id, _member_id, entry_id = _notification_fixture(
+        medical_addr="route-medical@example.com"
+    )
+    slot_date = datetime.date(2035, 2, 24)
+    unreachable_smtp_port = _unused_local_port()
+
+    clear_mailpit_messages(cfg)
+    try:
+        with _route_mail_config(
+            route_app,
+            MAIL_SERVER="127.0.0.1",
+            MAIL_PORT=unreachable_smtp_port,
+            MAIL_USE_TLS=False,
+            MAIL_USE_SSL=False,
+            MAIL_SUPPRESS_SEND=True,
+        ):
+            response = _post_scheduler_payload(
+                route_client,
+                device_id,
+                slot_date,
+                {
+                    "diffs": [{"id": entry_id, "med": {"requested": True}}],
+                    "notify": True,
+                },
+            )
+
+            assert response.status_code == 200
+            payload = response.get_json()
+            assert payload is not None
+            assert sorted(payload["notifications"], key=lambda note: note["key"]) == [
+                {
+                    "key": "medical",
+                    "status": "skipped",
+                    "message": "Medical support notification delivery was suppressed.",
+                    "msg": "skipped",
+                },
+                {
+                    "key": "schedule",
+                    "status": "skipped",
+                    "message": "Schedule notification delivery was suppressed.",
+                    "msg": "skipped",
+                },
+            ]
+            assert list_mailpit_messages(cfg) == []
+
+            audit_rows = _email_audit_rows(
+                model.EmailAuditLog.action == "email.scheduler.notification",
+                model.EmailAuditLog.details.like(f"%device={device_id}%"),
+            )
+            assert len(audit_rows) == 2
+            assert {row.recipient for row in audit_rows} == {
+                f"{device_id.lower()}-schedule@example.com",
+                "route-medical@example.com",
+            }
+            assert all(
+                row.status == logic.EMAIL_AUDIT_STATUS_SKIPPED for row in audit_rows
+            )
+    finally:
+        clear_mailpit_messages(cfg)
+
+
+@pytest.mark.covers_route("/device/<the_device>", "POST")
 def test_device_schedule_post_reports_missing_support_address_without_false_send(
     route_app, route_client, route_app_context
 ):
@@ -444,9 +528,11 @@ def test_device_schedule_post_reports_missing_support_address_without_false_send
             assert response.status_code == 200
             payload = response.get_json()
             assert payload is not None
-            assert sorted(payload["notifications"], key=lambda note: note["key"]) == [
-                {"key": "medical", "msg": "address"},
-                {"key": "schedule", "msg": "success"},
+            assert sorted(
+                [(note["key"], note["status"]) for note in payload["notifications"]]
+            ) == [
+                ("medical", "missing_recipient"),
+                ("schedule", "success"),
             ]
             _wait_for_mail_count(cfg, expected=1)
 
@@ -464,6 +550,14 @@ def test_device_schedule_post_reports_missing_support_address_without_false_send
                 audit_rows[0].recipient == f"{device_id.lower()}-schedule@example.com"
             )
             assert "stream=schedule" in audit_rows[0].details
+            incident = _notification_incident(
+                scheduler_notification_issue_key(
+                    device_id, "medical", "missing_recipient"
+                )
+            )
+            assert incident is not None
+            assert incident.active is True
+            assert incident.state == "open"
         finally:
             clear_mailpit_messages(cfg)
 

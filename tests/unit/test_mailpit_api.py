@@ -15,6 +15,8 @@ from mailpit_api import (
     wait_for_mailpit_message,
 )
 
+pytestmark = pytest.mark.xdist_group("mailpit")
+
 
 @contextmanager
 def _env_override(

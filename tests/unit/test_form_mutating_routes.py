@@ -79,7 +79,7 @@ def _route_mail_config(route_app, **mail_updates) -> Iterator[None]:
         scheduler_message.mailer.init_app(route_app)
 
 
-pytestmark = pytest.mark.route
+pytestmark = [pytest.mark.route, pytest.mark.xdist_group("mailpit")]
 
 
 @pytest.mark.covers_route("/mailing-lists", "POST")

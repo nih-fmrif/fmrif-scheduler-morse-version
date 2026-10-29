@@ -12,6 +12,30 @@ import scheduler.logic.rbac_audit_support as audit_logic
 from scheduler import model
 from scheduler.auth.test_session_state import get_auth_test_session_pi_groups
 
+from ._rbac_explorer_payloads import (
+    RbacActor,
+    RbacDetail,
+    RbacEntityOption,
+    RbacGraphNode,
+    RbacKeyValueRow,
+    RbacMatrix,
+    RbacMatrixRow,
+    RbacQuickAddConfig,
+    RbacSelectOption,
+    RbacTable,
+    RbacTableAction,
+    RbacTableRow,
+    build_entity_option,
+    build_graph_focus,
+    build_graph_node,
+    build_keyvalue_row,
+    build_matrix_row,
+    build_rbac_actor,
+    build_select_option,
+    build_table_action,
+    build_table_row,
+)
+
 _RBAC_SCOPE_LABELS: Dict[str, str] = {
     "group": "groups",
     "device": "devices",
@@ -21,28 +45,27 @@ _RBAC_AUDIT_SCOPE_LABELS: Dict[str, str] = {
     "all": "all",
     **_RBAC_SCOPE_LABELS,
 }
-_RBAC_EMAIL_STATUS_OPTIONS: List[Dict[str, str]] = [
-    {"value": audit_logic.EMAIL_STATUS_NONE, "label": audit_logic.EMAIL_STATUS_NONE},
-    {"value": audit_logic.EMAIL_STATUS_SENT, "label": audit_logic.EMAIL_STATUS_SENT},
-    {
-        "value": audit_logic.EMAIL_STATUS_FAILED,
-        "label": audit_logic.EMAIL_STATUS_FAILED,
-    },
+_RBAC_EMAIL_STATUS_OPTIONS: List[RbacSelectOption] = [
+    build_select_option(
+        value=audit_logic.EMAIL_STATUS_NONE,
+        label=audit_logic.EMAIL_STATUS_NONE,
+    ),
+    build_select_option(
+        value=audit_logic.EMAIL_STATUS_SENT,
+        label=audit_logic.EMAIL_STATUS_SENT,
+    ),
+    build_select_option(
+        value=audit_logic.EMAIL_STATUS_FAILED,
+        label=audit_logic.EMAIL_STATUS_FAILED,
+    ),
 ]
 _RBAC_GRAPH_NODE_LIMIT = 12
 _RBAC_TABLE_ROW_LIMIT = 250
 _RBAC_MATRIX_ROW_LIMIT = 500
 
 
-def _rbac_actor(user: Optional[model.User]) -> Dict[str, Any]:
-    actor: Dict[str, Any] = {
-        "id": user.id if user is not None else "",
-        "is_admin": False,
-        "is_dev_pi": False,
-        "managed_groups": set(),
-        "allowed_scopes": [],
-        "can_access": False,
-    }
+def _rbac_actor(user: Optional[model.User]) -> RbacActor:
+    actor = build_rbac_actor(actor_id=user.id if user is not None else "")
     if user is None or not user.active:
         return actor
 
@@ -97,7 +120,7 @@ def _rbac_actor(user: Optional[model.User]) -> Dict[str, Any]:
     return actor
 
 
-def _rbac_actor_scope_labels(actor: Dict[str, Any]) -> Dict[str, str]:
+def _rbac_actor_scope_labels(actor: RbacActor) -> Dict[str, str]:
     allowed = actor.get("allowed_scopes", [])
     if not isinstance(allowed, list) or len(allowed) == 0:
         return {}
@@ -108,21 +131,21 @@ def _rbac_actor_scope_labels(actor: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def _rbac_actor_allows_scope(actor: Dict[str, Any], scope: str) -> bool:
+def _rbac_actor_allows_scope(actor: RbacActor, scope: str) -> bool:
     allowed = actor.get("allowed_scopes", [])
     if not isinstance(allowed, list):
         return False
     return scope in allowed
 
 
-def _rbac_actor_managed_groups(actor: Dict[str, Any]) -> Set[str]:
+def _rbac_actor_managed_groups(actor: RbacActor) -> Set[str]:
     groups = actor.get("managed_groups", set())
     if isinstance(groups, set):
         return groups
     return set()
 
 
-def _rbac_href_allowed_for_actor(href: str, actor: Dict[str, Any]) -> bool:
+def _rbac_href_allowed_for_actor(href: str, actor: RbacActor) -> bool:
     target = (href or "").strip()
     if target == "":
         return True
@@ -169,20 +192,20 @@ def _rbac_user_label(user: model.User) -> str:
 
 
 def _rbac_slice_graph_nodes(
-    entries: List[Dict[str, str]],
+    entries: List[RbacGraphNode],
     *,
     limit: int = _RBAC_GRAPH_NODE_LIMIT,
-) -> Tuple[List[Dict[str, str]], int]:
+) -> Tuple[List[RbacGraphNode], int]:
     if len(entries) <= limit:
         return entries, 0
     return entries[:limit], len(entries) - limit
 
 
 def _rbac_limit_rows(
-    rows: List[Dict[str, Any]],
+    rows: List[Any],
     *,
     limit: int = _RBAC_TABLE_ROW_LIMIT,
-) -> Tuple[List[Dict[str, Any]], int]:
+) -> Tuple[List[Any], int]:
     if len(rows) <= limit:
         return rows, 0
     return rows[:limit], len(rows) - limit
@@ -202,7 +225,7 @@ def _rbac_entities(
     scope: str,
     *,
     include_inactive: bool = False,
-) -> List[Dict[str, Any]]:
+) -> List[RbacEntityOption]:
     if scope == "group":
         statement = (
             select(model.Group)
@@ -213,11 +236,11 @@ def _rbac_entities(
             statement = statement.where(model.Group.active)
         groups = model.db.session.scalars(statement).all()
         return [
-            {
-                "id": group.id,
-                "label": _rbac_group_label(group),
-                "active": bool(group.active),
-            }
+            build_entity_option(
+                entity_id=group.id,
+                label=_rbac_group_label(group),
+                active=bool(group.active),
+            )
             for group in groups
         ]
 
@@ -233,11 +256,11 @@ def _rbac_entities(
             statement = statement.where(model.Device.active)
         devices = model.db.session.scalars(statement).all()
         return [
-            {
-                "id": device.id,
-                "label": _rbac_device_label(device),
-                "active": bool(device.active),
-            }
+            build_entity_option(
+                entity_id=device.id,
+                label=_rbac_device_label(device),
+                active=bool(device.active),
+            )
             for device in devices
         ]
 
@@ -251,11 +274,11 @@ def _rbac_entities(
             statement = statement.where(model.User.active)
         users = model.db.session.scalars(statement).all()
         return [
-            {
-                "id": user.id,
-                "label": _rbac_user_label(user),
-                "active": bool(user.active),
-            }
+            build_entity_option(
+                entity_id=user.id,
+                label=_rbac_user_label(user),
+                active=bool(user.active),
+            )
             for user in users
         ]
 
@@ -264,10 +287,10 @@ def _rbac_entities(
 
 def _rbac_entities_for_actor(
     scope: str,
-    actor: Dict[str, Any],
+    actor: RbacActor,
     *,
     include_inactive: bool = False,
-) -> List[Dict[str, Any]]:
+) -> List[RbacEntityOption]:
     if not _rbac_actor_allows_scope(actor, scope):
         return []
 
@@ -288,11 +311,11 @@ def _rbac_entities_for_actor(
             statement = statement.where(model.Group.active)
         groups = model.db.session.scalars(statement).all()
         return [
-            {
-                "id": group.id,
-                "label": _rbac_group_label(group),
-                "active": bool(group.active),
-            }
+            build_entity_option(
+                entity_id=group.id,
+                label=_rbac_group_label(group),
+                active=bool(group.active),
+            )
             for group in groups
         ]
 
@@ -310,11 +333,11 @@ def _rbac_entities_for_actor(
             statement = statement.where(model.Device.active)
         devices = model.db.session.scalars(statement).all()
         return [
-            {
-                "id": device.id,
-                "label": _rbac_device_label(device),
-                "active": bool(device.active),
-            }
+            build_entity_option(
+                entity_id=device.id,
+                label=_rbac_device_label(device),
+                active=bool(device.active),
+            )
             for device in devices
         ]
 
@@ -345,7 +368,7 @@ def _rbac_entity_visible(scope: str, entity: str, *, include_inactive: bool) -> 
 def _rbac_entity_visible_for_actor(
     scope: str,
     entity: str,
-    actor: Dict[str, Any],
+    actor: RbacActor,
     *,
     include_inactive: bool,
 ) -> bool:
@@ -395,15 +418,15 @@ def _rbac_select_option(
     label: str,
     *,
     meta: str = "",
-) -> Dict[str, str]:
-    return {"value": value, "label": label, "meta": meta}
+) -> RbacSelectOption:
+    return build_select_option(value=value, label=label, meta=meta)
 
 
 def _rbac_group_detail(
     group: model.Group,
     *,
     include_inactive: bool = False,
-) -> Dict[str, Any]:
+) -> RbacDetail:
     memberships_statement = (
         select(model.Membership)
         .options(
@@ -438,8 +461,8 @@ def _rbac_group_detail(
     membership_by_user = {row.user: row for row in memberships}
     linked_device_ids = {device.id for device in devices}
 
-    member_nodes: List[Dict[str, str]] = []
-    member_rows: List[Dict[str, Any]] = []
+    member_nodes: List[RbacGraphNode] = []
+    member_rows: List[RbacTableRow] = []
     for row in memberships:
         status = "approved" if row.approved else "pending"
         tags = [status]
@@ -451,52 +474,52 @@ def _rbac_group_detail(
             tags.append("inactive group")
         meta = ", ".join(tags)
         member_nodes.append(
-            {
-                "label": row.user,
-                "meta": meta,
-                "href": url_for("rbac", scope="user", entity=row.user),
-            }
+            build_graph_node(
+                label=row.user,
+                meta=meta,
+                href=url_for("rbac", scope="user", entity=row.user),
+            )
         )
         member_rows.append(
-            {
-                "cells": {
+            build_table_row(
+                cells={
                     "user": row.user,
                     "status": status,
                     "pi": _rbac_badge(bool(row.pi)),
                     "user_state": _rbac_state(bool(row.user_active)),
                 },
-                "actions": [
-                    {
-                        "label": "inspect user",
-                        "href": url_for("rbac", scope="user", entity=row.user),
-                    }
+                actions=[
+                    build_table_action(
+                        label="inspect user",
+                        href=url_for("rbac", scope="user", entity=row.user),
+                    )
                 ],
-            }
+            )
         )
 
-    device_nodes: List[Dict[str, str]] = []
-    device_rows: List[Dict[str, Any]] = []
+    device_nodes: List[RbacGraphNode] = []
+    device_rows: List[RbacTableRow] = []
     for device in devices:
         device_nodes.append(
-            {
-                "label": _rbac_device_label(device),
-                "meta": _rbac_state(bool(device.active)),
-                "href": url_for("rbac", scope="device", entity=device.id),
-            }
+            build_graph_node(
+                label=_rbac_device_label(device),
+                meta=_rbac_state(bool(device.active)),
+                href=url_for("rbac", scope="device", entity=device.id),
+            )
         )
         device_rows.append(
-            {
-                "cells": {
+            build_table_row(
+                cells={
                     "device": _rbac_device_label(device),
                     "status": _rbac_state(bool(device.active)),
                 },
-                "actions": [
-                    {
-                        "label": "inspect device",
-                        "href": url_for("rbac", scope="device", entity=device.id),
-                    },
+                actions=[
+                    build_table_action(
+                        label="inspect device",
+                        href=url_for("rbac", scope="device", entity=device.id),
+                    ),
                 ],
-            }
+            )
         )
 
     all_devices_statement = (
@@ -507,28 +530,28 @@ def _rbac_group_detail(
     if not include_inactive:
         all_devices_statement = all_devices_statement.where(model.Device.active)
     all_devices = model.db.session.scalars(all_devices_statement).all()
-    device_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
+    device_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], RbacMatrixRow]] = []
     for device in all_devices:
         linked = device.id in linked_device_ids
         can_link = bool(group.active) and (linked or bool(group.department))
-        row = {
-            "id": device.id,
-            "search": (
+        row = build_matrix_row(
+            row_id=device.id,
+            search=(
                 f"{device.id} {_rbac_device_label(device)} "
                 f"{_rbac_state(bool(device.active))}"
             ),
-            "cells": {
+            cells={
                 "device": _rbac_device_label(device),
                 "device_state": _rbac_state(bool(device.active)),
             },
-            "values": {"linked": linked},
-            "editable": {"linked": can_link},
-            "operation": {
+            values={"linked": linked},
+            editable={"linked": can_link},
+            operation={
                 "kind": "device.group.set",
                 "group": group.id,
                 "device": device.id,
             },
-        }
+        )
         rank = (
             0 if linked else 1,
             0 if device.active else 1,
@@ -557,14 +580,14 @@ def _rbac_group_detail(
     pi_option_ids = list(eligible_pi_user_ids)
     if current_pi_user != "" and current_pi_user not in pi_option_ids:
         pi_option_ids.append(current_pi_user)
-    pi_options = []
+    pi_options: List[RbacSelectOption] = []
     for user_id in pi_option_ids:
         label = user_id
         if user_id == current_pi_user and user_id not in eligible_pi_user_ids:
             label = f"{user_id} [current, not eligible]"
-        pi_options.append({"value": user_id, "label": label})
+        pi_options.append(build_select_option(value=user_id, label=label))
 
-    membership_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
+    membership_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], RbacMatrixRow]] = []
     for user in all_users:
         membership = membership_by_user.get(user.id)
         if membership is None and not user.active:
@@ -580,33 +603,33 @@ def _rbac_group_detail(
         status = "not member"
         if is_member:
             status = "approved" if approved else "pending"
-        row = {
-            "id": user.id,
-            "search": (
+        row = build_matrix_row(
+            row_id=user.id,
+            search=(
                 f"{user.id} {_rbac_user_label(user)} {status} "
                 f"{_rbac_state(bool(user.active))} {email_status}"
             ),
-            "cells": {
+            cells={
                 "user": _rbac_user_label(user),
                 "user_state": _rbac_state(bool(user.active)),
                 "pi": _rbac_badge(pi),
             },
-            "values": {
+            values={
                 "member": is_member,
                 "approved": approved,
                 "email_status": email_status,
             },
-            "editable": {
+            editable={
                 "member": bool(group.active and (user.active or is_member)),
                 "approved": bool(group.active and user.active and is_member),
                 "email_status": bool(group.active and is_member and not approved),
             },
-            "operation": {
+            operation={
                 "kind": "group.membership.set",
                 "group": group.id,
                 "user": user.id,
             },
-        }
+        )
         rank = (
             0 if is_member else 1,
             0 if approved else 1,
@@ -637,14 +660,211 @@ def _rbac_group_detail(
         .order_by(model.Inst.label, model.Inst.id)
     )
     institutes = model.db.session.scalars(institute_statement).all()
-    inst_options = [{"value": "", "label": "none"}]
+    inst_options: List[RbacSelectOption] = [build_select_option(value="", label="none")]
     for inst in institutes:
         label = inst.label
         if label != inst.id:
             label = f"{inst.label} ({inst.id})"
         if not inst.active:
             label = f"{label} [inactive]"
-        inst_options.append({"value": inst.id, "label": label})
+        inst_options.append(build_select_option(value=inst.id, label=label))
+
+    group_settings_rows: List[RbacKeyValueRow] = [
+        build_keyvalue_row(
+            row_id=f"{group.id}-label",
+            search=f"{group.id} label {_rbac_group_label(group)}",
+            label="short label",
+            kind="input",
+            input_type="text",
+            max_length=20,
+            field="label",
+            value=group.label or "",
+            editable=True,
+            operation={"kind": "group.meta.set", "group": group.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-description",
+            search=f"{group.id} description {_rbac_group_label(group)}",
+            label="long label",
+            kind="input",
+            input_type="text",
+            max_length=75,
+            field="description",
+            value=group.description or "",
+            editable=True,
+            operation={"kind": "group.meta.set", "group": group.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-addr",
+            search=f"{group.id} email {_rbac_group_label(group)}",
+            label="email",
+            kind="input",
+            input_type="text",
+            field="addr",
+            value=group.addr or "",
+            editable=True,
+            operation={"kind": "group.meta.set", "group": group.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-link",
+            search=f"{group.id} link {_rbac_group_label(group)}",
+            label="link",
+            kind="input",
+            input_type="url",
+            field="link",
+            value=group.link or "",
+            editable=True,
+            operation={"kind": "group.meta.set", "group": group.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-color",
+            search=f"{group.id} color {_rbac_group_label(group)}",
+            label="legend color",
+            kind="input",
+            input_type="color",
+            field="color",
+            value=group.color or "#000000",
+            editable=not special_group,
+            operation={"kind": "group.meta.set", "group": group.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-inst",
+            search=f"{group.id} institute {_rbac_group_label(group)}",
+            label="institute",
+            kind="select",
+            field="inst",
+            value=group.inst or "",
+            options=inst_options,
+            editable=not special_group,
+            operation={"kind": "group.meta.set", "group": group.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-pi",
+            search=f"{group.id} pi {_rbac_group_label(group)}",
+            label="PI user",
+            kind="select",
+            field="user",
+            value=current_pi_user,
+            options=pi_options,
+            editable=bool(group.active and len(eligible_pi_user_ids) > 0),
+            operation={
+                "kind": "group.pi.set",
+                "group": group.id,
+                "expected_current_pi": current_pi_user,
+            },
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-active",
+            search=f"{group.id} active {_rbac_group_label(group)}",
+            label="active",
+            kind="checkbox",
+            field="active",
+            value=bool(group.active),
+            editable=can_toggle_active,
+            operation={"kind": "group.meta.set", "group": group.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-membership-enabled",
+            search=f"{group.id} membership-enabled {_rbac_group_label(group)}",
+            label="membership-enabled",
+            kind="checkbox",
+            value=bool(group.has_membership),
+            editable=False,
+        ),
+        build_keyvalue_row(
+            row_id=f"{group.id}-joinable",
+            search=f"{group.id} joinable {_rbac_group_label(group)}",
+            label="joinable",
+            kind="checkbox",
+            value=bool(group.is_joinable),
+            editable=False,
+        ),
+    ]
+
+    tables: List[RbacTable] = [
+        {
+            "title": "members",
+            "empty": "No members found for this group.",
+            "more": member_more,
+            "columns": [
+                {"key": "user", "label": "user"},
+                {"key": "status", "label": "status"},
+                {"key": "pi", "label": "pi"},
+                {"key": "user_state", "label": "user state"},
+            ],
+            "rows": member_rows,
+        },
+        {
+            "title": "device links",
+            "empty": "No devices linked to this group.",
+            "more": device_more,
+            "columns": [
+                {"key": "device", "label": "device"},
+                {"key": "status", "label": "device status"},
+            ],
+            "rows": device_rows,
+        },
+    ]
+    matrices: List[RbacMatrix] = [
+        {
+            "id": "group-metadata-matrix",
+            "title": "group settings",
+            "description": status_note,
+            "empty": "Group metadata unavailable.",
+            "apply_label": "apply group settings",
+            "confirm": f"Apply metadata updates for {group.id}?",
+            "more": 0,
+            "filter": False,
+            "layout": "keyvalue",
+            "rows": group_settings_rows,
+        },
+        {
+            "id": "group-membership-matrix",
+            "title": "membership state",
+            "description": (
+                "Edit member and approval state. "
+                "PI assignment is managed in group settings."
+            ),
+            "empty": "No users found for this group.",
+            "apply_label": "apply membership updates",
+            "confirm": f"Apply membership updates for {group.id}?",
+            "more": membership_matrix_more,
+            "columns": [
+                {"key": "user", "label": "user", "kind": "text"},
+                {"key": "user_state", "label": "user state", "kind": "text"},
+                {"key": "member", "label": "member", "kind": "checkbox"},
+                {"key": "approved", "label": "approved", "kind": "checkbox"},
+                {
+                    "key": "email_status",
+                    "label": "email",
+                    "kind": "select",
+                    "options": _RBAC_EMAIL_STATUS_OPTIONS,
+                },
+                {"key": "pi", "label": "PI", "kind": "text"},
+            ],
+            "rows": membership_matrix_rows,
+            "behavior": "group-membership",
+        },
+        {
+            "id": "group-device-links-matrix",
+            "title": "linked devices",
+            "description": "Tick devices that should remain linked to this group.",
+            "empty": "No devices found.",
+            "apply_label": "apply device links",
+            "confirm": f"Apply device link updates for {group.id}?",
+            "more": device_matrix_more,
+            "columns": [
+                {"key": "device", "label": "device", "kind": "text"},
+                {
+                    "key": "device_state",
+                    "label": "device state",
+                    "kind": "text",
+                },
+                {"key": "linked", "label": "linked", "kind": "checkbox"},
+            ],
+            "rows": device_matrix_rows,
+        },
+    ]
 
     return {
         "summary": {
@@ -660,213 +880,14 @@ def _rbac_group_detail(
         "graph": {
             "source_title": "members",
             "target_title": "linked devices",
-            "focus": {
-                "label": _rbac_group_label(group),
-                "href": "",
-            },
+            "focus": build_graph_focus(label=_rbac_group_label(group)),
             "sources": left_nodes,
             "targets": right_nodes,
             "source_more": left_more,
             "target_more": right_more,
         },
-        "tables": [
-            {
-                "title": "members",
-                "empty": "No members found for this group.",
-                "more": member_more,
-                "columns": [
-                    {"key": "user", "label": "user"},
-                    {"key": "status", "label": "status"},
-                    {"key": "pi", "label": "pi"},
-                    {"key": "user_state", "label": "user state"},
-                ],
-                "rows": member_rows,
-            },
-            {
-                "title": "device links",
-                "empty": "No devices linked to this group.",
-                "more": device_more,
-                "columns": [
-                    {"key": "device", "label": "device"},
-                    {"key": "status", "label": "device status"},
-                ],
-                "rows": device_rows,
-            },
-        ],
-        "matrices": [
-            {
-                "id": "group-metadata-matrix",
-                "title": "group settings",
-                "description": status_note,
-                "empty": "Group metadata unavailable.",
-                "apply_label": "apply group settings",
-                "confirm": f"Apply metadata updates for {group.id}?",
-                "more": 0,
-                "filter": False,
-                "layout": "keyvalue",
-                "rows": [
-                    {
-                        "id": f"{group.id}-label",
-                        "search": f"{group.id} label {_rbac_group_label(group)}",
-                        "label": "short label",
-                        "kind": "input",
-                        "input_type": "text",
-                        "max_length": 20,
-                        "field": "label",
-                        "value": group.label or "",
-                        "editable": True,
-                        "operation": {"kind": "group.meta.set", "group": group.id},
-                    },
-                    {
-                        "id": f"{group.id}-description",
-                        "search": f"{group.id} description {_rbac_group_label(group)}",
-                        "label": "long label",
-                        "kind": "input",
-                        "input_type": "text",
-                        "max_length": 75,
-                        "field": "description",
-                        "value": group.description or "",
-                        "editable": True,
-                        "operation": {"kind": "group.meta.set", "group": group.id},
-                    },
-                    {
-                        "id": f"{group.id}-addr",
-                        "search": f"{group.id} email {_rbac_group_label(group)}",
-                        "label": "email",
-                        "kind": "input",
-                        "input_type": "text",
-                        "field": "addr",
-                        "value": group.addr or "",
-                        "editable": True,
-                        "operation": {"kind": "group.meta.set", "group": group.id},
-                    },
-                    {
-                        "id": f"{group.id}-link",
-                        "search": f"{group.id} link {_rbac_group_label(group)}",
-                        "label": "link",
-                        "kind": "input",
-                        "input_type": "url",
-                        "field": "link",
-                        "value": group.link or "",
-                        "editable": True,
-                        "operation": {"kind": "group.meta.set", "group": group.id},
-                    },
-                    {
-                        "id": f"{group.id}-color",
-                        "search": f"{group.id} color {_rbac_group_label(group)}",
-                        "label": "legend color",
-                        "kind": "input",
-                        "input_type": "color",
-                        "field": "color",
-                        "value": group.color or "#000000",
-                        "editable": not special_group,
-                        "operation": {"kind": "group.meta.set", "group": group.id},
-                    },
-                    {
-                        "id": f"{group.id}-inst",
-                        "search": f"{group.id} institute {_rbac_group_label(group)}",
-                        "label": "institute",
-                        "kind": "select",
-                        "field": "inst",
-                        "value": group.inst or "",
-                        "options": inst_options,
-                        "editable": not special_group,
-                        "operation": {"kind": "group.meta.set", "group": group.id},
-                    },
-                    {
-                        "id": f"{group.id}-pi",
-                        "search": f"{group.id} pi {_rbac_group_label(group)}",
-                        "label": "PI user",
-                        "kind": "select",
-                        "field": "user",
-                        "value": current_pi_user,
-                        "options": pi_options,
-                        "editable": bool(
-                            group.active and len(eligible_pi_user_ids) > 0
-                        ),
-                        "operation": {
-                            "kind": "group.pi.set",
-                            "group": group.id,
-                            "expected_current_pi": current_pi_user,
-                        },
-                    },
-                    {
-                        "id": f"{group.id}-active",
-                        "search": f"{group.id} active {_rbac_group_label(group)}",
-                        "label": "active",
-                        "kind": "checkbox",
-                        "field": "active",
-                        "value": bool(group.active),
-                        "editable": can_toggle_active,
-                        "operation": {"kind": "group.meta.set", "group": group.id},
-                    },
-                    {
-                        "id": f"{group.id}-membership-enabled",
-                        "search": f"{group.id} membership-enabled {_rbac_group_label(group)}",
-                        "label": "membership-enabled",
-                        "kind": "checkbox",
-                        "value": bool(group.has_membership),
-                        "editable": False,
-                    },
-                    {
-                        "id": f"{group.id}-joinable",
-                        "search": f"{group.id} joinable {_rbac_group_label(group)}",
-                        "label": "joinable",
-                        "kind": "checkbox",
-                        "value": bool(group.is_joinable),
-                        "editable": False,
-                    },
-                ],
-            },
-            {
-                "id": "group-membership-matrix",
-                "title": "membership state",
-                "description": (
-                    "Edit member and approval state. "
-                    "PI assignment is managed in group settings."
-                ),
-                "empty": "No users found for this group.",
-                "apply_label": "apply membership updates",
-                "confirm": f"Apply membership updates for {group.id}?",
-                "more": membership_matrix_more,
-                "columns": [
-                    {"key": "user", "label": "user", "kind": "text"},
-                    {"key": "user_state", "label": "user state", "kind": "text"},
-                    {"key": "member", "label": "member", "kind": "checkbox"},
-                    {"key": "approved", "label": "approved", "kind": "checkbox"},
-                    {
-                        "key": "email_status",
-                        "label": "email",
-                        "kind": "select",
-                        "options": _RBAC_EMAIL_STATUS_OPTIONS,
-                    },
-                    {"key": "pi", "label": "PI", "kind": "text"},
-                ],
-                "rows": membership_matrix_rows,
-                "behavior": "group-membership",
-            },
-            {
-                "id": "group-device-links-matrix",
-                "title": "linked devices",
-                "description": (
-                    "Tick devices that should remain linked to this group."
-                ),
-                "empty": "No devices found.",
-                "apply_label": "apply device links",
-                "confirm": f"Apply device link updates for {group.id}?",
-                "more": device_matrix_more,
-                "columns": [
-                    {"key": "device", "label": "device", "kind": "text"},
-                    {
-                        "key": "device_state",
-                        "label": "device state",
-                        "kind": "text",
-                    },
-                    {"key": "linked", "label": "linked", "kind": "checkbox"},
-                ],
-                "rows": device_matrix_rows,
-            },
-        ],
+        "tables": tables,
+        "matrices": matrices,
         "mutations": [],
     }
 
@@ -875,7 +896,7 @@ def _rbac_device_detail(
     device: model.Device,
     *,
     include_inactive: bool = False,
-) -> Dict[str, Any]:
+) -> RbacDetail:
     groups_statement = (
         select(model.Group)
         .options(
@@ -917,57 +938,57 @@ def _rbac_device_detail(
         user_perms_statement = user_perms_statement.where(model.User.active)
     user_perms = model.db.session.execute(user_perms_statement).all()
 
-    source_nodes: List[Dict[str, str]] = []
-    group_rows: List[Dict[str, Any]] = []
+    source_nodes: List[RbacGraphNode] = []
+    group_rows: List[RbacTableRow] = []
     for group in groups:
         source_nodes.append(
-            {
-                "label": _rbac_group_label(group),
-                "meta": _rbac_state(bool(group.active)),
-                "href": url_for("rbac", scope="group", entity=group.id),
-            }
+            build_graph_node(
+                label=_rbac_group_label(group),
+                meta=_rbac_state(bool(group.active)),
+                href=url_for("rbac", scope="group", entity=group.id),
+            )
         )
         group_rows.append(
-            {
-                "cells": {
+            build_table_row(
+                cells={
                     "group": _rbac_group_label(group),
                     "status": _rbac_state(bool(group.active)),
                 },
-                "actions": [
-                    {
-                        "label": "inspect group",
-                        "href": url_for("rbac", scope="group", entity=group.id),
-                    },
+                actions=[
+                    build_table_action(
+                        label="inspect group",
+                        href=url_for("rbac", scope="group", entity=group.id),
+                    ),
                 ],
-            }
+            )
         )
 
-    target_nodes: List[Dict[str, str]] = []
-    special_rows: List[Dict[str, Any]] = []
+    target_nodes: List[RbacGraphNode] = []
+    special_rows: List[RbacTableRow] = []
     for ud, user in user_perms:
         flags = _rbac_permission_flags(ud)
         target_nodes.append(
-            {
-                "label": _rbac_user_label(user),
-                "meta": flags,
-                "href": url_for("rbac", scope="user", entity=user.id),
-            }
+            build_graph_node(
+                label=_rbac_user_label(user),
+                meta=flags,
+                href=url_for("rbac", scope="user", entity=user.id),
+            )
         )
-        actions = [
-            {
-                "label": "inspect user",
-                "href": url_for("rbac", scope="user", entity=user.id),
-            }
+        actions: List[RbacTableAction] = [
+            build_table_action(
+                label="inspect user",
+                href=url_for("rbac", scope="user", entity=user.id),
+            )
         ]
         special_rows.append(
-            {
-                "cells": {
+            build_table_row(
+                cells={
                     "user": _rbac_user_label(user),
                     "user_state": _rbac_state(bool(user.active)),
                     "permissions": flags,
                 },
-                "actions": actions,
-            }
+                actions=actions,
+            )
         )
 
     linked_group_ids = {group.id for group in groups}
@@ -986,28 +1007,28 @@ def _rbac_device_detail(
     if not include_inactive:
         all_groups_statement = all_groups_statement.where(model.Group.active)
     all_groups = model.db.session.scalars(all_groups_statement).all()
-    group_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
+    group_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], RbacMatrixRow]] = []
     for group in all_groups:
         linked = group.id in linked_group_ids
         can_link = linked or (group.active and bool(group.department))
-        row = {
-            "id": group.id,
-            "search": (
+        row = build_matrix_row(
+            row_id=group.id,
+            search=(
                 f"{group.id} {_rbac_group_label(group)} "
                 f"{_rbac_state(bool(group.active))}"
             ),
-            "cells": {
+            cells={
                 "group": _rbac_group_label(group),
                 "group_state": _rbac_state(bool(group.active)),
             },
-            "values": {"linked": linked},
-            "editable": {"linked": bool(can_link)},
-            "operation": {
+            values={"linked": linked},
+            editable={"linked": bool(can_link)},
+            operation={
                 "kind": "device.group.set",
                 "group": group.id,
                 "device": device.id,
             },
-        }
+        )
         rank = (
             0 if linked else 1,
             0 if group.active else 1,
@@ -1054,7 +1075,7 @@ def _rbac_device_detail(
             user.id: user
             for user in model.db.session.scalars(users_by_id_statement).all()
         }
-    user_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
+    user_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], RbacMatrixRow]] = []
     for user_id in user_matrix_ids:
         user = users_by_id.get(user_id)
         if user is None:
@@ -1069,39 +1090,39 @@ def _rbac_device_detail(
         training = bool(override.training) if override is not None else False
         has_override = any((templates, slot, tech, medical, training))
         can_assign = bool(user.active and dev_member)
-        row = {
-            "id": user.id,
-            "search": (
+        row = build_matrix_row(
+            row_id=user.id,
+            search=(
                 f"{user.id} {_rbac_user_label(user)} "
                 f"{'dev-member' if dev_member else 'non-dev'} "
                 f"{'technologist' if is_technologist else 'non-technologist'}"
             ),
-            "cells": {
+            cells={
                 "user": _rbac_user_label(user),
                 "user_state": _rbac_state(bool(user.active)),
                 "dev_member": _rbac_badge(bool(dev_member)),
                 "technologist": _rbac_badge(bool(is_technologist)),
             },
-            "values": {
+            values={
                 "templates": templates,
                 "slot": slot,
                 "tech": tech,
                 "medical": medical,
                 "training": training,
             },
-            "editable": {
+            editable={
                 "templates": bool(can_assign or templates),
                 "slot": bool(can_assign or slot),
                 "tech": bool((can_assign and is_technologist) or tech),
                 "medical": bool(can_assign or medical),
                 "training": bool(can_assign or training),
             },
-            "operation": {
+            operation={
                 "kind": "user.device.set",
                 "device": device.id,
                 "user": user.id,
             },
-        }
+        )
         rank = (
             0 if has_override else 1,
             0 if dev_member else 1,
@@ -1115,19 +1136,19 @@ def _rbac_device_detail(
     user_matrix_rows, user_matrix_more = _rbac_limit_rows(
         user_matrix_rows, limit=_RBAC_MATRIX_ROW_LIMIT
     )
-    quick_add_user_options = []
+    quick_add_user_options: List[RbacSelectOption] = []
     for dev_user in sorted(dev_users, key=lambda row: row.id.lower()):
         if not dev_user.active:
             continue
         suffix = "technologist" if dev_user.id in tech_user_ids else "DEV member"
         quick_add_user_options.append(
-            {
-                "value": dev_user.id,
-                "label": _rbac_user_label(dev_user),
-                "meta": suffix,
-            }
+            build_select_option(
+                value=dev_user.id,
+                label=_rbac_user_label(dev_user),
+                meta=suffix,
+            )
         )
-    quick_add_config: Optional[Dict[str, Any]] = None
+    quick_add_config: Optional[RbacQuickAddConfig] = None
     if len(quick_add_user_options) > 0:
         quick_add_config = {
             "label": "+ add DEV user",
@@ -1173,6 +1194,167 @@ def _rbac_device_detail(
     group_rows, group_more = _rbac_limit_rows(group_rows)
     special_rows, special_more = _rbac_limit_rows(special_rows)
 
+    device_settings_rows: List[RbacKeyValueRow] = [
+        build_keyvalue_row(
+            row_id=f"{device.id}-label",
+            search=f"{device.id} label {_rbac_device_label(device)}",
+            label="label",
+            kind="input",
+            input_type="text",
+            max_length=25,
+            field="label",
+            value=device.label or "",
+            editable=True,
+            operation={"kind": "device.meta.set", "device": device.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{device.id}-description",
+            search=f"{device.id} description {_rbac_device_label(device)}",
+            label="description",
+            kind="input",
+            input_type="text",
+            field="description",
+            value=device.description or "",
+            editable=True,
+            operation={"kind": "device.meta.set", "device": device.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{device.id}-addr",
+            search=f"{device.id} email {_rbac_device_label(device)}",
+            label="email",
+            kind="input",
+            input_type="text",
+            field="addr",
+            value=device.addr or "",
+            editable=True,
+            operation={"kind": "device.meta.set", "device": device.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{device.id}-tech-addr",
+            search=f"{device.id} tech email {_rbac_device_label(device)}",
+            label="tech email",
+            kind="input",
+            input_type="text",
+            field="tech_addr",
+            value=device.tech_addr or "",
+            editable=True,
+            operation={"kind": "device.meta.set", "device": device.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{device.id}-medical-addr",
+            search=f"{device.id} medical email {_rbac_device_label(device)}",
+            label="medical email",
+            kind="input",
+            input_type="text",
+            field="med_addr",
+            value=device.med_addr or "",
+            editable=True,
+            operation={"kind": "device.meta.set", "device": device.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{device.id}-training-addr",
+            search=f"{device.id} training email {_rbac_device_label(device)}",
+            label="training email",
+            kind="input",
+            input_type="text",
+            field="train_addr",
+            value=device.train_addr or "",
+            editable=True,
+            operation={"kind": "device.meta.set", "device": device.id},
+        ),
+        build_keyvalue_row(
+            row_id=f"{device.id}-active",
+            search=f"{device.id} active {_rbac_device_label(device)}",
+            label="active",
+            kind="checkbox",
+            field="active",
+            value=bool(device.active),
+            editable=True,
+            operation={"kind": "device.meta.set", "device": device.id},
+        ),
+    ]
+    tables: List[RbacTable] = [
+        {
+            "title": "group links",
+            "empty": "No groups linked to this device.",
+            "more": group_more,
+            "columns": [
+                {"key": "group", "label": "group"},
+                {"key": "status", "label": "group status"},
+            ],
+            "rows": group_rows,
+        },
+        {
+            "title": "device-specific user permissions",
+            "empty": "No device-specific user permissions found.",
+            "more": special_more,
+            "columns": [
+                {"key": "user", "label": "user"},
+                {"key": "user_state", "label": "user state"},
+                {"key": "permissions", "label": "permissions"},
+            ],
+            "rows": special_rows,
+        },
+    ]
+    matrices: List[RbacMatrix] = [
+        {
+            "id": "device-metadata-matrix",
+            "title": "device settings",
+            "description": "Edit device metadata and active state inline.",
+            "empty": "Device metadata unavailable.",
+            "apply_label": "apply device settings",
+            "confirm": f"Apply metadata updates for {device.id}?",
+            "more": 0,
+            "filter": False,
+            "layout": "keyvalue",
+            "rows": device_settings_rows,
+        },
+        {
+            "id": "device-group-links-matrix",
+            "title": "group links",
+            "description": "Tick groups that should remain linked to this device.",
+            "empty": "No groups found.",
+            "apply_label": "apply group links",
+            "confirm": f"Apply group link updates for {device.id}?",
+            "more": group_matrix_more,
+            "columns": [
+                {"key": "group", "label": "group", "kind": "text"},
+                {"key": "group_state", "label": "group state", "kind": "text"},
+                {"key": "linked", "label": "linked", "kind": "checkbox"},
+            ],
+            "rows": group_matrix_rows,
+        },
+        {
+            "id": "device-user-permissions-matrix",
+            "title": "DEV user permissions",
+            "description": (
+                "Edit per-user device flags directly. "
+                "Stale overrides can be cleared here."
+            ),
+            "empty": "No DEV users or overrides found.",
+            "apply_label": "apply permission updates",
+            "confirm": f"Apply user permission updates for {device.id}?",
+            "more": user_matrix_more,
+            "quick_add": quick_add_config,
+            "columns": [
+                {"key": "user", "label": "user", "kind": "text"},
+                {"key": "user_state", "label": "user state", "kind": "text"},
+                {"key": "dev_member", "label": "DEV member", "kind": "text"},
+                {
+                    "key": "technologist",
+                    "label": "technologist",
+                    "kind": "text",
+                },
+                {"key": "templates", "label": "templates", "kind": "checkbox"},
+                {"key": "slot", "label": "edit any", "kind": "checkbox"},
+                {"key": "tech", "label": "tech", "kind": "checkbox"},
+                {"key": "medical", "label": "medical", "kind": "checkbox"},
+                {"key": "training", "label": "training", "kind": "checkbox"},
+            ],
+            "rows": user_matrix_rows,
+        },
+    ]
+
     return {
         "summary": {
             "title": _rbac_device_label(device),
@@ -1183,176 +1365,14 @@ def _rbac_device_detail(
         "graph": {
             "source_title": "linked groups",
             "target_title": "user-specific device permissions",
-            "focus": {
-                "label": _rbac_device_label(device),
-                "href": "",
-            },
+            "focus": build_graph_focus(label=_rbac_device_label(device)),
             "sources": left_nodes,
             "targets": right_nodes,
             "source_more": left_more,
             "target_more": right_more,
         },
-        "tables": [
-            {
-                "title": "group links",
-                "empty": "No groups linked to this device.",
-                "more": group_more,
-                "columns": [
-                    {"key": "group", "label": "group"},
-                    {"key": "status", "label": "group status"},
-                ],
-                "rows": group_rows,
-            },
-            {
-                "title": "device-specific user permissions",
-                "empty": "No device-specific user permissions found.",
-                "more": special_more,
-                "columns": [
-                    {"key": "user", "label": "user"},
-                    {"key": "user_state", "label": "user state"},
-                    {"key": "permissions", "label": "permissions"},
-                ],
-                "rows": special_rows,
-            },
-        ],
-        "matrices": [
-            {
-                "id": "device-metadata-matrix",
-                "title": "device settings",
-                "description": "Edit device metadata and active state inline.",
-                "empty": "Device metadata unavailable.",
-                "apply_label": "apply device settings",
-                "confirm": f"Apply metadata updates for {device.id}?",
-                "more": 0,
-                "filter": False,
-                "layout": "keyvalue",
-                "rows": [
-                    {
-                        "id": f"{device.id}-label",
-                        "search": f"{device.id} label {_rbac_device_label(device)}",
-                        "label": "label",
-                        "kind": "input",
-                        "input_type": "text",
-                        "max_length": 25,
-                        "field": "label",
-                        "value": device.label or "",
-                        "editable": True,
-                        "operation": {"kind": "device.meta.set", "device": device.id},
-                    },
-                    {
-                        "id": f"{device.id}-description",
-                        "search": f"{device.id} description {_rbac_device_label(device)}",
-                        "label": "description",
-                        "kind": "input",
-                        "input_type": "text",
-                        "field": "description",
-                        "value": device.description or "",
-                        "editable": True,
-                        "operation": {"kind": "device.meta.set", "device": device.id},
-                    },
-                    {
-                        "id": f"{device.id}-addr",
-                        "search": f"{device.id} email {_rbac_device_label(device)}",
-                        "label": "email",
-                        "kind": "input",
-                        "input_type": "text",
-                        "field": "addr",
-                        "value": device.addr or "",
-                        "editable": True,
-                        "operation": {"kind": "device.meta.set", "device": device.id},
-                    },
-                    {
-                        "id": f"{device.id}-tech-addr",
-                        "search": f"{device.id} tech email {_rbac_device_label(device)}",
-                        "label": "tech email",
-                        "kind": "input",
-                        "input_type": "text",
-                        "field": "tech_addr",
-                        "value": device.tech_addr or "",
-                        "editable": True,
-                        "operation": {"kind": "device.meta.set", "device": device.id},
-                    },
-                    {
-                        "id": f"{device.id}-medical-addr",
-                        "search": f"{device.id} medical email {_rbac_device_label(device)}",
-                        "label": "medical email",
-                        "kind": "input",
-                        "input_type": "text",
-                        "field": "med_addr",
-                        "value": device.med_addr or "",
-                        "editable": True,
-                        "operation": {"kind": "device.meta.set", "device": device.id},
-                    },
-                    {
-                        "id": f"{device.id}-training-addr",
-                        "search": f"{device.id} training email {_rbac_device_label(device)}",
-                        "label": "training email",
-                        "kind": "input",
-                        "input_type": "text",
-                        "field": "train_addr",
-                        "value": device.train_addr or "",
-                        "editable": True,
-                        "operation": {"kind": "device.meta.set", "device": device.id},
-                    },
-                    {
-                        "id": f"{device.id}-active",
-                        "search": f"{device.id} active {_rbac_device_label(device)}",
-                        "label": "active",
-                        "kind": "checkbox",
-                        "field": "active",
-                        "value": bool(device.active),
-                        "editable": True,
-                        "operation": {"kind": "device.meta.set", "device": device.id},
-                    },
-                ],
-            },
-            {
-                "id": "device-group-links-matrix",
-                "title": "group links",
-                "description": (
-                    "Tick groups that should remain linked to this device."
-                ),
-                "empty": "No groups found.",
-                "apply_label": "apply group links",
-                "confirm": f"Apply group link updates for {device.id}?",
-                "more": group_matrix_more,
-                "columns": [
-                    {"key": "group", "label": "group", "kind": "text"},
-                    {"key": "group_state", "label": "group state", "kind": "text"},
-                    {"key": "linked", "label": "linked", "kind": "checkbox"},
-                ],
-                "rows": group_matrix_rows,
-            },
-            {
-                "id": "device-user-permissions-matrix",
-                "title": "DEV user permissions",
-                "description": (
-                    "Edit per-user device flags directly. "
-                    "Stale overrides can be cleared here."
-                ),
-                "empty": "No DEV users or overrides found.",
-                "apply_label": "apply permission updates",
-                "confirm": f"Apply user permission updates for {device.id}?",
-                "more": user_matrix_more,
-                "quick_add": quick_add_config,
-                "columns": [
-                    {"key": "user", "label": "user", "kind": "text"},
-                    {"key": "user_state", "label": "user state", "kind": "text"},
-                    {"key": "dev_member", "label": "DEV member", "kind": "text"},
-                    {
-                        "key": "technologist",
-                        "label": "technologist",
-                        "kind": "text",
-                    },
-                    {"key": "templates", "label": "templates", "kind": "checkbox"},
-                    {"key": "slot", "label": "edit any", "kind": "checkbox"},
-                    {"key": "tech", "label": "tech", "kind": "checkbox"},
-                    {"key": "medical", "label": "medical", "kind": "checkbox"},
-                    {"key": "training", "label": "training", "kind": "checkbox"},
-                ],
-                "rows": user_matrix_rows,
-            },
-        ],
+        "tables": tables,
+        "matrices": matrices,
         "mutations": [],
     }
 
@@ -1887,7 +1907,7 @@ def _rbac_user_detail(
     }
 
 
-def _rbac_empty_detail(scope: str) -> Dict[str, Any]:
+def _rbac_empty_detail(scope: str) -> RbacDetail:
     label = _RBAC_SCOPE_LABELS.get(scope, "items")
     return {
         "summary": {
@@ -1899,7 +1919,7 @@ def _rbac_empty_detail(scope: str) -> Dict[str, Any]:
         "graph": {
             "source_title": "source",
             "target_title": "target",
-            "focus": {"label": "Nothing selected", "href": ""},
+            "focus": build_graph_focus(label="Nothing selected"),
             "sources": [],
             "targets": [],
             "source_more": 0,
@@ -1916,7 +1936,7 @@ def _rbac_detail(
     entity: str,
     *,
     include_inactive: bool = False,
-) -> Dict[str, Any]:
+) -> RbacDetail:
     if scope == "group":
         group = logic.get_group(entity)
         if group is None:

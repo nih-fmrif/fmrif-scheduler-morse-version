@@ -11,6 +11,7 @@ from sqlalchemy.sql import func
 
 import scheduler.logic.rbac_audit_support as logic
 from scheduler import model
+from scheduler.logic.admin_issues import LIVE_ISSUE_TYPE_PREFIX
 
 NOTIFICATION_INCIDENT_STATE_OPEN = "open"
 NOTIFICATION_INCIDENT_STATE_IGNORED = "ignored"
@@ -355,6 +356,10 @@ def _normalized_detected_issues(
     return normalized
 
 
+def _scanner_managed_issue_clause():
+    return ~model.NotificationIncident.issue_type.like(f"{LIVE_ISSUE_TYPE_PREFIX}%")
+
+
 def reconcile_notification_incidents(
     detected_issues: List[Dict[str, str]],
 ) -> Dict[str, int]:
@@ -466,7 +471,8 @@ def reconcile_notification_incidents(
         model.db.session.add(row)
 
     stale_statement = select(model.NotificationIncident).where(
-        model.NotificationIncident.active.is_(True)
+        model.NotificationIncident.active.is_(True),
+        _scanner_managed_issue_clause(),
     )
     if len(keys) > 0:
         stale_statement = stale_statement.where(

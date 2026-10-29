@@ -9,8 +9,12 @@ from wtforms import Form, fields, validators
 
 from scheduler import message, model
 
+from ._schedule_editor_reference import fmt_hours
+from .admin_issues import (
+    resolve_scheduler_notification_issues,
+    upsert_scheduler_notification_issue,
+)
 from .rbac_audit_support import EMAIL_STATUS_FAILED, EMAIL_STATUS_SENT, sign_message
-from .schedule_editor import fmt_hours
 
 Datalist = List[Tuple[str, str]]
 
@@ -455,7 +459,44 @@ def fmt_support_notifications(hours, sns, include_kind):
     return "\n".join(acc)
 
 
-def send_scheduler_notifications(device: model.Device, msgs: dict[str, str]):
+def _scheduler_stream_label(key: str) -> str:
+    return {
+        "schedule": "Schedule",
+        "training": "Training support",
+        "medical": "Medical support",
+        "technologist": "Technologist support",
+    }.get(key, key.replace("_", " ").title())
+
+
+def _scheduler_device_href(device: model.Device) -> str:
+    try:
+        return url_for("device", the_device=device.id)
+    except Exception:
+        return ""
+
+
+def _scheduler_notification_result(
+    key: str,
+    status: str,
+    message_text: str,
+    *,
+    issue_key: Optional[str] = None,
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "key": key,
+        "status": status,
+        "message": message_text,
+        # Legacy alias retained while downstream tests and callers migrate.
+        "msg": status,
+    }
+    if issue_key:
+        row["issue_key"] = issue_key
+    return row
+
+
+def send_scheduler_notifications(
+    device: model.Device, msgs: dict[str, str], *, actor: str = "system"
+):
     streams = (
         ("schedule", device.addr, "schedule change"),
         ("training", device.train_addr, "training request change"),
@@ -463,16 +504,34 @@ def send_scheduler_notifications(device: model.Device, msgs: dict[str, str]):
         ("technologist", device.tech_addr, "technologist request change"),
     )
     notes: list[dict[str, Any]] = []
+    href = _scheduler_device_href(device)
     for key, addr, subj in streams:
         msg = msgs[key]
         if msg == "":
             continue
 
-        def note(what):
-            notes.append({"key": key, "msg": what})
+        stream_label = _scheduler_stream_label(key)
 
         if "@" not in addr:
-            note("address")
+            issue_key = upsert_scheduler_notification_issue(
+                actor=actor,
+                device_id=device.id,
+                device_label=device.label,
+                stream=key,
+                kind="missing_recipient",
+                href=href,
+            )
+            notes.append(
+                _scheduler_notification_result(
+                    key,
+                    "missing_recipient",
+                    (
+                        f"{stream_label} notification could not be sent because "
+                        "no recipient address is configured."
+                    ),
+                    issue_key=issue_key,
+                )
+            )
             continue
 
         subject = f"[scheduler] {device.label}: {key} {subj}"
@@ -487,11 +546,46 @@ def send_scheduler_notifications(device: model.Device, msgs: dict[str, str]):
             },
         )
         if not ok:
-            note("failed")
+            issue_key = upsert_scheduler_notification_issue(
+                actor=actor,
+                device_id=device.id,
+                device_label=device.label,
+                stream=key,
+                kind="delivery_failed",
+                href=href,
+            )
+            notes.append(
+                _scheduler_notification_result(
+                    key,
+                    "failed",
+                    (
+                        f"{stream_label} notification failed to send. "
+                        "Review the Admin Panel issue feed and recent email audit."
+                    ),
+                    issue_key=issue_key,
+                )
+            )
         elif current_app.config.get("MAIL_SUPPRESS_SEND", False):
-            note("skipped")
+            notes.append(
+                _scheduler_notification_result(
+                    key,
+                    "skipped",
+                    f"{stream_label} notification delivery was suppressed.",
+                )
+            )
         else:
-            note("success")
+            resolve_scheduler_notification_issues(
+                actor=actor,
+                device_id=device.id,
+                stream=key,
+            )
+            notes.append(
+                _scheduler_notification_result(
+                    key,
+                    "success",
+                    f"{stream_label} notification sent.",
+                )
+            )
 
     return notes
 

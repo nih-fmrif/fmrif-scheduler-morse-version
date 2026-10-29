@@ -8,6 +8,8 @@ pixi run test-unit -- tests/unit/test_some_file.py -q
 pixi run test-unit-xdist
 pixi run test-routes
 pixi run test-routes -- tests/unit/test_some_route_file.py -q
+pixi run test-routes-xdist
+pixi run test-routes-xdist -- tests/unit/test_some_route_file.py -q
 pixi run test-integration
 pixi run test-integration-ci
 pixi run test-debian-smoke
@@ -41,12 +43,14 @@ pixi run test-load-moderate-notify
 
 ## Notes
 - `test-unit` and `test-routes` use `scripts/run-target-aware-pytest-suite.py`, which forwards into `scripts/run-isolated-test-suite.sh`.
-- `test-unit-xdist` is an opt-in unit-only variant that adds `-n auto` on top of the same wrapper.
+- `test-unit-xdist` adds `-n auto --dist loadgroup` on top of the same wrapper.
+- `test-routes-xdist` adds the same `-n auto --dist loadgroup` strategy for route tests.
 - `test-integration*` runs directly through `scripts/run-isolated-test-suite.sh`.
 - `test-integration` is the local-default browser run; `test-integration-ci` uses a CI-friendly reporter.
 - The wrapper applies per-suite isolation for DB/Mailpit/runtime settings.
 - Interface policy: when explicit test selectors are supplied, they replace the default collection root for that task. Tasks must not silently widen a narrowed request.
-- Keep `test-routes` on the default serial task unless worker-specific route isolation is added deliberately.
+- Mailpit-backed pytest modules declare `pytest.mark.xdist_group("mailpit")` so `loadgroup` keeps their shared inbox traffic on one worker while the rest of the suite can fan out.
+- Use `test-routes-xdist` for the faster full route pass; keep `test-routes` as the serial fallback for focused debugging.
 - Integration tasks start their own app server; no separate `pixi run serve` is required.
 - The default integration tasks exclude Playwright tests tagged `@heavy`; run those explicitly with `pixi run test-integration-heavy`.
 - When a browser smoke pass is sufficient, skip the full browser matrix and target Chromium directly:

@@ -18,11 +18,12 @@ from route_seed import (
     set_session_user,
 )
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 import scheduler.logic.schedule_editor as logic
 import scheduler.logic.templates as template_logic
 from scheduler import model
+from scheduler.logic.admin_issues import scheduler_save_failure_fingerprint
 from scheduler.logic.schedule_editor import _clear_reference_data_cache
 
 pytestmark = pytest.mark.route
@@ -62,6 +63,59 @@ def _email_audit_rows(*criteria):
     for criterion in criteria:
         statement = statement.where(criterion)
     return model.db.session.scalars(statement).all()
+
+
+class _Diag:
+    def __init__(
+        self,
+        *,
+        constraint_name=None,
+        message_primary=None,
+        message_detail=None,
+        sqlstate=None,
+    ):
+        self.constraint_name = constraint_name
+        self.message_primary = message_primary
+        self.message_detail = message_detail
+        self.sqlstate = sqlstate
+
+
+class _Orig(Exception):
+    def __init__(
+        self,
+        *,
+        constraint_name=None,
+        message_primary=None,
+        message_detail=None,
+        pgcode=None,
+    ):
+        super().__init__(message_primary or "database error")
+        self.diag = _Diag(
+            constraint_name=constraint_name,
+            message_primary=message_primary,
+            message_detail=message_detail,
+            sqlstate=pgcode,
+        )
+        self.pgcode = pgcode
+
+
+def _integrity_error(
+    *,
+    constraint_name=None,
+    message_primary=None,
+    message_detail=None,
+    pgcode=None,
+):
+    return IntegrityError(
+        "insert into tblsched ...",
+        {},
+        _Orig(
+            constraint_name=constraint_name,
+            message_primary=message_primary,
+            message_detail=message_detail,
+            pgcode=pgcode,
+        ),
+    )
 
 
 @pytest.mark.covers_route("/device/<the_device>", "GET")
@@ -849,3 +903,83 @@ def test_device_schedule_post_creates_synthetic_slot_and_returns_id_map(
         model.EmailAuditLog.action == "email.scheduler.notification"
     )
     assert audit_rows == []
+
+
+@pytest.mark.covers_route("/device/<the_device>", "POST")
+def test_device_schedule_post_persists_live_incident_for_unmapped_db_failure(
+    route_client, route_app_context, monkeypatch
+):
+    ensure_admin_user()
+    set_admin_session(route_client)
+
+    device_id = seeded_scanner_id()
+    group_id = create_group()
+    member_id = "db-failure-member"
+    ensure_active_user(member_id, "db-failure-member@example.com", "DB Failure Member")
+    set_group_membership(group_id, member_id, approved=True, pi=False)
+    slot_date = datetime.date(2035, 2, 2)
+    slot_id = f"new-{slot_date.isoformat()}-08"
+    if model.db.session.get(model.DeviceGroup, (device_id, group_id)) is None:
+        model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
+        model.db.session.commit()
+    _clear_reference_data_cache()
+
+    get_response = route_client.get(
+        f"/device/{device_id}?start={slot_date.isoformat()}&days=1"
+    )
+    csrf_token = extract_csrf_token(get_response.get_data(as_text=True))
+
+    err = _integrity_error(
+        constraint_name="tblsched_custom_debug_path",
+        message_primary="violates custom schedule guard",
+        message_detail="detail for admins only",
+        pgcode="XX000",
+    )
+    real_commit = model.db.session.commit
+    calls = {"count": 0}
+
+    def flaky_commit():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise err
+        return real_commit()
+
+    monkeypatch.setattr(model.db.session, "commit", flaky_commit)
+
+    post_response = route_client.post(
+        f"/device/{device_id}?start={slot_date.isoformat()}&days=1",
+        json={
+            "csrf_token": csrf_token,
+            "payload": {
+                "diffs": [
+                    {
+                        "id": slot_id,
+                        "date": slot_date.isoformat(),
+                        "hour": 8,
+                        "group": ["", group_id],
+                        "member": ["", member_id],
+                    }
+                ],
+                "notify": False,
+            },
+        },
+        follow_redirects=False,
+    )
+
+    assert post_response.status_code == 200
+    payload = post_response.get_json()
+    assert payload is not None
+    assert payload["errors"][slot_id][0]["code"] == "database_rejected"
+    assert payload["errors"][slot_id][0]["message"] == (
+        "database rejected the change. refresh the schedule and retry. "
+        "if it keeps happening, contact an administrator."
+    )
+
+    fingerprint = scheduler_save_failure_fingerprint(err)
+    issue_key = f"scheduler-save-db:{device_id}:{fingerprint}"
+    incident = model.db.session.get(model.NotificationIncident, issue_key)
+    assert incident is not None
+    assert incident.issue_type == "live.scheduler.db_error"
+    assert incident.active is True
+    assert incident.state == "open"
+    assert "Constraint: tblsched_custom_debug_path" in incident.detail

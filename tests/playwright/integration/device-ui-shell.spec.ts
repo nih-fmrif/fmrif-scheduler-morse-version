@@ -31,23 +31,29 @@ test.describe('Schedule UI interactions', () => {
     const { path } = await openSeededDeviceGrid(page);
     expect(path).toMatch(/^\/device\/[^/?#]+(?:\?.*)?$/);
 
+    await page.setViewportSize({ width: 760, height: 900 });
     const jumpForm = page.locator('nav.jump-form');
     const startInput = jumpForm.locator('input[name="start"]');
     await expect(startInput).toHaveAttribute('type', 'date');
     await expect(page.locator('#jump-open-picker')).toBeVisible();
     await expect(page.locator('#jump-prev-non-empty')).toContainText('Prev scheduled');
     await expect(page.locator('#jump-next-non-empty')).toContainText('Next scheduled');
+    const prevBox = await page.locator('#jump-prev-non-empty').boundingBox();
+    const nextBox = await page.locator('#jump-next-non-empty').boundingBox();
+    expect(prevBox).not.toBeNull();
+    expect(nextBox).not.toBeNull();
+    if (prevBox && nextBox) {
+      expect(Math.abs(prevBox.y - nextBox.y)).toBeLessThan(4);
+    }
 
     await page.locator('#legend-open').click();
     const legendDialog = page.locator('#legend-dialog-container .dialog-box-container');
-    await expect(legendDialog).toContainText('pending edits');
-    await expect(legendDialog).toContainText('slot recorded as used');
-    await expect(legendDialog).toContainText('the last save was rejected by the server');
-    await expect(legendDialog).toContainText('group color stripe');
-    await expect(legendDialog).toContainText('muted rows are off-hours outside 7am to 10pm');
-    await expect(legendDialog).not.toContainText('view activity log');
-    await expect(legendDialog).not.toContainText('expand');
-    await expect(legendDialog).not.toContainText('close');
+    await expect(legendDialog).toContainText('How To Read This Schedule');
+    await expect(legendDialog).toContainText('You have unsaved edits for this slot.');
+    await expect(legendDialog).toContainText('The server rejected the last save for this slot.');
+    await expect(legendDialog).toContainText('The left stripe shows the assigned group color.');
+    await expect(legendDialog).toContainText('Muted rows are outside the normal 7am to 10pm window.');
+    await expect(legendDialog).not.toContainText('status markers');
   });
 
   test('should show a compact inspector banner', async ({ page }) => {

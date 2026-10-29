@@ -79,7 +79,7 @@
 {% macro readonly_status_token(typ="item", hidden=true) %}
 	<span
 		class="status-token status-token-readonly"
-		title="Slot is read only"
+		title="Booking is read only in this view"
 		{% if hidden %}hidden{% endif %}
 		data-readonly-cue="slot"
 	>
@@ -90,7 +90,7 @@
 {% macro support_status_token(typ="item", hidden=true) %}
 	<span
 		class="status-token status-token-support"
-		title="Support requested and actionable by you"
+		title="Support is requested here and you can respond to it"
 		{% if hidden %}hidden{% endif %}
 		data-support-cue="slot"
 	>
@@ -194,77 +194,71 @@
 {% endmacro %}
 
 {% macro schedule_legend(show_time_recorded=false, show_group_cues=false, show_daytime_cues=false) %}
-	<dl class="legend-content">
-		<div>
-			<dt>status markers</dt>
-			<dd>
-				<dl>
-					<div>
-						<dt>{{ support_status_token(hidden=false) }}</dt>
-						<dd>support is requested here and you can act on it</dd>
-					</div>
-					<div>
-						<dt>{{ readonly_status_token(hidden=false) }}</dt>
-						<dd>slot cannot be edited in this view</dd>
-					</div>
-					<div>
-						<dt>{{ pending_status_token() }}</dt>
-						<dd>pending edits</dd>
-					</div>
-					<div>
-						<dt>{{ error_status_token() }}</dt>
-						<dd>validation or blocking errors are present</dd>
-					</div>
-					<div>
-						<dt>{{ rejected_status_token() }}</dt>
-						<dd>the last save was rejected by the server</dd>
-					</div>
-				</dl>
-			</dd>
-		</div>
+	<div class="legend-content">
+		<section class="legend-section" aria-labelledby="legend-section-status">
+			<h2 id="legend-section-status">What the badges mean</h2>
+			<ul class="legend-list">
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ support_status_token(hidden=false) }}</span>
+					<span class="legend-item-copy">Support has been requested here, and you can respond to it.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ readonly_status_token(hidden=false) }}</span>
+					<span class="legend-item-copy">You can view this slot, but you cannot change the booking in this schedule.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ pending_status_token() }}</span>
+					<span class="legend-item-copy">You have unsaved edits for this slot.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ error_status_token() }}</span>
+					<span class="legend-item-copy">This slot still has a validation or blocking problem.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ rejected_status_token() }}</span>
+					<span class="legend-item-copy">The server rejected the last save for this slot.</span>
+				</li>
+			</ul>
+		</section>
 		{% if show_time_recorded %}
-		<div>
-			<dt>usage record</dt>
-			<dd>
-				<dl>
-					<div>
-						<dt>{{ usage_status_token("unrecorded") }}</dt>
-						<dd>usage not yet recorded</dd>
-					</div>
-					<div>
-						<dt>{{ usage_status_token("unused") }}</dt>
-						<dd>slot recorded as unused</dd>
-					</div>
-					<div>
-						<dt>{{ usage_status_token("used") }}</dt>
-						<dd>slot recorded as used</dd>
-					</div>
-				</dl>
-			</dd>
-		</div>
+		<section class="legend-section" aria-labelledby="legend-section-usage">
+			<h2 id="legend-section-usage">Usage status</h2>
+			<ul class="legend-list">
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ usage_status_token("unrecorded") }}</span>
+					<span class="legend-item-copy">No usage has been recorded for this slot yet.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ usage_status_token("unused") }}</span>
+					<span class="legend-item-copy">This slot was recorded as unused.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ usage_status_token("used") }}</span>
+					<span class="legend-item-copy">This slot was recorded as used.</span>
+				</li>
+			</ul>
+		</section>
 		{% endif %}
 		{% if show_group_cues or show_daytime_cues %}
-		<div>
-			<dt>visual cues</dt>
-			<dd>
-				<dl>
-					{% if show_group_cues %}
-					<div>
-						<dt><span class="legend-inline-swatch" aria-hidden="true"></span></dt>
-						<dd>group color stripe marks the assigned group</dd>
-					</div>
-					{% endif %}
-					{% if show_daytime_cues %}
-					<div>
-						<dt><span class="legend-inline-band" aria-hidden="true"></span></dt>
-						<dd>muted rows are off-hours outside 7am to 10pm</dd>
-					</div>
-					{% endif %}
-				</dl>
-			</dd>
-		</div>
+		<section class="legend-section" aria-labelledby="legend-section-visual">
+			<h2 id="legend-section-visual">Other visual cues</h2>
+			<ul class="legend-list">
+				{% if show_group_cues %}
+				<li class="legend-item">
+					<span class="legend-item-icon"><span class="legend-inline-swatch" aria-hidden="true"></span></span>
+					<span class="legend-item-copy">The left stripe shows the assigned group color.</span>
+				</li>
+				{% endif %}
+				{% if show_daytime_cues %}
+				<li class="legend-item">
+					<span class="legend-item-icon"><span class="legend-inline-band" aria-hidden="true"></span></span>
+					<span class="legend-item-copy">Muted rows are outside the normal 7am to 10pm window.</span>
+				</li>
+				{% endif %}
+			</ul>
+		</section>
 		{% endif %}
-	</dl>
+	</div>
 {% endmacro %}
 
 {% macro entry_text(id, lbl, list, value) %}
@@ -337,15 +331,15 @@
 {% endmacro %}
 
 {% macro schedule_legend_dialog(show_time_recorded=false, show_group_cues=false, show_daytime_cues=false) %}
-<div
-	id="legend-dialog-container"
-	class="dialog-container"
+	<div
+		id="legend-dialog-container"
+		class="dialog-container"
 	aria-hidden="true"
 	aria-labelledby="legend-dialog-title"
->
-	<div class="dialog-overlay" data-a11y-dialog-hide></div>
-	<div class="dialog-box-container" role="document">
-		<h1 id="legend-dialog-title" class="dialog-title">schedule legend</h1>
+	>
+		<div class="dialog-overlay" data-a11y-dialog-hide></div>
+		<div class="dialog-box-container" role="document">
+			<h1 id="legend-dialog-title" class="dialog-title">How To Read This Schedule</h1>
 		<button type="button" data-a11y-dialog-hide>
 			{{ icons.close() }}
 			<sr-only>Close dialog</sr-only>
@@ -385,7 +379,7 @@
 				</div>
 				<div>
 					<dt>mode</dt>
-					<dd class="editor-inspector-detail-mode">read only</dd>
+					<dd class="editor-inspector-detail-mode">Read-only booking</dd>
 				</div>
 				<div>
 					<dt>pending</dt>

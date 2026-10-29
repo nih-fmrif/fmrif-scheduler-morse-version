@@ -22,6 +22,12 @@ from scheduler import model
 from scheduler.config import settings
 from scheduler.db_runtime import probe_database_health
 
+from ._admin_config_operation_payloads import (
+    AdminOperationResultPayload,
+    AdminOperationsStatusPayload,
+    BackupStatusPayload,
+    RestoreDrillStatusPayload,
+)
 from ._admin_config_settings import (
     admin_settings_available,
     get_admin_setting,
@@ -97,8 +103,8 @@ class AdminOperationResult:
     def ok(self) -> bool:
         return self.status == "ok"
 
-    def to_payload(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {
+    def to_payload(self) -> AdminOperationResultPayload:
+        payload: AdminOperationResultPayload = {
             "status": self.status,
             "detail": self.detail,
         }
@@ -1022,7 +1028,7 @@ def run_globals_backup_operation(
 
 def collect_backup_status(
     config: BackupOperationsConfig | None = None,
-) -> dict[str, Any]:
+) -> BackupStatusPayload:
     backup_config = config or get_admin_backup_operations_config()
     directory = backup_directory_path(backup_config)
     latest_file = latest_backup_file(backup_config)
@@ -1118,7 +1124,7 @@ def collect_backup_status(
 
 def collect_restore_drill_status(
     config: RestoreDrillOperationsConfig | None = None,
-) -> dict[str, Any]:
+) -> RestoreDrillStatusPayload:
     restore_config = config or get_admin_restore_drill_operations_config()
     last_success_at = _parse_timestamp(
         get_admin_setting(ADMIN_SETTING_KEY_RESTORE_LAST_SUCCESS_AT)
@@ -1156,7 +1162,7 @@ def collect_restore_drill_status(
     }
 
 
-def collect_admin_operations_status() -> dict[str, Any]:
+def collect_admin_operations_status() -> AdminOperationsStatusPayload:
     return {
         "database": probe_database_health(),
         "backup": collect_backup_status(),
@@ -1174,9 +1180,12 @@ __all__ = [
     "ADMIN_SETTING_KEY_BACKUP_RETENTION_COUNT",
     "ADMIN_SETTING_KEY_RESTORE_ENABLED",
     "ADMIN_SETTING_KEY_RESTORE_INTERVAL_DAYS",
+    "AdminOperationsStatusPayload",
     "AdminOperationResult",
+    "AdminOperationResultPayload",
     "BACKUP_FORMAT_CUSTOM",
     "BACKUP_FORMAT_PLAIN",
+    "BackupStatusPayload",
     "BackupOperationsConfig",
     "DEFAULT_BACKUP_DIRECTORY",
     "DEFAULT_BACKUP_ENABLED",
@@ -1202,6 +1211,7 @@ __all__ = [
     "prune_globals_backup_files",
     "record_backup_execution",
     "record_restore_drill_execution",
+    "RestoreDrillStatusPayload",
     "run_backup_operation",
     "run_globals_backup_operation",
     "run_restore_drill_operation",

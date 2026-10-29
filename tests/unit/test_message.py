@@ -13,6 +13,8 @@ from mailpit_api import (
 
 from scheduler import message
 
+pytestmark = pytest.mark.xdist_group("mailpit")
+
 
 def _unused_local_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:

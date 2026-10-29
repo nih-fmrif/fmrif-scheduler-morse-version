@@ -1,15 +1,14 @@
 """RBAC explorer payload serialization and response shaping helpers."""
 
-from typing import Any, Dict, List
-
 from ._rbac_explorer_core import _rbac_href_allowed_for_actor
+from ._rbac_explorer_payloads import RbacActor, RbacDetail, RbacMatrix
 
 
 def _rbac_restrict_detail_for_actor(
     scope: str,
-    detail: Dict[str, Any],
-    actor: Dict[str, Any],
-) -> Dict[str, Any]:
+    detail: RbacDetail,
+    actor: RbacActor,
+) -> RbacDetail:
     if bool(actor.get("is_admin")):
         return detail
 
@@ -17,7 +16,7 @@ def _rbac_restrict_detail_for_actor(
     if not isinstance(matrices, list):
         return detail
 
-    restricted: List[Dict[str, Any]] = []
+    restricted: list[RbacMatrix] = []
     for matrix in matrices:
         if not isinstance(matrix, dict):
             continue

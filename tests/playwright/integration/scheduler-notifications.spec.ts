@@ -214,8 +214,8 @@ test.describe('Scheduler notifications', () => {
     const resultDialog = page.locator('#result-dialog-container .dialog-box-container');
     await expect(resultDialog).toBeVisible();
     await expect(resultDialog).toContainText(/1 entry updated/i);
-    await expect(resultDialog).toContainText('schedule notification sent');
-    await expect(resultDialog).toContainText('medical notification sent');
+    await expect(resultDialog).toContainText(/schedule notification sent/i);
+    await expect(resultDialog).toContainText(/medical support notification sent/i);
     await expect
       .poll(async () => await page.locator('#review-pending').textContent(), { timeout: 10000 })
       .toContain('Review pending (0)');

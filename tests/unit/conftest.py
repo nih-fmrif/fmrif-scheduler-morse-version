@@ -220,7 +220,8 @@ def suite_db_bootstrap(request):
     if has_route_tests and has_non_route_tests:
         raise RuntimeError(
             "Mixed route and non-route selections are not supported in one pytest "
-            "session. Use pixi run test-unit or pixi run test-routes."
+            "session. Use pixi run test-unit, pixi run test-unit-xdist, "
+            "pixi run test-routes, or pixi run test-routes-xdist."
         )
 
     if has_route_tests:

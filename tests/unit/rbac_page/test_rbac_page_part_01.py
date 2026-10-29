@@ -34,7 +34,7 @@ import scheduler.message as scheduler_message
 from scheduler import model
 from scheduler.routes import rbac_routes
 
-pytestmark = pytest.mark.route
+pytestmark = [pytest.mark.route, pytest.mark.xdist_group("mailpit")]
 
 
 def _capture_rbac_events(

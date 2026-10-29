@@ -72,4 +72,50 @@ test.describe('Mock Role Coverage (Admin)', () => {
       })
       .toBe('category|top priority|1');
   });
+
+  test('applies RBAC matrix changes without a browser confirm dialog', async ({ page }, testInfo) => {
+    await ensureProfileSession(page, 'admin', 'test-admin', { testInfo });
+
+    const dialogs: string[] = [];
+    page.on('dialog', (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+
+    await page.goto('/rbac?scope=device&entity=d');
+    await expect(page.getByRole('status')).toContainText('Relationships loaded.');
+
+    const section = page.locator('article.rbac-matrix').filter({
+      has: page.getByRole('heading', { name: 'DEV user permissions' }),
+    });
+    await expect(section).toBeVisible();
+
+    const targetRow = section.locator('tbody tr').filter({ hasText: 'user0049' }).first();
+    await expect(targetRow).toBeVisible();
+
+    const checkbox = targetRow.locator('input[type="checkbox"]').nth(3);
+    if (!(await checkbox.isChecked())) {
+      await checkbox.check();
+      await section.getByRole('button', { name: /apply permission updates/i }).click();
+      await expect(page.locator('#app-feedback')).toContainText(
+        /(RBAC updates applied|Applied \d+ of \d+ requested RBAC changes)/i
+      );
+    }
+
+    expect(dialogs).toEqual([]);
+  });
+
+  test('shows modal required-field errors through app notifications', async ({ page }, testInfo) => {
+    await ensureProfileSession(page, 'admin', 'test-admin', { testInfo });
+
+    await page.goto('/rbac');
+    await expect(page.getByRole('heading', { name: /rbac explorer/i })).toBeVisible();
+
+    await page.getByRole('button', { name: /\+ add group/i }).click();
+    await expect(page.locator('#rbac-modal')).toBeVisible();
+    await page.locator('#rbac-modal-submit').click();
+
+    await expect(page.locator('#app-feedback')).toContainText(/group id is required/i);
+    await expect(page.locator('#rbac-modal')).toBeVisible();
+  });
 });

@@ -38,26 +38,28 @@ block body %} {% if clock_warning %}
         required
         hidden
       />
-      <button
-        id="jump-prev-non-empty"
-        type="button"
-        class="admin-show-more-button jump-arrow-button"
-        aria-label="jump to previous scheduled day"
-        title="Jump to the previous scheduled day"
-      >
-        {{ icons.arrow_left("previous scheduled day") }}
-        <span class="jump-arrow-label">Prev scheduled</span>
-      </button>
-      <button
-        id="jump-next-non-empty"
-        type="button"
-        class="admin-show-more-button jump-arrow-button"
-        aria-label="jump to next scheduled day"
-        title="Jump to the next scheduled day"
-      >
-        {{ icons.arrow_right("next scheduled day") }}
-        <span class="jump-arrow-label">Next scheduled</span>
-      </button>
+      <div class="jump-nav-pair" aria-label="scheduled day navigation">
+        <button
+          id="jump-prev-non-empty"
+          type="button"
+          class="admin-show-more-button jump-arrow-button"
+          aria-label="jump to previous scheduled day"
+          title="Jump to the previous scheduled day"
+        >
+          {{ icons.arrow_left("previous scheduled day") }}
+          <span class="jump-arrow-label">Prev scheduled</span>
+        </button>
+        <button
+          id="jump-next-non-empty"
+          type="button"
+          class="admin-show-more-button jump-arrow-button"
+          aria-label="jump to next scheduled day"
+          title="Jump to the next scheduled day"
+        >
+          {{ icons.arrow_right("next scheduled day") }}
+          <span class="jump-arrow-label">Next scheduled</span>
+        </button>
+      </div>
     </div>
   </form>
 </nav>

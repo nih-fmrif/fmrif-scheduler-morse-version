@@ -706,6 +706,10 @@ function wire_inspector_modal() {
   }
   const dialog = new A11yDialog(container);
   container.__schedulerInspectorDialog = dialog;
+  trigger.addEventListener("click", (evt) => {
+    evt.preventDefault();
+    dialog.show();
+  });
 }
 
 function format_inspector_error_rows(errors) {
@@ -2167,13 +2171,17 @@ class SupportRequestSubForm {
       return false;
     }
     // filing requests is controlled by the slot editability.
-    return this.parent.editable;
+    return this.parent.bookingEditable;
   }
   get support_actionable() {
+    const supportPerms = this.perms.support || {};
+    const canFulfill =
+      supportPerms[this.handler_permission_key] ??
+      this.perms[this.handler_permission_key];
     return (
       this.response_window_open &&
       this.request_active &&
-      this.perms[this.handler_permission_key] &&
+      canFulfill &&
       this.members.size > 0
     );
   }
@@ -2403,19 +2411,16 @@ class Cell {
   }
   get past() {
     // users with edit_any are not bound by this concept
-    if (this.perms.edit_any) {
+    if (this.perms.booking_edit_any) {
       return false;
     }
     return this.old;
   }
-  get editable() {
-    if (this.locked) {
-      return false;
-    }
-    if (this.perms.edit_any) {
+  get bookingEditable() {
+    if (this.perms.booking_edit_any) {
       return true;
     }
-    if (this.perms.edit && !this.old) {
+    if (this.perms.booking_edit && !this.old) {
       const g = this.orig.group;
       if (!this.device_groups.has(g)) {
         // if the original group no longer belongs to the device, consider the slot up for grabs
@@ -2427,6 +2432,12 @@ class Cell {
       return this.membership.has(this.orig.group);
     }
     return false;
+  }
+  get editable() {
+    if (this.locked) {
+      return false;
+    }
+    return this.bookingEditable;
   }
   get supportActionable() {
     return Object.values(this.sr).some((sr) => sr.support_actionable);
@@ -2579,7 +2590,7 @@ class Cell {
     this.elm.title = tooltip.join("; ");
   }
   preview_default_group() {
-    if (!this.default_group || !this.editable) {
+    if (!this.default_group || !this.bookingEditable) {
       return;
     }
     if (this.orig.group != "" || this.group.value != "") {
@@ -2612,12 +2623,13 @@ class Cell {
   }
   sync_state_flags() {
     this.elm.dataset.canEdit = from_bool(this.editable);
+    this.elm.dataset.bookingEditable = from_bool(this.bookingEditable);
     this.elm.dataset.canInteract = from_bool(this.canInteract);
     this.elm.dataset.supportActionable = from_bool(this.supportActionable);
     this.elm.dataset.changed = from_bool(this.changed);
     this.elm.dataset.error = from_bool(this.invalid);
     if (this.readonlyCue) {
-      this.readonlyCue.hidden = this.editable;
+      this.readonlyCue.hidden = this.bookingEditable;
     }
     if (this.supportCue) {
       this.supportCue.hidden = !this.supportActionable;
@@ -2736,12 +2748,33 @@ function wire_cell_editors() {
 
   // if this is missing, we're on a template page so everything is true
   const perms = json_from_script_or("user-perms", {
+    booking_edit: true,
+    booking_edit_any: true,
+    support_fulfillment: {
+      medical: true,
+      tech: true,
+      training: true,
+    },
     edit: true,
     edit_any: true,
     medical: true,
     tech: true,
     training: true,
   });
+  const normalizedPerms = {
+    booking_edit: Boolean(perms.booking_edit ?? perms.edit),
+    booking_edit_any: Boolean(perms.booking_edit_any ?? perms.edit_any),
+    support: {
+      tech: Boolean(perms.support_fulfillment?.tech ?? perms.tech),
+      medical: Boolean(perms.support_fulfillment?.medical ?? perms.medical),
+      training: Boolean(perms.support_fulfillment?.training ?? perms.training),
+    },
+  };
+  normalizedPerms.edit = normalizedPerms.booking_edit;
+  normalizedPerms.edit_any = normalizedPerms.booking_edit_any;
+  normalizedPerms.tech = normalizedPerms.support.tech;
+  normalizedPerms.medical = normalizedPerms.support.medical;
+  normalizedPerms.training = normalizedPerms.support.training;
 
   // if this is missing we're on a template page so edit_any is true and it's irrelevant
   const user_groups = json_from_script_or("user-groups", []);
@@ -2768,12 +2801,14 @@ function wire_cell_editors() {
   );
 
   const cfg = {
-    perms,
+    perms: normalizedPerms,
     membership,
     device_groups,
     schedulable_groups,
     default_group:
-      !perms.edit_any && selectionGroups.length == 1 ? selectionGroups[0] : "",
+      !normalizedPerms.booking_edit_any && selectionGroups.length == 1
+        ? selectionGroups[0]
+        : "",
     selection_group_list: document.querySelector("datalist#selection-groups")
       ? "selection-groups"
       : "groups",
@@ -2805,7 +2840,7 @@ function wire_cell_editors() {
   const inspectorState = {
     target: "Select a time slot",
     summary: "no slot selected",
-    mode: "read only",
+    mode: "Read-only booking",
     pending: "0 changes",
     errors: "0 errors",
   };
@@ -2850,7 +2885,7 @@ function wire_cell_editors() {
         inspector.slotEditor.hidden === false,
     );
   const set_inspector_action_label = (
-    editable,
+    bookingEditable,
     supportActionable,
     selected = false,
   ) => {
@@ -2866,17 +2901,17 @@ function wire_cell_editors() {
       inspector.openSupportCue.hidden = !selected || !supportActionable;
     }
     if (inspector.openReadonlyCue) {
-      inspector.openReadonlyCue.hidden = !selected || editable;
+      inspector.openReadonlyCue.hidden = !selected || bookingEditable;
     }
     inspector.open.dataset.editMode = selected
-      ? editable
+      ? bookingEditable
         ? "editable"
         : "readonly"
       : "none";
     const buttonTitle =
-      selected && !editable && supportActionable
+      selected && !bookingEditable && supportActionable
         ? "Open selection details for a read-only slot with actionable support"
-        : selected && !editable
+        : selected && !bookingEditable
         ? "Open selection details for a read-only slot"
         : "Open selection details";
     inspector.open.title = buttonTitle;
@@ -3777,10 +3812,15 @@ function wire_cell_editors() {
     }
     return rows.slice(0, 6);
   };
+  const is_entry_booking_editable = (entry) =>
+    Boolean(
+      entry &&
+        (entry.dataset.bookingEditable ?? entry.dataset.canEdit) == "true",
+    );
   const is_entry_editable = (entry) =>
     Boolean(
       entry &&
-        entry.dataset.canEdit == "true" &&
+        is_entry_booking_editable(entry) &&
         entry.dataset.locked != "true",
     );
   const is_entry_interactive = (entry) =>
@@ -4265,7 +4305,7 @@ function wire_cell_editors() {
   const set_inspector_default_state = () => {
     inspectorState.target = "Select a time slot";
     inspectorState.summary = "no slot selected";
-    inspectorState.mode = "read only";
+    inspectorState.mode = "Read-only booking";
     inspectorState.pending = "0 changes";
     inspectorState.errors = "0 errors";
     render_slot_errors([]);
@@ -4285,7 +4325,7 @@ function wire_cell_editors() {
       set_inspector_default_state();
       return;
     }
-    const editable = is_entry_editable(entry);
+    const bookingEditable = is_entry_booking_editable(entry);
     const interactive = is_entry_interactive(entry);
     const supportActionable = is_entry_support_actionable(entry);
     const cell = ensure_cell(entry);
@@ -4294,16 +4334,18 @@ function wire_cell_editors() {
     inspectorState.target = `${date}, ${hour}`;
     inspectorState.summary = slot_summary(entry);
     if (entry.dataset.locked == "true") {
-      inspectorState.mode = "locked";
-    } else if (editable) {
-      inspectorState.mode = "editable";
+      inspectorState.mode = "Save rejected; refresh before retrying";
+    } else if (bookingEditable && supportActionable) {
+      inspectorState.mode = "Editable booking; support can be assigned";
+    } else if (bookingEditable) {
+      inspectorState.mode = "Editable booking";
     } else if (supportActionable) {
-      inspectorState.mode = "read only | support available";
+      inspectorState.mode = "Read-only booking; support can be assigned";
     } else {
-      inspectorState.mode = "read only";
+      inspectorState.mode = "Read-only booking";
     }
     if (inspector.open) {
-      set_inspector_action_label(editable, supportActionable, true);
+      set_inspector_action_label(bookingEditable, supportActionable, true);
     }
     if (inspector.save) {
       inspector.save.hidden = !interactive;
@@ -4311,7 +4353,7 @@ function wire_cell_editors() {
     if (inspector.slotEditor && refreshEditor) {
       mount_inspector_entry_editor(entry);
     }
-    sync_duration_controls(entry, editable);
+    sync_duration_controls(entry, bookingEditable);
     update_inspector_counts(entry, cell);
     sync_inspector_modal();
   };
@@ -4324,7 +4366,7 @@ function wire_cell_editors() {
     const day = dayLabelForCol(col);
     inspectorState.target = `${day}, ${hour}`.replace(/^,\s*/, "");
     inspectorState.summary = "open | unassigned | no support requests";
-    inspectorState.mode = "read only";
+    inspectorState.mode = "Read-only booking";
     update_inspector_counts(null, null);
     mount_inspector_entry_editor(null, true);
     if (inspector.save) {
@@ -6414,6 +6456,9 @@ function wire_cell_editors() {
     if (inspectorDialog && typeof inspectorDialog.hide == "function") {
       inspectorDialog.hide();
     }
+    if (inspectorContainer instanceof HTMLElement) {
+      inspectorContainer.setAttribute("aria-hidden", "true");
+    }
   };
   const submitTemplateDiffs = (diffs, notify = false) => {
     const csrf_token = document.querySelector("#csrf_token").value;
@@ -6608,6 +6653,7 @@ function wire_cell_editors() {
       );
       return;
     }
+    closeInspector();
     submitDiffBatch(diffs, saveTargets, {
       closeInspectorOnSuccess: true,
       applyValues: () => anchorValues,

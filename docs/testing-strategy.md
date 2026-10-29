@@ -14,6 +14,7 @@
 - Network/browser: none
 - CI: yes
 - Database bootstrap: `tests/unit/conftest.py` initializes `fmrif_scheduler_test` via `sql/000-init.sh` so route tests use production-like SQL objects.
+- Parallelism: worker-scoped route DB names are supported under `xdist`; Mailpit-backed modules must also carry `pytest.mark.xdist_group("mailpit")` so `--dist loadgroup` keeps shared SMTP inbox access on one worker.
 - Contract enforcement: `tests/unit/route_contract.py` and `tests/unit/test_route_contract.py`
   - Every registered Flask route rule and method must be declared in `ROUTE_EXPECTATIONS`.
   - Every protected `GET` route must declare per-role expected status in `RBAC_GET_EXPECTATIONS` for mock roles (`admin`, `member`, `dev`, `tech`, `inactive`).
@@ -93,6 +94,8 @@ Route tests:
 ```bash
 pixi run test-routes
 pixi run test-routes -- tests/unit/test_some_route_file.py -q
+pixi run test-routes-xdist
+pixi run test-routes-xdist -- tests/unit/test_some_route_file.py -q
 ```
 
 Integration tests (mock auth):
@@ -124,8 +127,12 @@ The `test-unit` and `test-routes` tasks use
 `scripts/run-isolated-test-suite.sh`. When explicit test selectors are passed,
 the task drops its default collection root instead of silently widening scope.
 `test-unit-xdist` is an opt-in unit-only variant layered on the same wrapper
-with `-n auto`; keep route tests on the default serial task unless worker-aware
-route isolation is introduced explicitly.
+with `-n auto --dist loadgroup`; Mailpit-backed unit tests share an
+`xdist_group("mailpit")` marker so they stay on one worker while the rest of
+the unit suite can spread out.
+`test-routes-xdist` applies the same `-n auto --dist loadgroup` strategy to the
+route suite. Use it for the fast full-suite path; keep `test-routes` as the
+serial fallback when debugging order-dependent or worker-specific issues.
 `test-integration*` tasks are wrapped directly by
 `scripts/run-isolated-test-suite.sh`, which assigns suite-scoped test DB names
 and Mailpit ports so those suites can run in parallel without sharing test mail

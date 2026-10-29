@@ -1057,13 +1057,6 @@ function renderMatrices(container, matrices, onApply, onQuickAdd, notifier) {
         return;
       }
 
-      const confirmMessage = text(
-        matrix.confirm || `Apply ${operations.length} RBAC changes?`,
-      );
-      if (!window.confirm(confirmMessage)) {
-        return;
-      }
-
       await onApply(matrix, operations);
     });
 
@@ -1384,6 +1377,14 @@ function initRbacExplorer(root) {
     modalConfig = null;
   };
 
+  const notifyModalError = (message, control = null) => {
+    modalError.textContent = "";
+    notifier.notify(text(message), "error", { sticky: true });
+    if (control instanceof HTMLElement) {
+      control.focus();
+    }
+  };
+
   const openModal = (config) => {
     modalConfig = config;
     modalTitle.textContent = text(config.title || "RBAC update");
@@ -1670,15 +1671,14 @@ function initRbacExplorer(root) {
         typeof value === "string" &&
         value === ""
       ) {
-        modalError.textContent = `${text(field.label || name)} is required.`;
-        control.focus();
+        notifyModalError(`${text(field.label || name)} is required.`, control);
         return;
       }
       values[name] = value;
     }
 
     if (typeof modalConfig.toOperations !== "function") {
-      modalError.textContent = "Missing modal submit handler.";
+      notifyModalError("Missing modal submit handler.");
       return;
     }
     const submission = modalConfig.toOperations(values);
@@ -1686,7 +1686,7 @@ function initRbacExplorer(root) {
       ? submission.operations
       : [];
     if (operations.length === 0) {
-      modalError.textContent = "No RBAC changes to apply.";
+      notifyModalError("No RBAC changes to apply.");
       return;
     }
 
