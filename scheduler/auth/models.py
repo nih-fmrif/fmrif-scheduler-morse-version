@@ -1,28 +1,19 @@
 """Models for authentication"""
 
-from dataclasses import dataclass
-from datetime import datetime
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List, Mapping, Optional
 
 
 @dataclass
-class LDAPUser:
-    """Represents an authenticated LDAP user"""
+class SessionUser:
+    """Represents an authenticated user built from JWT claims."""
 
     username: str
-    display_name: str
     email: str
-    groups: List[str]
-    token: Optional[str] = None
-    token_expiry: Optional[datetime] = None
+    display_name: str = ""
+    groups: List[str] = field(default_factory=list)
+    claims: Optional[Mapping[str, object]] = None
     active: bool = True
-
-    @property
-    def is_authenticated(self) -> bool:
-        """Check if user has valid authentication"""
-        if not self.token or not self.token_expiry:
-            return False
-        return datetime.utcnow() < self.token_expiry
 
     @property
     def id(self) -> str:
@@ -32,7 +23,7 @@ class LDAPUser:
     @property
     def label(self) -> str:
         """Return display name as label for compatibility"""
-        return self.display_name
+        return self.display_name or self.username
 
     @property
     def addr(self) -> str:

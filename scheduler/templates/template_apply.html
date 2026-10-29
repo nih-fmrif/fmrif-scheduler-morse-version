@@ -3,50 +3,102 @@
 body %}
 <p class="note">
   {% if warn %}{{ icons.info() }}{{ warn }}{% else %}template application begins
-  on {{ start }}{% endif %}
+  on Sunday {{ start }}{% endif %}
 </p>
 {% if templates %}
 <div class="apply-helper">
+  {% if templates | selectattr("compatibility.blocking") | list %}
+  <p class="note apply-helper-repair-note">
+    {{ icons.info() }} templates marked below as repair required remain visible
+    for review, but they cannot be applied until their stale or unavailable
+    values are repaired.
+  </p>
+  {% endif %}
   <div class="apply-helper-no-js">
     <span>available templates</span>
     <ul>
       {% for t in templates %}
-      <li><strong>{{ t.id }}</strong>: {{ t.label}}</li>
+      <li>
+        <strong>{{ t.id }}</strong>: {{ t.label }} {% if
+        t.compatibility.blocking %}
+        <strong>(repair required)</strong>
+        <ul>
+          {% for summary in t.compatibility.summary %}
+          <li>{{ summary }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <span>(ready)</span>
+        {% endif %}
+      </li>
       {% endfor %}
     </ul>
   </div>
   <div class="apply-helper-js" hidden>
-    <span>click buttons below to add to list of templates to apply</span>
-    <div>
+    <p class="apply-helper-instructions">
+      click buttons below to add to list of templates to apply
+    </p>
+    <div class="template-option-list">
       {% for t in templates %}
-      <button type="button" data-tc="{{ t.id }}">
-        <sr-only>add </sr-only><strong>{{ t.id }}</strong>: {{ t.label}}
-      </button>
+      <div class="template-option">
+        <button
+          type="button"
+          class="admin-show-more-button template-option-button"
+          data-tc="{{ t.id }}"
+          data-template-state="{% if t.compatibility.blocking %}blocking{% else %}ready{% endif %}"
+          {%
+          if
+          t.compatibility.blocking
+          %}disabled
+          aria-disabled="true"
+          {%
+          endif
+          %}
+          title="{% if t.compatibility.summary %}{{ t.compatibility.summary | join('; ') }}{% else %}ready{% endif %}"
+        >
+          <sr-only>add </sr-only><strong>{{ t.id }}</strong>: {{ t.label}}
+        </button>
+        {% if t.compatibility.blocking %}
+        <p class="template-option-status" data-status="blocking">
+          repair required
+        </p>
+        {% endif %}
+      </div>
       {% endfor %}
     </div>
   </div>
 </div>
 
-<form class="template-apply" method="post" action="{{ action }}">
+<form
+  class="template-apply"
+  method="post"
+  action="{{ action }}"
+  data-initial-state="{% if form.templates.data or form.templates.errors %}dirty{% else %}pristine{% endif %}"
+  data-has-server-errors="{% if form.templates.errors %}1{% else %}0{% endif %}"
+  data-server-error-message="{% if form.templates.errors %}{{ form.templates.errors[0] }}{% endif %}"
+>
   {{ macros.form(form)}}
-  <button
-    type="submit"
-    data-confirm-title="Apply templates"
-    data-confirm-confirm="apply templates"
-  >
-    apply
-  </button>
+  <div class="template-apply-actions">
+    <button
+      type="submit"
+      data-js-submit
+      disabled
+      data-confirm-title="Apply templates"
+      data-confirm-confirm="apply templates"
+    >
+      apply
+    </button>
+    <noscript>
+      <button type="submit">apply</button>
+    </noscript>
+  </div>
 </form>
 
-<script type="module" async>
-  const con = document.querySelector(".apply-helper");
-  const templates = document.querySelector("#templates");
-  con.addEventListener("click", (e) => {
-    e.preventDefault();
-    templates.value += e.target.dataset.tc;
-  });
-  con.classList.add("js-loaded");
-</script>
+<script
+  nonce="{{ current_csp_nonce() }}"
+  type="module"
+  src="{{ static_asset_url('js/template-apply.js') }}"
+></script>
 {% else %}
 <p class="note">{{ icons.info()}} {{ no_templates }}</p>
 {% endif %} {% endblock %}

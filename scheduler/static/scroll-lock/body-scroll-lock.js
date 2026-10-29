@@ -26,8 +26,6 @@ const isIosDevice =
 let locks = [];
 let documentListenerAdded = false;
 let initialClientY = -1;
-let previousBodyOverflowSetting;
-let previousBodyPaddingRight;
 
 // returns true if `el` should be allowed to receive touchmove events.
 const allowTouchMove = (el) =>
@@ -59,49 +57,22 @@ const preventDefault = (rawEvent) => {
 };
 
 const setOverflowHidden = (options) => {
-  // If previousBodyPaddingRight is already set, don't set it again.
-  if (previousBodyPaddingRight === undefined) {
-    const reserveScrollBarGap =
-      !!options && options.reserveScrollBarGap === true;
-    const scrollBarGap =
-      window.innerWidth - document.documentElement.clientWidth;
-
-    if (reserveScrollBarGap && scrollBarGap > 0) {
-      previousBodyPaddingRight = document.body.style.paddingRight;
-      document.body.style.paddingRight = `${scrollBarGap}px`;
-    }
+  const reserveScrollBarGap = !!options && options.reserveScrollBarGap === true;
+  if (reserveScrollBarGap) {
+    // CSP-safe mode does not set inline padding; scrollbar-gap reservation is ignored.
   }
-
-  // If previousBodyOverflowSetting is already set, don't set it again.
-  if (previousBodyOverflowSetting === undefined) {
-    previousBodyOverflowSetting = document.body.style.overflow;
-    // Setting overflow on body/documentElement synchronously in Desktop Safari slows down
-    // the responsiveness for some reason. Setting within a setTimeout fixes this.
-    setTimeout(() => {
-      document.body.style.overflow = "hidden";
-    });
-  }
+  // Setting overflow on body/documentElement synchronously in Desktop Safari slows down
+  // the responsiveness for some reason. Setting within a setTimeout fixes this.
+  setTimeout(() => {
+    document.body.classList.add("body-scroll-locked");
+  });
 };
 
 const restoreOverflowSetting = () => {
   // Setting overflow on body/documentElement synchronously in Desktop Safari slows down
   // the responsiveness for some reason. Setting within a setTimeout fixes this.
   setTimeout(() => {
-    if (previousBodyPaddingRight !== undefined) {
-      document.body.style.paddingRight = previousBodyPaddingRight;
-
-      // Restore previousBodyPaddingRight to undefined so setOverflowHidden knows it
-      // can be set again.
-      previousBodyPaddingRight = undefined;
-    }
-
-    if (previousBodyOverflowSetting !== undefined) {
-      document.body.style.overflow = previousBodyOverflowSetting;
-
-      // Restore previousBodyOverflowSetting to undefined
-      // so setOverflowHidden knows it can be set again.
-      previousBodyOverflowSetting = undefined;
-    }
+    document.body.classList.remove("body-scroll-locked");
   });
 };
 

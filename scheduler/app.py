@@ -1,35 +1,91 @@
-import ipaddress
+import hashlib
+import os
+import re
+import secrets
+import subprocess
+import traceback
+import uuid
 from datetime import timedelta
 from functools import wraps
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import click
-from flask import Flask, abort, current_app, g, jsonify, redirect, request, session
-from flask.helpers import flash, url_for
-from flask.templating import render_template
-from flask.wrappers import Response
+from flask import (
+    Flask,
+    Response,
+    abort,
+    current_app,
+    g,
+    got_request_exception,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
+from markupsafe import Markup, escape
+from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.exceptions import HTTPException
 
-from scheduler.auth.session import get_user_from_session
+import scheduler.logic.app_error_events as app_error_logic
+import scheduler.logic.core as logic
+import scheduler.logic.csp_violation_events as csp_logic
+from scheduler import db_runtime
+from scheduler.auth.session import (
+    authenticate_bearer_token,
+    get_user_from_session,
+    require_jwt,
+)
 from scheduler.auth.views import auth
 
-from . import logic, message, model
-from .config import app_config, settings
+from . import message, model
+from .config import app_config, normalize_app_env, settings
+from .logging import configure_app_logging, redact_string, redact_value
+from .routes import core_routes as core_route_handlers
+from .routes.entity_routes import register_entity_routes
+from .routes.rbac_routes import audit_rbac_action, register_rbac_blueprint
 
-## Configuration
-app = Flask(__name__)
 
-# Load configuration from settings
-app.config.update(**app_config)
+def css_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9_-]+", "-", (value or "").strip().lower()).strip("-")
+    return token or "none"
 
-# Add session security settings
-app.config.update(
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Strict",
-    PERMANENT_SESSION_LIFETIME=timedelta(seconds=settings.ldap.token_lifetime),
-)
+
+def current_csp_nonce() -> str:
+    """Return request-scoped CSP nonce for templates, if available."""
+    try:
+        return getattr(g, "csp_nonce", "")
+    except RuntimeError:
+        return ""
+
+
+_SHARED_SESSION_INTERFACE = None
+_APP_ERROR_REFERENCE_PREFIX = "APP-ERR"
+_APP_ERROR_BODY_PREVIEW_CHARS = 4096
+_APP_ERROR_HEADER_NAMES = ("Accept", "Content-Type", "Referer")
+_CSP_REPORT_TEXT_LIMIT = 2048
+_CSP_REPORTING_GROUP = "csp-endpoint"
+_STATIC_ASSET_VERSION: Optional[str] = None
+
+_cached_memberships = core_route_handlers._cached_memberships
+_request_bool_cache = core_route_handlers._request_bool_cache
+_cached_show_tech_join_form = core_route_handlers._cached_show_tech_join_form
+_cached_is_admin = core_route_handlers._cached_is_admin
+_home_device_permissions = core_route_handlers._home_device_permissions
+_rbac_user_is_group_pi = core_route_handlers._rbac_user_is_group_pi
+_rbac_user_can_access = core_route_handlers._rbac_user_can_access
+inject_template_context = core_route_handlers.inject_template_context
+robots = core_route_handlers.robots
+home = core_route_handlers.home
+mailing_lists = core_route_handlers.mailing_lists
+join_form_subnav = core_route_handlers.join_form_subnav
+join_form_breadcrumb = core_route_handlers.join_form_breadcrumb
+join_form = core_route_handlers.join_form
+join_form_tech = core_route_handlers.join_form_tech
+handle_join_group = core_route_handlers.handle_join_group
+register_core_routes = core_route_handlers.register_core_routes
 
 
 def proxy_fix(app):
@@ -40,24 +96,143 @@ def proxy_fix(app):
         app.wsgi_app = ProxyFix(app.wsgi_app, **counts)
 
 
-proxy_fix(app)
+def _resolve_static_asset_version() -> str:
+    global _STATIC_ASSET_VERSION
+    if _STATIC_ASSET_VERSION is not None:
+        return _STATIC_ASSET_VERSION
 
-# Initialize extensions
-model.db.init_app(app)
-Session(app)
-message.mailer.init_app(app)
-signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
-app.config["URL_SIGNER"] = signer
+    for name in (
+        "STATIC_ASSET_VERSION",
+        "GIT_SHA",
+        "SOURCE_VERSION",
+        "GITHUB_SHA",
+    ):
+        value = str(os.environ.get(name, "") or "").strip()
+        if value != "":
+            _STATIC_ASSET_VERSION = value[:12]
+            return _STATIC_ASSET_VERSION
 
-# Register blueprints
-app.register_blueprint(auth, url_prefix="/auth")
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        _STATIC_ASSET_VERSION = completed.stdout.strip()
+    except (FileNotFoundError, PermissionError, subprocess.SubprocessError):
+        _STATIC_ASSET_VERSION = ""
+    return _STATIC_ASSET_VERSION
+
+
+def create_app(*, skip_startup_db_check: bool = False) -> Flask:
+    """Build and configure a Flask application instance."""
+    app = Flask(__name__)
+
+    app_env = normalize_app_env(os.environ.get("APP_ENV", settings.app_env))
+
+    # Load base settings first, then apply profile/runtime overrides.
+    app.config.update(**app_config)
+    app.config["APP_ENV"] = app_env
+    app.config["DEBUG"] = settings.core.debug
+    app.config["AUTH_TEST_ENABLED"] = settings.auth_test.enabled
+    app.config["SESSION_COOKIE_SECURE"] = settings.session.cookie_secure
+    app.config["TEMPLATES_AUTO_RELOAD"] = settings.core.debug
+    app.config["STATIC_ASSET_VERSION"] = _resolve_static_asset_version()
+
+    if app_env == "development":
+        os.environ.setdefault("FLASK_DEBUG", "1")
+        os.environ.setdefault("FLASK_RUN_RELOAD", "1")
+        app.config["DEBUG"] = True
+        app.config["TEMPLATES_AUTO_RELOAD"] = True
+
+    if not app.config.get("SESSION_COOKIE_PATH"):
+        app.config["SESSION_COOKIE_PATH"] = "/"
+
+    app.config.update(
+        SESSION_COOKIE_SECURE=settings.session.cookie_secure,
+        SESSION_COOKIE_HTTPONLY=settings.session.cookie_httponly,
+        SESSION_COOKIE_SAMESITE=settings.session.cookie_samesite,
+        PERMANENT_SESSION_LIFETIME=timedelta(
+            seconds=settings.session.permanent_lifetime
+        ),
+    )
+
+    configure_app_logging(app)
+    proxy_fix(app)
+
+    model.db.init_app(app)
+    with app.app_context():
+        db_runtime.configure_engine_runtime(model.db.engine)
+        if settings.database.startup_check and not skip_startup_db_check:
+            db_runtime.verify_startup_database_connectivity()
+    app.config.setdefault("SESSION_SQLALCHEMY", model.db)
+    global _SHARED_SESSION_INTERFACE
+    if _SHARED_SESSION_INTERFACE is None:
+        Session(app)
+        _SHARED_SESSION_INTERFACE = app.session_interface
+    else:
+        app.session_interface = _SHARED_SESSION_INTERFACE
+    message.mailer.init_app(app)
+    signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="nih-scheduler")
+    app.config["URL_SIGNER"] = signer
+
+    app.register_blueprint(auth, url_prefix="/auth")
+    register_core_app_features(app)
+    app.add_url_rule(
+        "/csp-report", endpoint="csp_report", view_func=csp_report, methods=["POST"]
+    )
+    register_core_routes(
+        app,
+        active_user_required=active_user_required,
+        login_required=login_required,
+        render_to=render_to,
+        my_url_fn=my_url,
+        to_fn=to,
+        breadcrumb_fn=breadcrumb,
+        subpage_nav_fn=subpage_nav,
+        audit_rbac_action_fn=audit_rbac_action,
+    )
+
+    register_rbac_blueprint(
+        app,
+        active_user_required=active_user_required,
+        admin_only=admin_only,
+        render_to=render_to,
+        breadcrumb_fn=breadcrumb,
+        subpage_nav_fn=subpage_nav,
+    )
+
+    register_entity_routes(
+        app,
+        active_user_required=active_user_required,
+        login_required=login_required,
+        render_to=render_to,
+        my_url_fn=my_url,
+        to_fn=to,
+        breadcrumb_fn=breadcrumb,
+        subpage_nav_fn=subpage_nav,
+    )
+
+    @got_request_exception.connect_via(app)
+    def _capture_request_exception(
+        sender: Flask, exception: BaseException, **_extra: object
+    ) -> None:
+        _ = sender
+        _capture_unhandled_app_exception(exception)
+
+    return app
+
 
 ## Authentication
 
 
-@app.before_request
 def setup_user():
     """Load user from session if available"""
+    g.csp_nonce = secrets.token_urlsafe(16) if settings.security.enable_csp else ""
+
     # user already loaded
     if "user" in g:
         return
@@ -69,43 +244,217 @@ def setup_user():
     if request.endpoint == "static":
         return
 
-    # DEVELOPMENT ONLY: Superuser mode for testing
-    # ToDo: Remove this block in production. This is a development hack for testing purposes.
-    # In production, always use proper authentication via LDAP.
-    if current_app.config.get("SUPERUSER_MODE", False):
-        g.user = get_user_from_session() or logic.get_or_create_superuser()
+    # Try bearer token first (stateless API calls)
+    bearer_user = authenticate_bearer_token(request.headers.get("Authorization"))
+    if bearer_user:
+        g.user = bearer_user
         return
 
     # Try to get user from session
     g.user = get_user_from_session()
 
 
+def _request_client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "").strip()
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        if first:
+            return first
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    remote = (request.remote_addr or "").strip()
+    return remote or "unknown"
+
+
+def _csp_policy_with_reporting(policy: str) -> str:
+    normalized = (policy or "").strip()
+    if normalized == "":
+        return normalized
+    if re.search(r"(?i)\breport-to\b", normalized):
+        return normalized
+    separator = "" if normalized.endswith(";") else ";"
+    return f"{normalized}{separator} report-to {_CSP_REPORTING_GROUP}"
+
+
+def _csp_report_entries(payload: Any) -> List[Tuple[str, Dict[str, Any]]]:
+    if not isinstance(payload, list):
+        return []
+
+    entries: List[Tuple[str, Dict[str, Any]]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        report_type = str(item.get("type", "") or "").strip().lower()
+        if report_type != "csp-violation":
+            continue
+        body = item.get("body")
+        if isinstance(body, dict):
+            entries.append((report_type, body))
+    return entries
+
+
+def _csp_report_text(
+    report: Dict[str, Any], *keys: str, limit: int = _CSP_REPORT_TEXT_LIMIT
+) -> str:
+    for key in keys:
+        value = report.get(key)
+        if value is None:
+            continue
+        token = str(value).strip()
+        if token != "":
+            return token[:limit]
+    return ""
+
+
+def _csp_report_int(report: Dict[str, Any], *keys: str) -> Optional[int]:
+    for key in keys:
+        value = report.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _csp_report_actor() -> str:
+    user = getattr(g, "user", None)
+    if user is None:
+        return "anonymous"
+    user_id = str(getattr(user, "id", "") or "").strip()
+    return user_id or "anonymous"
+
+
+def csp_report():
+    if not csp_logic.csp_violation_event_table_available():
+        return ("", 204)
+
+    payload = request.get_json(silent=True, force=True)
+    entries = _csp_report_entries(payload)
+    if not entries:
+        return ("", 204)
+
+    actor = _csp_report_actor()
+    ip_addr = _request_client_ip()
+    user_agent = request.headers.get("User-Agent", "")
+
+    try:
+        for report_type, report in entries:
+            sanitized_report = redact_value(report)
+            if not isinstance(sanitized_report, dict):
+                continue
+            csp_logic.record_csp_violation_event(
+                report_type=report_type,
+                actor=actor,
+                ip_addr=ip_addr,
+                user_agent=user_agent,
+                document_uri=_csp_report_text(
+                    sanitized_report, "document-uri", "documentURL"
+                ),
+                referrer=_csp_report_text(sanitized_report, "referrer"),
+                blocked_uri=_csp_report_text(
+                    sanitized_report, "blocked-uri", "blockedURL"
+                ),
+                violated_directive=_csp_report_text(
+                    sanitized_report,
+                    "violated-directive",
+                    "violatedDirective",
+                ),
+                effective_directive=_csp_report_text(
+                    sanitized_report,
+                    "effective-directive",
+                    "effectiveDirective",
+                ),
+                original_policy=_csp_report_text(
+                    sanitized_report,
+                    "original-policy",
+                    "originalPolicy",
+                    limit=8192,
+                ),
+                source_file=_csp_report_text(
+                    sanitized_report, "source-file", "sourceFile"
+                ),
+                line_number=_csp_report_int(
+                    sanitized_report, "line-number", "lineNumber"
+                ),
+                column_number=_csp_report_int(
+                    sanitized_report, "column-number", "columnNumber"
+                ),
+                disposition=_csp_report_text(sanitized_report, "disposition"),
+                status_code=_csp_report_int(
+                    sanitized_report, "status-code", "statusCode"
+                ),
+                script_sample=_csp_report_text(
+                    sanitized_report, "script-sample", "sample", limit=512
+                ),
+                report_body=sanitized_report,
+            )
+    except SQLAlchemyError:
+        model.db.session.rollback()
+        current_app.logger.exception("Failed to persist CSP violation report")
+    except Exception:
+        current_app.logger.exception("Failed to process CSP violation report")
+
+    return ("", 204)
+
+
+def apply_security_headers(response: Response):
+    """Apply baseline security headers without changing page behavior."""
+    response.headers["X-Content-Type-Options"] = settings.security.content_type_options
+    response.headers["X-Frame-Options"] = settings.security.frame_options
+    response.headers["Referrer-Policy"] = settings.security.referrer_policy
+
+    if settings.security.enable_csp:
+        policy = _csp_policy_with_reporting(settings.security.csp_policy)
+        nonce = getattr(g, "csp_nonce", "")
+        if "{nonce}" in policy:
+            policy = policy.replace("{nonce}", nonce)
+        csp_header = (
+            "Content-Security-Policy-Report-Only"
+            if settings.security.csp_report_only
+            else "Content-Security-Policy"
+        )
+        response.headers[csp_header] = policy
+        if settings.security.csp_report_only:
+            response.headers.pop("Content-Security-Policy", None)
+        else:
+            response.headers.pop("Content-Security-Policy-Report-Only", None)
+        response.headers["Reporting-Endpoints"] = (
+            f'{_CSP_REPORTING_GROUP}="{url_for("csp_report")}"'
+        )
+
+    # Keep HSTS edge-owned so the TLS terminator remains the single authority.
+    return response
+
+
 def login_required(f):
-    @wraps(f)
-    def protect(*args, **kwargs):
-        if g.user is None:
-            abort(403, "Access denied: Authentication required")
-        return f(*args, **kwargs)
-
-    return protect
+    return require_jwt(f)
 
 
-def in_network_required(f):
-    @wraps(f)
-    def protect(*args, **kwargs):
-        ip = ipaddress.ip_address(request.access_route[-1])
-        if not any(ip in network for network in app.config["NIH_NETWORKS"]):
-            abort(403, "Access denied: this page is limited to the NIH network")
-        return f(*args, **kwargs)
+def _css_token_filter(value: str) -> str:
+    return css_token(value)
 
-    return protect
+
+# Keep nonce access import-mode agnostic: macros imported without context
+# can still read the request-scoped CSP nonce through this helper.
+def _current_csp_nonce_global() -> str:
+    return current_csp_nonce()
+
+
+def _static_asset_url_global(filename: str) -> str:
+    params: Dict[str, str] = {"filename": filename}
+    version = str(current_app.config.get("STATIC_ASSET_VERSION", "") or "").strip()
+    if version != "":
+        params["v"] = version
+    return url_for("static", **params)
 
 
 def active_user_required(f):
     @wraps(f)
+    @require_jwt
     def protect(*args, **kwargs):
-        if g.user is None:
-            abort(403, "Access denied: Authentication required")
         if not g.user.active:
             abort(403, "Access denied: this page is limited to active users")
         return f(*args, **kwargs)
@@ -115,8 +464,9 @@ def active_user_required(f):
 
 def admin_only(f):
     @wraps(f)
+    @require_jwt
     def protect(*args, **kwargs):
-        if not (g.user is not None and g.user.active and logic.is_admin(g.user)):
+        if not (g.user is not None and _cached_is_admin()):
             abort(403, "Access denied: this page is admin only")
         return f(*args, **kwargs)
 
@@ -126,44 +476,262 @@ def admin_only(f):
 ## Error handlers
 
 
-def render_error_page(code: int, msg: str, show_login: bool = False) -> Tuple[str, int]:
+def _request_prefers_json() -> bool:
+    if request.path.startswith("/json/"):
+        return True
+    accept = request.accept_mimetypes
+    if not accept:
+        return False
+    best = accept.best_match(["application/json", "text/html"])
+    return (
+        best == "application/json" and accept["application/json"] >= accept["text/html"]
+    )
+
+
+def _request_client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "").strip()
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        if first:
+            return first
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    remote = (request.remote_addr or "").strip()
+    return remote or "unknown"
+
+
+def _error_reference_id() -> str:
+    return f"{_APP_ERROR_REFERENCE_PREFIX}-{uuid.uuid4().hex[:12].upper()}"
+
+
+def _redacted_multidict(multi_dict) -> Dict[str, object]:
+    redacted: Dict[str, object] = {}
+    for key in multi_dict.keys():
+        values = [str(value) for value in multi_dict.getlist(key)]
+        payload: object = values[0] if len(values) == 1 else values
+        masked = redact_value({str(key): payload})
+        if len(values) == 1:
+            redacted[str(key)] = masked[str(key)]
+        else:
+            redacted[str(key)] = masked[str(key)]
+    return redacted
+
+
+def _error_request_context_payload() -> Dict[str, object]:
+    user = getattr(g, "user", None)
+    payload: Dict[str, object] = {
+        "actor": {
+            "id": str(getattr(user, "id", "") or "").strip() or "anonymous",
+            "active": bool(getattr(user, "active", False)),
+        },
+        "request": {
+            "method": request.method,
+            "path": request.path,
+            "endpoint": request.endpoint or "",
+            "view_args": redact_value(dict(request.view_args or {})),
+            "query": _redacted_multidict(request.args),
+            "form": _redacted_multidict(request.form),
+            "headers": {
+                key.lower().replace("-", "_"): redact_string(value.strip())
+                for key in _APP_ERROR_HEADER_NAMES
+                if (value := request.headers.get(key, ""))
+            },
+        },
+    }
+
+    try:
+        json_body = request.get_json(silent=True)
+    except Exception:
+        json_body = None
+    if json_body is not None:
+        payload["request"]["json"] = redact_value(json_body)
+
+    raw_body = ""
+    try:
+        raw_body = request.get_data(cache=True, as_text=True) or ""
+    except Exception:
+        raw_body = ""
+    if raw_body != "":
+        trimmed = raw_body[:_APP_ERROR_BODY_PREVIEW_CHARS]
+        if len(raw_body) > _APP_ERROR_BODY_PREVIEW_CHARS:
+            trimmed = f"{trimmed}..."
+        payload["request"]["raw_body_preview"] = redact_string(trimmed)
+
+    return payload
+
+
+def _top_application_frame(exception: BaseException) -> str:
+    frames = traceback.extract_tb(exception.__traceback__)
+    if len(frames) == 0:
+        return "unknown"
+
+    for frame in reversed(frames):
+        marker = f"{os.sep}scheduler{os.sep}"
+        if marker in frame.filename:
+            suffix = frame.filename.split(marker, 1)[1]
+            return f"{suffix}:{frame.name}:{frame.lineno}"
+
+    frame = frames[-1]
+    return f"{os.path.basename(frame.filename)}:{frame.name}:{frame.lineno}"
+
+
+def _app_error_fingerprint(exception: BaseException) -> str:
+    raw = "|".join(
+        [
+            exception.__class__.__name__,
+            str(request.endpoint or request.path or ""),
+            _top_application_frame(exception),
+        ]
+    )
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+    return f"{exception.__class__.__name__}:{digest}"
+
+
+def _capture_unhandled_app_exception(exception: BaseException) -> Optional[str]:
+    if isinstance(exception, HTTPException):
+        return None
+    if getattr(g, "_app_error_captured", False):
+        return getattr(g, "_app_error_reference_id", None)
+
+    g._app_error_captured = True
+
+    try:
+        model.db.session.rollback()
+    except Exception:
+        pass
+
+    if not app_error_logic.app_error_event_table_available():
+        return None
+
+    reference_id = _error_reference_id()
+    stack_trace = redact_string(
+        "".join(
+            traceback.format_exception(
+                type(exception), exception, exception.__traceback__
+            )
+        )
+    )
+    try:
+        stored = app_error_logic.record_app_error_event(
+            reference_id=reference_id,
+            actor=str(getattr(getattr(g, "user", None), "id", "") or "anonymous"),
+            ip_addr=_request_client_ip(),
+            user_agent=redact_string(request.headers.get("User-Agent", "").strip()),
+            method=request.method,
+            where_path=request.path,
+            endpoint=request.endpoint or "",
+            status_code=500,
+            exception_type=exception.__class__.__name__,
+            exception_message=redact_string(
+                str(exception) or "Unhandled application error"
+            ),
+            fingerprint=_app_error_fingerprint(exception),
+            request_context=_error_request_context_payload(),
+            stack_trace=stack_trace,
+        )
+    except SQLAlchemyError:
+        current_app.logger.exception("Failed to persist app error event")
+        return None
+
+    if stored:
+        g._app_error_reference_id = reference_id
+        return reference_id
+    return None
+
+
+def render_error_page(
+    code: int,
+    title: str,
+    detail: Optional[str] = None,
+    show_login: bool = False,
+    reference_id: str = "",
+) -> Tuple[str, int]:
     data = {
         "code": code,
-        "msg": msg,
+        "title": title,
+        "detail": detail,
+        "assurance": "The application administrators have been notified.",
         "show_login": show_login,
+        "reference_id": reference_id,
+        **breadcrumb(),
     }
     return render_template("error.html", **data), code
 
 
-@app.errorhandler(403)
+def wants_html_response() -> bool:
+    accept = request.accept_mimetypes
+    if not accept:
+        return False
+    return (
+        accept.best_match(["text/html", "application/json"]) == "text/html"
+        and accept["text/html"] > accept["application/json"]
+    )
+
+
+def unauthorized(e):
+    # Redirect browser clients to login for unauthenticated requests
+    if g.user is None and wants_html_response():
+        return redirect(url_for("auth.login"))
+    return render_error_page(
+        401,
+        "Authentication Required",
+        "Your session may have expired. Please sign in and try again.",
+        show_login=g.user is None,
+    )
+
+
 def access_denied(e):
     # Redirect to login page if user is not authenticated
     if g.user is None:
         return redirect(url_for("auth.login"))
-    return render_error_page(403, e.description)
+    current_app.logger.warning(
+        "Access denied for user=%s on path=%s (%s)",
+        getattr(g.user, "id", "unknown"),
+        request.path,
+        e.description,
+    )
+    return render_error_page(
+        403,
+        "Access Denied",
+        "You do not have permission to view this page.",
+    )
 
 
-@app.errorhandler(404)
 def not_found(e):
-    return render_error_page(404, "Not found")
+    return render_error_page(
+        404,
+        "Page Not Found",
+        "The page you requested could not be found.",
+        show_login=g.user is None,
+    )
+
+
+def internal_server_error(e):
+    _ = e
+    reference_id = str(getattr(g, "_app_error_reference_id", "") or "")
+    if _request_prefers_json():
+        payload = {
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred.",
+        }
+        if reference_id != "":
+            payload["reference_id"] = reference_id
+        return jsonify(payload), 500
+
+    detail = "An unexpected error occurred while processing your request."
+    return render_error_page(
+        500,
+        "Internal Server Error",
+        detail,
+        reference_id=reference_id,
+    )
 
 
 ## CLI commands
 
 
-@app.cli.command("force-login")
-@click.argument("user")
-def force_login_cli(user):
-    """Create a login link for USER"""
-    u = logic.get_user(user)
-    if u is None:
-        click.echo(f"no such user {user}")
-        return
-    token = logic.create_reset_token_for(user)
-    click.echo(url_for("force_login", token=token))
-
-
-@app.cli.command("deactivate-user")
+@click.command("deactivate-user")
 @click.argument("user")
 def deactivate_user(user):
     """mark USER as no longer active"""
@@ -177,7 +745,7 @@ def deactivate_user(user):
     click.echo(f"{user} is now inactive")
 
 
-@app.cli.command("activate-user")
+@click.command("activate-user")
 @click.argument("user")
 def activate_user(user):
     """mark USER as active"""
@@ -191,7 +759,7 @@ def activate_user(user):
     click.echo(f"{user} is now active")
 
 
-@app.cli.command("add-admin")
+@click.command("add-admin")
 @click.argument("user")
 def add_admin(user):
     """add USER as an approved member of the admin group"""
@@ -249,10 +817,22 @@ def breadcrumb(*routes: Union[str, Tuple[str, str]]) -> Breadcrumb_links:
     return {"breadcrumb": trail}
 
 
-def sr_only_tag(s: str) -> str:
-    """replace " [" with "<sr-only>" and "]" with "</sr-only>",
-    allowing more compact representation of common pattern."""
-    return s.replace(" [", "<sr-only> ").replace("]", "</sr-only>")
+def sr_only_tag(s: str) -> Markup:
+    """Render compact nav labels with optional sr-only suffix safely.
+
+    Expected pattern: ``visible [screen-reader text]``.
+    Any user-provided content is HTML-escaped before optional sr-only wrapping.
+    """
+    text = str(s or "")
+    start = text.find(" [")
+    end = text.rfind("]")
+    if start == -1 or end <= start + 2:
+        return Markup(escape(text))
+
+    visible = escape(text[:start])
+    sr_text = escape(text[start + 2 : end])
+    tail = escape(text[end + 1 :])
+    return Markup(f"{visible}<sr-only> {sr_text}</sr-only>{tail}")
 
 
 Subpage_links = Dict[str, Dict[str, Union[str, List[Tuple[str, str]]]]]
@@ -290,1177 +870,31 @@ def render_to(template):
     return decorator
 
 
-## Routes
+def register_core_app_features(app: Flask) -> None:
+    app.before_request(setup_user)
+    app.context_processor(inject_template_context)
+    app.after_request(apply_security_headers)
+    app.add_template_filter(_css_token_filter, "css_token")
+    app.add_template_global(_current_csp_nonce_global, "current_csp_nonce")
+    app.add_template_global(_static_asset_url_global, "static_asset_url")
+    app.add_url_rule("/health/db", view_func=health_db)
+    app.register_error_handler(401, unauthorized)
+    app.register_error_handler(403, access_denied)
+    app.register_error_handler(404, not_found)
+    app.register_error_handler(500, internal_server_error)
+    app.cli.add_command(deactivate_user)
+    app.cli.add_command(activate_user)
+    app.cli.add_command(add_admin)
 
 
-@app.route("/robots.txt")
-def robots():
-    return Response("User-agent: *\nDisallow: /", mimetype="text/plain")
-
-
-@app.route("/force-login/<token>")
-def force_login(token):
-    user = logic.get_user_from_token(token)
-    if user is None:
-        abort(400)
-    session["user_name"] = user.id
-    g.user = user
-    return redirect("/")
-
-
-@app.route("/")
-@login_required
-@render_to("index")
-def home():
-    routes = []
-    routes.append(("devices", url_for("devices")))
-
-    active = g.user.active
-    memberships = logic.get_memberships(g.user)
-    if active and len(memberships) > 0:
-        routes.append(("groups", url_for("groups")))
-
-    if active:
-        routes.append(("join form", url_for("join_form")))
-    routes.append(("list action form", url_for("mailing_lists")))
-
-    return {
-        "routes": routes,
-        **breadcrumb(),
-    }
-
-
-@app.route("/mailing-lists", methods=["GET", "POST"])
-@login_required
-@render_to("mailing-lists")
-def mailing_lists():
-    form = logic.get_mailing_list_form(name=g.user.label, addr=g.user.addr)
-    if form.validate_on_submit():
-        logic.process_mailing_list_form_submissions(form)
-        flash("your mailing list subscription status has been updated")
-        return to("home")
-    return {
-        "form": form,
-        "action": my_url(),
-        **breadcrumb("list action form"),
-    }
-
-
-def join_form_subnav(user: model.User) -> Subpage_links:
-    return subpage_nav(
-        "show [which form]",
-        [
-            (True, "join form", url_for("join_form")),
-            (
-                logic.show_tech_join_form(g.user),
-                "technologist join form",
-                url_for("join_form_tech"),
-            ),
-        ],
+def health_db() -> tuple[Response, int]:
+    payload = db_runtime.probe_database_health()
+    status_code = 200 if payload["status"] == "ok" else 503
+    if payload["status"] == "ok":
+        return jsonify({"status": "ok", "database": "reachable"}), status_code
+    current_app.logger.error(
+        "Database health check failed: %s %s",
+        payload.get("error", "unknown"),
+        payload.get("detail", ""),
     )
-
-
-def join_form_breadcrumb() -> Breadcrumb_links:
-    return breadcrumb(("join form", url_for("join_form")))
-
-
-@app.route("/join", methods=["GET", "POST"])
-@in_network_required
-@active_user_required
-@render_to("join")
-def join_form():
-    departments = logic.get_departments_for_join_form(g.user)
-    form = logic.JoinForm(departments)
-    no_departments = False
-    if len(departments) == 0:
-        no_departments = True
-    if form.validate_on_submit():
-        if logic.record_join_form(form, g.user, form.group.data):
-            logic.notify_group_pi_of_join_form(g.user, form.group.data)
-            flash("your membership request is being processed")
-            return to("home")
-    return {
-        "form": form,
-        "action": my_url(),
-        "no_departments": no_departments,
-        **join_form_subnav(g.user),
-        **join_form_breadcrumb(),
-    }
-
-
-@app.route("/join/tech", methods=["GET", "POST"])
-@in_network_required
-@active_user_required
-@render_to("join_tech")
-def join_form_tech():
-    if not logic.show_tech_join_form(g.user):
-        abort(
-            403,
-            "Only DEV members who have not become technologists already may access this form",
-        )
-    # we only need to show the form on GET and there's nothing to validate on post:
-    # if the browser allowed the form to be submitted, it's good
-    if request.method == "POST":
-        logic.record_tech_join(g.user)
-        model.db.session.commit()
-        logic.notify_dev_pi_of_tech_join_form(g.user)
-        flash("you are now a technologist")
-        return to("home")
-    return {
-        **join_form_subnav(g.user),
-        **join_form_breadcrumb(),
-    }
-
-
-@app.route("/join/approve/<token>", endpoint="join-group-approve")
-@app.route("/join/deny/<token>", endpoint="join-group-deny")
-@active_user_required
-def handle_join_group(token):
-    req = logic.read_signed_message(token)
-
-    # make sure token is a real token
-    if req is None or len(req) != 3 or req[0] != "join-group":
-        abort(400)
-
-    # get the user and group from the token data
-    _, uid, gid = req
-    u = logic.get_user(uid)
-    if u is None or not u.active:
-        abort(400)
-    grp = logic.get_group(gid)
-    if grp is None or not grp.active:
-        abort(400)
-
-    # make sure the request is unprocessed
-    req = logic.get_join_request(u, grp)
-    if req is None:
-        flash("this request was previously denied")
-        return to("home")
-
-    if req.approved is not None:
-        flash("this request was previously approved")
-        return to("home")
-
-    # make sure current user is PI of g
-    pi = logic.pi_of_group(gid)
-    if pi != g.user.id:
-        abort(403, f"only the PI of {grp.label} can approve or deny this request")
-
-    approve = request.endpoint == "join-group-approve"
-
-    logic.handle_join_request(approve, req)
-    model.db.session.commit()
-
-    if approve:
-        flash(f"you have approved {u.id} to be a member of {grp.label}")
-    else:
-        flash(f"you have denied {u.id} from becoming a member {grp.label}")
-    logic.notify_user_of_join_request_outcome(approve, u, grp.label)
-
-    return to("home")
-
-
-def groups_subpage_nav(is_admin: bool) -> Subpage_links:
-    return subpage_nav(
-        "show [which groups]",
-        [
-            (True, "active [groups]", url_for("groups")),
-            (
-                is_admin,
-                "inactive [groups]",
-                url_for("groups-inactive"),
-            ),
-            (is_admin, "add group", url_for("group_add")),
-        ],
-    )
-
-
-def groups_breadcrumb() -> Breadcrumb_links:
-    return breadcrumb(("groups", url_for("groups")))
-
-
-@app.route("/groups")
-@app.route("/groups/inactive", endpoint="groups-inactive")
-@active_user_required
-@render_to("groups")
-def groups():
-    title = "groups"
-    memberships = logic.get_memberships(g.user)
-    is_admin = "admin" in memberships
-    active = request.endpoint == "groups"
-    if not active:
-        if not is_admin:
-            abort(403, "access denied")
-        title += " (inactive)"
-
-    groups = []
-    if is_admin:
-        # admin see all groups with members
-        groups = logic.get_all_groups_with_members(active)
-    else:
-        # nonadmins only see groups they're in
-        groups = logic.get_groups(memberships)
-
-    return {
-        "title": title,
-        "groups": groups,
-        **groups_subpage_nav(is_admin),
-        **groups_breadcrumb(),
-    }
-
-
-@app.route("/groups/add", methods=["GET", "POST"])
-@admin_only
-@render_to("group_edit")
-def group_add():
-    institutes = logic.get_institutes_datalist()
-    form = logic.GroupEditForm("", institutes, is_admin=True, create=True)
-
-    if form.validate_on_submit():
-        if logic.create_group(form):
-            flash("new group added")
-            return to("group", the_group=form.id.data)
-
-    return {
-        "title": "add new group",
-        "form": form,
-        "action": my_url(),
-        "submit": "create",
-        **groups_subpage_nav(True),
-        **groups_breadcrumb(),
-    }
-
-
-# shared subpage nav for all group pages
-def group_subpage_nav(group: model.Group, su: logic.Group_leader_kind) -> Subpage_links:
-    can_edit = "group_pi" in su or "admin" in su
-    return subpage_nav(
-        "show",
-        [
-            # view has further protections, but if you can see any of them you can see it
-            (True, f"view [{group.label}]", url_for("group", the_group=group.id)),
-            (
-                group.active and can_edit,
-                f"membership [for {group.label}]",
-                url_for("group_membership", the_group=group.id),
-            ),
-            (
-                group.active and can_edit,
-                f"change PI [of {group.label}]",
-                url_for("group_pi", the_group=group.id),
-            ),
-            (
-                can_edit,
-                f"edit [{group.label}]",
-                url_for("group_edit", the_group=group.id),
-            ),
-        ],
-    )
-
-
-def group_breadcrumb(group: model.Group) -> Breadcrumb_links:
-    return breadcrumb(
-        ("groups", url_for("groups")),
-        (group.label, url_for("group", the_group=group.id)),
-    )
-
-
-@app.route("/group/<the_group>")
-@active_user_required
-@render_to("group")
-def group(the_group):
-    group = logic.get_group(the_group)
-    if group is None:
-        abort(404)
-
-    su = logic.get_group_leader_kind(g.user, group)
-
-    # inactive groups can only be viewed by admins
-    if not (group.active or "admin" in su):
-        abort(403)
-
-    members = logic.get_members_of_group(group)
-
-    # must be admin, dev_pi, or member
-    if not (len(su) > 0 or any(m == g.user.id for (m, _, _) in members)):
-        abort(403)
-
-    return {
-        "group": group,
-        "members": members,
-        "su": su,
-        **group_subpage_nav(group, su),
-        **group_breadcrumb(group),
-    }
-
-
-@app.route("/group/<the_group>/edit", methods=["GET", "POST"])
-@active_user_required
-@render_to("group_edit")
-def group_edit(the_group):
-    group = logic.get_group(the_group)
-    if group is None:
-        abort(404)
-
-    su = logic.get_group_leader_kind(g.user, group)
-    is_admin = "admin" in su
-
-    # only admins and group pi (if group active) can edit
-    if not (is_admin or (group.active and "group_pi" in su)):
-        abort(403)
-
-    institutes = []
-    if is_admin:
-        institutes = logic.get_institutes_datalist()
-    form = logic.GroupEditForm(group.id, institutes, is_admin=is_admin, obj=group)
-
-    if form.validate_on_submit():
-        if logic.update_group(is_admin, group, form):
-            flash(f"{group.label} has been updated")
-            return to("group", the_group=the_group)
-
-    return {
-        "title": f"edit {group.label}",
-        "group": group,
-        "su": su,
-        "form": form,
-        "action": my_url(),
-        "submit": "save",
-        **group_subpage_nav(group, su),
-        **group_breadcrumb(group),
-    }
-
-
-@app.route("/group/<the_group>/membership", methods=["GET", "POST"])
-@active_user_required
-@render_to("group_membership")
-def group_membership(the_group):
-    group = logic.get_group(the_group)
-    if group is None:
-        abort(404)
-
-    # cannot work with membership of inactive group, even if admin
-    if not group.active:
-        abort(403)
-
-    su = logic.get_group_leader_kind(g.user, group)
-
-    if not ("group_pi" in su or "admin" in su):
-        abort(403)
-
-    members = logic.get_members_of_group(group, all=True)
-    active, pending = [], []
-    for m, is_pi, is_active in members:
-        if is_active and not is_pi:
-            active.append(m)
-        elif not is_active:
-            pending.append(m)
-
-    form = logic.get_group_membership_form(group, active, pending)
-
-    no_entries = ""
-    if len(active) + len(pending) == 0:
-        no_entries = "there is no membership data that can be updated for this group"
-
-    if form.validate_on_submit():
-        action, u = form.action()
-        user = logic.get_user(u)
-        if user is None:
-            abort(400, f"{u} does not exist in db")
-        if action == "rm":
-            logic.remove_user_from_group(user, group)
-            model.db.session.commit()
-            flash(f"{user.id} is no longer a member of {group.label}")
-        elif action == "approve" or action == "deny":
-            req = logic.get_join_request(user, group)
-            if req is not None:
-                # if req is None, membership was deleted by someone else
-                # between getting the form and submitting it
-                approved = action == "approve"
-                logic.handle_join_request(approved, req)
-                model.db.session.commit()
-                logic.notify_user_of_join_request_outcome(approved, user, group.label)
-                outcome = "denied membership"
-                if approved:
-                    outcome = "approved"
-                flash(f"{user.id} was {outcome}")
-
-        return to_form()
-
-    return {
-        "title": f"edit {group.label} membership",
-        "action": my_url(),
-        "form": form,
-        "no_entries": no_entries,
-        **group_subpage_nav(group, su),
-        **group_breadcrumb(group),
-    }
-
-
-@app.route("/group/<the_group>/pi", methods=["GET", "POST"])
-@active_user_required
-@render_to("group_pi")
-def group_pi(the_group):
-    group = logic.get_group(the_group)
-    if group is None:
-        abort(404)
-
-    # cannot work with membership of inactive group, even if admin
-    if not group.active:
-        abort(403)
-
-    su = logic.get_group_leader_kind(g.user, group)
-
-    if not ("group_pi" in su or "admin" in su):
-        abort(403)
-
-    all_members = logic.get_members_of_group(group)
-    not_pi = []
-    for name, is_pi, _ in all_members:
-        if not is_pi:
-            not_pi.append(name)
-
-    no_entries = ""
-    if len(not_pi) == 0:
-        no_entries = "no candidates for PI"
-
-    form = logic.GroupPIForm(not_pi)
-    if form.validate_on_submit():
-        u = logic.process_group_pi_form(group, form)
-        if u is not None:
-            flash(f"{u.id} is now PI")
-            # this is an important enough change to log
-            app.logger.info(f"{g.user.id} changed pi of {group.id} to {u.id}")
-            if "admin" not in su:
-                # if we were the PI but are not now we no longer have access to this page
-                # but we're still a member of the group
-                return to("group", the_group=group.id)
-            return to("group_membership", the_group=group.id)
-
-    return {
-        "title": f"change PI of {group.label}",
-        "action": my_url(),
-        "form": form,
-        "no_entries": no_entries,
-        **group_subpage_nav(group, su),
-        **group_breadcrumb(group),
-    }
-
-
-def devices_breadcrumb() -> Breadcrumb_links:
-    return breadcrumb(("devices", url_for("devices")))
-
-
-def devices_subpage_nav(is_admin: bool) -> Subpage_links:
-    return subpage_nav(
-        "show [which devices]",
-        [
-            (True, "active [devices]", url_for("devices")),
-            (
-                is_admin,
-                "inactive [devices]",
-                url_for("devices-inactive"),
-            ),
-            (is_admin, "add device", url_for("device_add")),
-        ],
-    )
-
-
-@app.route("/devices")
-@app.route("/devices/inactive", endpoint="devices-inactive")
-@login_required
-@render_to("devices")
-def devices():
-    title = "devices"
-    is_admin = logic.is_admin(g.user)
-    active = request.endpoint == "devices"
-    if not active:
-        if not is_admin:
-            abort(403, "access denied")
-        title += " (inactive)"
-    devices = logic.get_devices(active)
-    return {
-        "title": title,
-        "devices": devices,
-        **devices_subpage_nav(is_admin),
-        **devices_breadcrumb(),
-    }
-
-
-@app.route("/device-add", methods=["GET", "POST"])
-@admin_only
-@render_to("device_edit")
-def device_add():
-    form = logic.DeviceEditForm(is_admin=True, create=True)
-
-    if form.validate_on_submit():
-        device = logic.create_device(form)
-        if device is not None:
-            flash(f"{device.label} created")
-            return to("device", the_device=device.id)
-
-    return {
-        "title": "add new device",
-        "action": my_url(),
-        "submit": "create",
-        "form": form,
-        **devices_subpage_nav(True),
-        **devices_breadcrumb(),
-    }
-
-
-def device_breadcrumb(device: model.Device) -> Breadcrumb_links:
-    return breadcrumb(
-        ("devices", url_for("devices")),
-        (device.label, url_for("device", the_device=device.id)),
-    )
-
-
-def device_subpage_nav(device: model.Device, perms: logic.DevicePerms) -> Subpage_links:
-    def can(permission: bool) -> bool:
-        return perms.admin or (permission and device.active)
-
-    edit = can(perms.dev_pi)
-    id = device.id
-    return subpage_nav(
-        "show",
-        [
-            (True, "schedule", url_for("device", the_device=id)),
-            (can(perms.template), "templates", url_for("device_tmpl", the_device=id)),
-            (edit, "groups", url_for("device_groups", the_device=id)),
-            (edit, "add group", url_for("device_groups_add", the_device=id)),
-            (edit, "users", url_for("device_users", the_device=id)),
-            (edit, "edit [{device.label}]", url_for("device_edit", the_device=id)),
-        ],
-    )
-
-
-@app.route("/device/<the_device>", methods=["GET", "POST"])
-@login_required
-@render_to("device")
-def device(the_device):
-    device = logic.get_device(the_device)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-
-    if not (device.active or perms.admin):
-        abort(403)
-
-    # get the date, defaulting to today
-    date = None
-    the_date = request.args.get("start")
-    if the_date is not None:
-        date = logic.parse_date(the_date)
-        if date is None:
-            abort(400, f"invalid start: {the_date} (must be YYYY-MM-DD date)")
-    date = logic.date_or_today(date)
-
-    # get the number of days to show, defaulting to 7
-    days = 7
-    the_days = request.args.get("days")
-    if the_days is not None:
-        days = logic.parse_days(the_days)
-        if days is None:
-            abort(400, f"invalid days: {the_days} (must be in 1-31)")
-
-    # find the end date of the window to show
-    end_date = logic.end_date(date, days)
-
-    entries = logic.schedule_for(device, date, end_date)
-
-    min, max = logic.device_schedule_extreme_dates(device)
-
-    fmt_start_date = logic.fmt_date(date)
-    fmt_end_date = logic.fmt_date(end_date)
-    fmt_min = ""
-    fmt_max = ""
-    if min is not None:
-        fmt_min = logic.fmt_date(min)
-        fmt_max = logic.fmt_date(max)
-
-    # compute which hours to hide by default
-    off_hours = logic.off_hours()
-    logic.strike_used_off_hours(off_hours, entries)
-    off_hour_runs = logic.group_off_hours_into_runs(off_hours)
-    off_hour_map = logic.convert_off_hour_runs_into_map(off_hour_runs)
-
-    no_entries = ""
-    never_entries = ""
-    if len(entries) == 0:
-        if min is None:
-            never_entries = "this device has not yet had any entries scheduled on it"
-        else:
-            no_entries = f"no entries scheduled for {fmt_start_date}. All entries are between {fmt_min} and {fmt_max}"
-
-    colors = logic.all_group_colors()
-
-    # need to determine if user can edit this
-    support = logic.SupportRequestDatalists([], [], [])
-    members_of_groups = {}
-    groups = []
-    device_groups = logic.all_groups_of_device(device)
-
-    # load any data user may need to edit
-    if device.active and perms.edit:
-        support = logic.support_request_datalists(device)
-
-        # load all relevant group-member datalists
-        if perms.edit_any:
-            members_of_groups = logic.all_member_datalists_by_group(device)
-            groups = device_groups
-        else:
-            members_of_groups = logic.member_datalists_by_group_for(device, g.user)
-            groups = logic.groups_of_device_for(device, g.user)
-
-    perms_json = {  # the permissions the js needs
-        "edit": perms.edit,
-        "edit_any": perms.edit_any,
-        "tech": perms.tech,
-        "medical": perms.medical,
-        "training": perms.training,
-    }
-    groups_json = [id for (id, _) in groups]
-    device_groups_json = [id for (id, _) in device_groups]
-
-    top_row, grouped_entries = logic.group_schedule_entries(entries)
-
-    hours = logic.fmt_hours()
-    cur_date, cur_hour, cur_minute = logic.db_now()
-
-    form = logic.JsonForm()
-    if request.method == "POST":
-        if not perms.edit:
-            # direct request or user lost edit access between fetching page and submitting form
-            abort(403)
-        if not form.validate():
-            # client response must specify payload
-            abort(500)
-
-        data = form.payload.data
-        diffs = data["diffs"]
-        send_notifications = data["notify"]
-
-        xs, srs, when, errors = logic.verify_scheduler_diffs(
-            diffs,
-            entries,
-            perms,
-            support,
-            cur_date,
-            cur_hour,
-            cur_minute,
-            groups,
-            members_of_groups,
-            g.user,
-        )
-        if errors is not None:
-            return jsonify({"errors": errors})
-
-        # update models
-        staged = logic.apply_scheduler_diffs(g.user, xs)
-        srs_notes = logic.apply_scheduler_sr_diffs(g.user, srs)
-
-        # prepare any notifications
-        ens, sns = logic.prepare_notifications(
-            send_notifications, when, diffs, srs_notes
-        )
-        notifications = logic.fmt_notifications(ens, sns)
-
-        # apply the changes then send notifications once they're committed
-        for s in staged:
-            model.db.session.add(s)
-        model.db.session.commit()
-        notification_results = logic.send_scheduler_notifications(device, notifications)
-
-        return jsonify({"saved": len(staged), "notifications": notification_results})
-
-    return {
-        "device": device,
-        "perms": perms,
-        "perms_json": perms_json,
-        "start_date": fmt_start_date,
-        "end_date": fmt_end_date,
-        "days": days,
-        "top_row": top_row,
-        "entries": grouped_entries,
-        "min": fmt_min,
-        "max": fmt_max,
-        "never_entries": never_entries,
-        "no_entries": no_entries,
-        "support": support,
-        "members_of_groups": members_of_groups,
-        "groups": groups,
-        "groups_json": groups_json,
-        "device_groups_json": device_groups_json,
-        "off_hours": list(off_hours),
-        "off_hour_map": off_hour_map,
-        "colors": colors,
-        "hours": hours,
-        "cur_date": cur_date,
-        "cur_hour": cur_hour,
-        "form": form,
-        **device_breadcrumb(device),
-        **device_subpage_nav(device, perms),
-    }
-
-
-@app.route("/json/v1/log/<id>")
-def entry_log(id):
-    if g.user is None:
-        abort(403)
-
-    eid, _, templateid = id.partition("-")
-    device = logic.get_device_from_schedid(eid)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-    if not (device.active or perms.admin):
-        abort(403)
-
-    entries = logic.get_sched_log_entry(eid)
-
-    template = None
-    templateObject = logic.get_template_from_templateid(templateid)
-    if templateObject is not None:
-        template = {
-            "id": templateObject.id,
-            "label": templateObject.label,
-            "hidden": templateObject.hidden,
-        }
-
-    return jsonify({"template": template, "entries": entries})
-
-
-@app.route("/device/<the_device>/edit", methods=["GET", "POST"])
-@active_user_required
-@render_to("device_edit")
-def device_edit(the_device):
-    device = logic.get_device(the_device)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-    can_edit = perms.admin or (perms.dev_pi and device.active)
-    if not can_edit:
-        abort(403)
-
-    form = logic.DeviceEditForm(is_admin=perms.admin, obj=device)
-
-    if form.validate_on_submit():
-        if logic.update_device(perms.admin, device, form):
-            flash(f"{device.label} has been updated")
-            return to("device", the_device=the_device)
-
-    return {
-        "title": f"edit {device.label}",
-        "device": device,
-        "action": my_url(),
-        "submit": "save",
-        "form": form,
-        **device_breadcrumb(device),
-        **device_subpage_nav(device, perms),
-    }
-
-
-def check_device_tmpl_perms(the_device):
-    device = logic.get_device(the_device)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-    can_edit = perms.admin or (perms.template and device.active)
-    if not can_edit:
-        abort(403)
-
-    return device, perms
-
-
-@app.route("/device/<the_device>/templates", methods=["GET", "POST"])
-@active_user_required
-@render_to("template_apply")
-def device_tmpl(the_device):
-    device, _ = check_device_tmpl_perms(the_device)
-
-    templates = logic.templates_of_device(device, archived=False)
-    codes = [t.id for t in templates]
-    start = logic.get_start_day_of(device)
-    chg_by = f"user {g.user.id}"
-    warn = ""
-    if start is None:
-        start = logic.next_sunday()
-        warn = f"no templates have been published to {device.label} before, so the start date will be {start}"
-    no_templates = ""
-    if len(templates) == 0:
-        no_templates = f"no templates have been created for {device.label} yet"
-
-    form = logic.TemplateApplyForm(codes)
-    if form.validate_on_submit():
-        errs = logic.validate_templates_before_application(device, form.templates.data)
-        if len(errs) > 0:
-            for err in errs:
-                flash(err, category="error")
-        else:
-            logic.process_template_apply(form, device, start, chg_by)
-            flash("templates applied")
-            return to("device", the_device=device.id, start=start)
-
-    return {
-        "title": f"apply templates to {device.label}",
-        "action": my_url(),
-        "form": form,
-        "warn": warn,
-        "templates": templates,
-        "no_templates": no_templates,
-        "start": start,
-        **template_breadcrumb(device),
-        **template_subpage_nav(device),
-    }
-
-
-@app.route("/device/<the_device>/groups", methods=["GET", "POST"])
-@active_user_required
-@render_to("device_groups")
-def device_groups(the_device):
-    device = logic.get_device(the_device)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-    can_edit = perms.admin or (perms.dev_pi and device.active)
-    if not can_edit:
-        abort(403)
-
-    related = logic.groups_of_device(device)
-    none = ""
-    if len(related) == 0:
-        none = "no departments are assigned to this device"
-    form = logic.get_device_groups_form(related)
-
-    if form.validate_on_submit():
-        dept = form.which()
-        if dept != "":
-            logic.remove_group_from_device(dept, device.id)
-            model.db.session.commit()
-            return to_form()
-
-    return {
-        "title": f"manage departments of {device.label}",
-        "device": device,
-        "none": none,
-        "action": my_url(),
-        "form": form,
-        **device_breadcrumb(device),
-        **device_subpage_nav(device, perms),
-    }
-
-
-@app.route("/device/<the_device>/groups/add", methods=["GET", "POST"])
-@active_user_required
-@render_to("device_groups_add")
-def device_groups_add(the_device):
-    device = logic.get_device(the_device)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-    can_edit = perms.admin or (perms.dev_pi and device.active)
-    if not can_edit:
-        abort(403)
-
-    departments = logic.groups_not_of_device(device)
-    none = ""
-    if len(departments) == 0:
-        none = "all departments have been added"
-    form = logic.AddGroupToDeviceForm(departments)
-    if form.validate_on_submit():
-        if logic.process_add_group_to_device_form(device.id, form):
-            return to("device_groups", the_device=device.id)
-
-    return {
-        "title": f"add department to {device.label}",
-        "device": device,
-        "none": none,
-        "action": my_url(),
-        "form": form,
-        **device_breadcrumb(device),
-        **device_subpage_nav(device, perms),
-    }
-
-
-@app.route("/device/<the_device>/users")
-@active_user_required
-@render_to("device_users")
-def device_users(the_device):
-    device = logic.get_device(the_device)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-    can_edit = perms.admin or (perms.dev_pi and device.active)
-    if not can_edit:
-        abort(403)
-
-    active, inactive = logic.get_dev_members_for_device(device)
-
-    return {
-        "title": f"manage DEV users of {device.label}",
-        "device": device,
-        "active": active,
-        "inactive": inactive,
-        **device_breadcrumb(device),
-        **device_subpage_nav(device, perms),
-    }
-
-
-@app.route("/device/<the_device>/users/<the_user>", methods=["GET", "POST"])
-@active_user_required
-@render_to("device_user")
-def device_user(the_device, the_user):
-    device = logic.get_device(the_device)
-    if device is None:
-        abort(404)
-
-    perms = logic.get_dev_perms(g.user, device)
-    can_edit = perms.admin or (perms.dev_pi and device.active)
-    if not can_edit:
-        abort(403)
-
-    dev_user = logic.get_user(the_user)
-    if dev_user is None or not dev_user.active:
-        abort(404)
-
-    dev, tech = logic.get_dev_tech_status(dev_user)
-    if not dev:
-        abort(404)
-
-    new, obj = logic.get_user_device_special_perms(dev_user, device)
-
-    form = logic.DeviceUserForm(new, tech, obj=obj)
-    if form.validate_on_submit():
-        action = form.action()
-        if action == "rm":
-            model.db.session.delete(obj)
-        else:
-            form.populate(obj)
-            model.db.session.add(obj)
-        model.db.session.commit()
-        return to("device_users", the_device=device.id)
-
-    title = f"manage {dev_user.id} permissions for {device.label}"
-    if new:
-        title = f"add {dev_user.id} permissions for {device.label}"
-    return {
-        "title": title,
-        "device": device,
-        "dev_user": dev_user,
-        "action": my_url(),
-        "form": form,
-        **device_breadcrumb(device),
-        **device_subpage_nav(device, perms),
-    }
-
-
-def template_breadcrumb(
-    device: model.Device, tmpl: Optional[model.Template] = None
-) -> Breadcrumb_links:
-    out = [
-        ("devices", url_for("devices")),
-        (device.label, url_for("device", the_device=device.id)),
-        ("templates", url_for("device_tmpl", the_device=device.id)),
-    ]
-    if tmpl is not None:
-        out.append(
-            (
-                f"edit {tmpl.label}",
-                url_for(
-                    "device_tmpl_schedule_edit",
-                    the_device=device.id,
-                    the_template=tmpl.id,
-                ),
-            )
-        )
-    return breadcrumb(*out)
-
-
-def template_subpage_nav(device: model.Device) -> Subpage_links:
-    def build_url(name: str) -> str:
-        return url_for(f"device_tmpl{name}", the_device=device.id)
-
-    return subpage_nav(
-        "templates",
-        [
-            (True, "apply", build_url("")),
-            (True, "active", build_url("_list")),
-            (True, "inactive", build_url("_archive")),
-            (True, "add template", build_url("_add")),
-        ],
-    )
-
-
-@app.route("/device/<the_device>/templates/list")
-@active_user_required
-@render_to("templates_list")
-def device_tmpl_list(the_device):
-    device, _ = check_device_tmpl_perms(the_device)
-    templates = logic.templates_of_device(device, archived=False)
-    return {
-        "title": f"templates of {device.label}",
-        "device": device,
-        "templates": templates,
-        **template_breadcrumb(device),
-        **template_subpage_nav(device),
-    }
-
-
-@app.route("/device/<the_device>/templates/archive")
-@active_user_required
-@render_to("templates_list")
-def device_tmpl_archive(the_device):
-    device, _ = check_device_tmpl_perms(the_device)
-    templates = logic.templates_of_device(device, archived=True)
-    return {
-        "title": f"archived templates of {device.label}",
-        "device": device,
-        "templates": templates,
-        **template_breadcrumb(device),
-        **template_subpage_nav(device),
-    }
-
-
-@app.route("/device/<the_device>/templates/add", methods=["GET", "POST"])
-@active_user_required
-@render_to("templates_metadata_edit")
-def device_tmpl_add(the_device):
-    device, _ = check_device_tmpl_perms(the_device)
-
-    templates = logic.all_templates_of_device(device)
-    form = logic.TemplateMetadataForm(device, templates, create=True)
-    if form.validate_on_submit():
-        ok, id = logic.create_template(form, device)
-        if ok:
-            return to(
-                "device_tmpl_schedule_edit",
-                the_device=form.device.id,
-                the_template=id,
-            )
-
-    return {
-        "title": f"add template to {device.label}",
-        "device": device,
-        "form": form,
-        "action": my_url(),
-        "submit": "create",
-        **template_breadcrumb(device),
-        **template_subpage_nav(device),
-    }
-
-
-def template_single_subpage_nav(
-    device: model.Device, tmpl: model.Template
-) -> Subpage_links:
-    def entry(label: str, url_suffix: str) -> tuple[bool, str, str]:
-        return (
-            True,
-            label,
-            url_for(
-                f"device_tmpl_{url_suffix}_edit",
-                the_device=device.id,
-                the_template=tmpl.id,
-            ),
-        )
-
-    return subpage_nav(
-        "edit template",
-        [
-            entry("schedule", "schedule"),
-            entry("metadata", "metadata"),
-        ],
-    )
-
-
-@app.route(
-    "/device/<the_device>/templates/edit/<the_template>", methods=["GET", "POST"]
-)
-@active_user_required
-@render_to("templates")
-def device_tmpl_schedule_edit(the_device, the_template):
-    device, _ = check_device_tmpl_perms(the_device)
-    tmpl = logic.get_template(device, the_template)
-    if tmpl is None:
-        abort(404)
-
-    entries = logic.get_template_entries(device, tmpl)
-    institutes = logic.get_institutes_datalist()
-    members_of_groups = logic.all_member_datalists_by_group(device)
-    groups = logic.all_groups_of_device(device)
-    device_groups_json = [id for (id, _) in groups]
-    grouped_entries = logic.group_template_entries(entries)
-    colors = logic.all_group_colors()
-    hours = logic.fmt_hours()
-
-    form = logic.JsonForm()
-    if request.method == "POST":
-        if not form.validate():
-            # client response must specify payload
-            abort(500)
-        diffs = form.payload.data["diffs"]
-
-        staged, errors = logic.verify_and_prep_template_diffs(
-            diffs, entries, institutes, groups, members_of_groups
-        )
-        if errors is not None:
-            return jsonify({"errors": errors})
-
-        for s in staged:
-            model.db.session.add(s)
-        model.db.session.commit()
-        return jsonify({"saved": len(staged)})
-
-    return {
-        "title": f"edit template schedule {device.label}/{tmpl.label}",
-        "entries": grouped_entries,
-        "institutes": institutes,
-        "groups": groups,
-        "device_groups_json": device_groups_json,
-        "members_of_groups": members_of_groups,
-        "colors": colors,
-        "hours": hours,
-        "form": form,
-        **template_breadcrumb(device, tmpl),
-        **template_single_subpage_nav(device, tmpl),
-    }
-
-
-@app.route(
-    "/device/<the_device>/templates/edit-metadata/<the_template>",
-    methods=["GET", "POST"],
-)
-@active_user_required
-@render_to("templates_metadata_edit")
-def device_tmpl_metadata_edit(the_device, the_template):
-    device, _ = check_device_tmpl_perms(the_device)
-    tmpl = logic.get_template(device, the_template)
-    if tmpl is None:
-        abort(404)
-
-    form = logic.TemplateMetadataForm(device, [], create=False, obj=tmpl)
-    if form.validate_on_submit():
-        if logic.process_update_template_metadata(form, tmpl):
-            return to(
-                "device_tmpl_schedule_edit",
-                the_device=form.device.id,
-                the_template=tmpl.id,
-            )
-
-    return {
-        "title": f"edit template {device.label}/{tmpl.label}",
-        "device": device,
-        "template": tmpl,
-        "form": form,
-        "action": my_url(),
-        "submit": "save",
-        **template_breadcrumb(device, tmpl),
-        **template_single_subpage_nav(device, tmpl),
-    }
+    return jsonify({"status": "error", "database": "unreachable"}), status_code

@@ -23,7 +23,7 @@ CREATE PROCEDURAL LANGUAGE plpgsql;
 SET search_path = public, pg_catalog;
 
 --
--- Name: foof(); Type: FUNCTION; Schema: public; Owner: jburton
+-- Name: foof(); Type: FUNCTION; Schema: public; Owner: person0078
 --
 
 CREATE FUNCTION foof() RETURNS record
@@ -31,10 +31,10 @@ CREATE FUNCTION foof() RETURNS record
     LANGUAGE sql;
 
 
-ALTER FUNCTION public.foof() OWNER TO jburton;
+ALTER FUNCTION public.foof() OWNER TO person0078;
 
 --
--- Name: template_default_fill(character varying, character varying); Type: FUNCTION; Schema: public; Owner: jburton
+-- Name: template_default_fill(character varying, character varying); Type: FUNCTION; Schema: public; Owner: person0078
 --
 
 CREATE FUNCTION template_default_fill(character varying, character varying) RETURNS boolean
@@ -42,10 +42,10 @@ CREATE FUNCTION template_default_fill(character varying, character varying) RETU
     LANGUAGE plpgsql;
 
 
-ALTER FUNCTION public.template_default_fill(character varying, character varying) OWNER TO jburton;
+ALTER FUNCTION public.template_default_fill(character varying, character varying) OWNER TO person0078;
 
 --
--- Name: template_to_sched(character varying, character varying, date, date); Type: FUNCTION; Schema: public; Owner: jburton
+-- Name: template_to_sched(character varying, character varying, date, date); Type: FUNCTION; Schema: public; Owner: person0078
 --
 
 CREATE FUNCTION template_to_sched(character varying, character varying, date, date) RETURNS boolean
@@ -74,14 +74,14 @@ $_$
     LANGUAGE plpgsql;
 
 
-ALTER FUNCTION public.template_to_sched(character varying, character varying, date, date) OWNER TO jburton;
+ALTER FUNCTION public.template_to_sched(character varying, character varying, date, date) OWNER TO person0078;
 
 SET default_tablespace = '';
 
 SET default_with_oids = true;
 
 --
--- Name: tlkpdept; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpdept (
@@ -104,104 +104,104 @@ CREATE TABLE tlkpdept (
 );
 
 
-ALTER TABLE public.tlkpdept OWNER TO jburton;
+ALTER TABLE public.tlkpdept OWNER TO person0078;
 
 --
--- Name: TABLE tlkpdept; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlkpdept; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlkpdept IS 'List of departments';
 
 
 --
--- Name: COLUMN tlkpdept.grp; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.grp; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.grp IS 'Group this falls in (ie, top-level department)';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkday_day; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkday_day; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkday_day IS 'Color for dept (for all times, despite name!)';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkday_eve; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkday_eve; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkday_eve IS 'UNUSED LEGACY';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkend_day; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkend_day; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkend_day IS 'UNUSED LEGACY';
 
 
 --
--- Name: COLUMN tlkpdept.color_wkend_eve; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.color_wkend_eve; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.color_wkend_eve IS 'UNUSED LEGACY';
 
 
 --
--- Name: COLUMN tlkpdept.ismain; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.ismain; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.ismain IS 'Should this appear as "top-level" department (in legend, etc.)';
 
 
 --
--- Name: COLUMN tlkpdept.iscurrent; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.iscurrent; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.iscurrent IS 'Is this department active';
 
 
 --
--- Name: COLUMN tlkpdept.inst; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.inst; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.inst IS 'Institute (NIMH, NINDS, NCI, etc)';
 
 
 --
--- Name: COLUMN tlkpdept.prog; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.prog; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.prog IS 'Program and Branch';
 
 
 --
--- Name: COLUMN tlkpdept.link; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.link; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.link IS 'Link to the Unit/Section''s home page';
 
 
 --
--- Name: COLUMN tlkpdept.pi; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpdept.pi; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpdept.pi IS 'Name of the primary investigatior in charge of the lab';
 
 
 --
--- Name: departments; Type: VIEW; Schema: public; Owner: jburton
+-- Name: departments; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW departments AS
     SELECT tlkpdept.deptcode, tlkpdept.dept, tlkpdept.dept_short, tlkpdept.grp, tlkpdept.color_wkday_day AS color FROM tlkpdept WHERE (tlkpdept.ismain AND tlkpdept.iscurrent) ORDER BY tlkpdept.deptcode;
 
 
-ALTER TABLE public.departments OWNER TO jburton;
+ALTER TABLE public.departments OWNER TO person0078;
 
 --
--- Name: VIEW departments; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: VIEW departments; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON VIEW departments IS 'Current, real departments';
@@ -218,7 +218,7 @@ CREATE VIEW departments_agt AS
 ALTER TABLE public.departments_agt OWNER TO adamt;
 
 --
--- Name: tblsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tblsched; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tblsched (
@@ -242,17 +242,17 @@ CREATE TABLE tblsched (
 );
 
 
-ALTER TABLE public.tblsched OWNER TO jburton;
+ALTER TABLE public.tblsched OWNER TO person0078;
 
 --
--- Name: TABLE tblsched; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tblsched; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tblsched IS 'Schedule assignments';
 
 
 --
--- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpresearcher; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpresearcher (
@@ -267,31 +267,31 @@ CREATE TABLE tlkpresearcher (
 );
 
 
-ALTER TABLE public.tlkpresearcher OWNER TO jburton;
+ALTER TABLE public.tlkpresearcher OWNER TO person0078;
 
 --
--- Name: TABLE tlkpresearcher; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlkpresearcher; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlkpresearcher IS 'List of researchers';
 
 
 --
--- Name: COLUMN tlkpresearcher.lose_to; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: COLUMN tlkpresearcher.lose_to; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON COLUMN tlkpresearcher.lose_to IS 'Researcher code this loses to after reservation period';
 
 
 --
--- Name: schedule; Type: VIEW; Schema: public; Owner: jburton
+-- Name: schedule; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW schedule AS
     SELECT s.schedid, s.scannercode, s.deptcode, d.dept_short, d.grp, s.scheddate, s.schedhour, r.researchercode, r.researchershort, d.color_wkday_day AS color, ((d.dept_short)::text || CASE WHEN (r.researchershort IS NULL) THEN ''::text ELSE ((' ('::text || (r.researchershort)::text) || ')'::text) END) AS label, s.time_used, s.templateid FROM ((tblsched s JOIN tlkpdept d USING (deptcode)) LEFT JOIN tlkpresearcher r USING (researchercode)) ORDER BY s.scheddate, s.schedhour, s.scannercode;
 
 
-ALTER TABLE public.schedule OWNER TO jburton;
+ALTER TABLE public.schedule OWNER TO person0078;
 
 --
 -- Name: schedule_agt; Type: VIEW; Schema: public; Owner: adamt
@@ -304,7 +304,7 @@ CREATE VIEW schedule_agt AS
 ALTER TABLE public.schedule_agt OWNER TO adamt;
 
 --
--- Name: tblsched_schedid_seq; Type: SEQUENCE; Schema: public; Owner: jburton
+-- Name: tblsched_schedid_seq; Type: SEQUENCE; Schema: public; Owner: person0078
 --
 
 CREATE SEQUENCE tblsched_schedid_seq
@@ -314,10 +314,10 @@ CREATE SEQUENCE tblsched_schedid_seq
     CACHE 1;
 
 
-ALTER TABLE public.tblsched_schedid_seq OWNER TO jburton;
+ALTER TABLE public.tblsched_schedid_seq OWNER TO person0078;
 
 --
--- Name: tbltemplate; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tbltemplate (
@@ -334,17 +334,17 @@ CREATE TABLE tbltemplate (
 );
 
 
-ALTER TABLE public.tbltemplate OWNER TO jburton;
+ALTER TABLE public.tbltemplate OWNER TO person0078;
 
 --
--- Name: TABLE tbltemplate; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tbltemplate; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tbltemplate IS 'Templated times for scanner use';
 
 
 --
--- Name: tbltemplate_templateid_seq; Type: SEQUENCE; Schema: public; Owner: jburton
+-- Name: tbltemplate_templateid_seq; Type: SEQUENCE; Schema: public; Owner: person0078
 --
 
 CREATE SEQUENCE tbltemplate_templateid_seq
@@ -354,10 +354,10 @@ CREATE SEQUENCE tbltemplate_templateid_seq
     CACHE 1;
 
 
-ALTER TABLE public.tbltemplate_templateid_seq OWNER TO jburton;
+ALTER TABLE public.tbltemplate_templateid_seq OWNER TO person0078;
 
 --
--- Name: tbltemplates; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplates; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tbltemplates (
@@ -369,10 +369,10 @@ CREATE TABLE tbltemplates (
 );
 
 
-ALTER TABLE public.tbltemplates OWNER TO jburton;
+ALTER TABLE public.tbltemplates OWNER TO person0078;
 
 --
--- Name: TABLE tbltemplates; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tbltemplates; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tbltemplates IS 'List of scanner templates';
@@ -381,7 +381,7 @@ COMMENT ON TABLE tbltemplates IS 'List of scanner templates';
 SET default_with_oids = false;
 
 --
--- Name: technicalscans; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: technicalscans; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE technicalscans (
@@ -395,7 +395,7 @@ CREATE TABLE technicalscans (
 );
 
 
-ALTER TABLE public.technicalscans OWNER TO jburton;
+ALTER TABLE public.technicalscans OWNER TO person0078;
 
 --
 -- Name: temp_timelapse; Type: TABLE; Schema: public; Owner: zope; Tablespace:
@@ -417,7 +417,7 @@ ALTER TABLE public.temp_timelapse OWNER TO zope;
 SET default_with_oids = true;
 
 --
--- Name: tlkpinst; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpinst; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpinst (
@@ -427,20 +427,20 @@ CREATE TABLE tlkpinst (
 );
 
 
-ALTER TABLE public.tlkpinst OWNER TO jburton;
+ALTER TABLE public.tlkpinst OWNER TO person0078;
 
 --
--- Name: template; Type: VIEW; Schema: public; Owner: jburton
+-- Name: template; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW "template" AS
     SELECT t.templateid, t.templatecode, t.scannercode, t.deptcode, d.dept_short, d.grp, t.dow, t."hour", t.researchercode, r.researchershort, d.color_wkday_day AS color, (((d.dept_short)::text || CASE WHEN (r.researchershort IS NULL) THEN ''::text ELSE ((' ('::text || (r.researchershort)::text) || ')'::text) END) || CASE WHEN (i.instshort IS NULL) THEN ''::text ELSE ((' ['::text || (i.instshort)::text) || ']'::text) END) AS label, t.instcode FROM (((tbltemplate t JOIN tlkpdept d USING (deptcode)) LEFT JOIN tlkpresearcher r USING (researchercode)) LEFT JOIN tlkpinst i USING (instcode)) ORDER BY t.dow, t."hour", t.scannercode, t.templatecode;
 
 
-ALTER TABLE public."template" OWNER TO jburton;
+ALTER TABLE public."template" OWNER TO person0078;
 
 --
--- Name: tlkpscanner; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpscanner; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlkpscanner (
@@ -452,17 +452,17 @@ CREATE TABLE tlkpscanner (
 );
 
 
-ALTER TABLE public.tlkpscanner OWNER TO jburton;
+ALTER TABLE public.tlkpscanner OWNER TO person0078;
 
 --
--- Name: TABLE tlkpscanner; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlkpscanner; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlkpscanner IS 'List of scanners';
 
 
 --
--- Name: tlogresearcher; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlogresearcher; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlogresearcher (
@@ -482,10 +482,10 @@ CREATE TABLE tlogresearcher (
 );
 
 
-ALTER TABLE public.tlogresearcher OWNER TO jburton;
+ALTER TABLE public.tlogresearcher OWNER TO person0078;
 
 --
--- Name: tlogsched; Type: TABLE; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlogsched; Type: TABLE; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE TABLE tlogsched (
@@ -508,51 +508,51 @@ CREATE TABLE tlogsched (
 );
 
 
-ALTER TABLE public.tlogsched OWNER TO jburton;
+ALTER TABLE public.tlogsched OWNER TO person0078;
 
 --
--- Name: TABLE tlogsched; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: TABLE tlogsched; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON TABLE tlogsched IS 'Logging of changes. DOES NOT USE referential integrity!';
 
 
 --
--- Name: vlogsched; Type: VIEW; Schema: public; Owner: jburton
+-- Name: vlogsched; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW vlogsched AS
     SELECT tlogsched.logid, tlogsched.schedid, tlogsched.scannercode, tlogsched.scheddate, tlogsched.schedhour, tlogsched.deptcode, tlogsched.researchercode, tlogsched.time_used, tlogsched.scannercode_old, tlogsched.scheddate_old, tlogsched.schedhour_old, tlogsched.deptcode_old, tlogsched.researchercode_old, tlogsched.time_used_old, tlogsched.chg_at, tlogsched.chg_by, (tlogsched.chg_at)::date AS chg_date, to_char(tlogsched.chg_at, 'FMMM/FMDD FMHH12:MIam'::text) AS chg_datetime FROM tlogsched;
 
 
-ALTER TABLE public.vlogsched OWNER TO jburton;
+ALTER TABLE public.vlogsched OWNER TO person0078;
 
 --
--- Name: VIEW vlogsched; Type: COMMENT; Schema: public; Owner: jburton
+-- Name: VIEW vlogsched; Type: COMMENT; Schema: public; Owner: person0078
 --
 
 COMMENT ON VIEW vlogsched IS 'Friendly view of loggig of changes';
 
 
 --
--- Name: vlogsched_auditlapse; Type: VIEW; Schema: public; Owner: jburton
+-- Name: vlogsched_auditlapse; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW vlogsched_auditlapse AS
     SELECT l.deptcode_old AS deptcode, l.scheddate, l.schedhour, (l.scheddate + (((l.schedhour)::text || ' hours'::text))::interval) AS schedtime, l.chg_at AS posttime, l.scannercode, ((date_part('epoch'::text, (l.chg_at - (l.scheddate + (((l.schedhour)::text || ' hours'::text))::interval))) / (60)::double precision) / (60)::double precision) AS diff, CASE WHEN (((date_part('dow'::text, l.scheddate) >= (1)::double precision) AND (date_part('dow'::text, l.scheddate) <= (5)::double precision)) AND ((l.schedhour >= 8) AND (l.schedhour <= 17))) THEN 'wdp'::text WHEN ((date_part('dow'::text, l.scheddate) >= (1)::double precision) AND (date_part('dow'::text, l.scheddate) <= (5)::double precision)) THEN 'wdn'::text WHEN ((l.schedhour >= 8) AND (l.schedhour <= 17)) THEN 'wep'::text ELSE 'wen'::text END AS slottype FROM tlogsched l WHERE (((l.deptcode)::text = 'post'::text) AND ((l.deptcode_old)::text <> 'post'::text));
 
 
-ALTER TABLE public.vlogsched_auditlapse OWNER TO jburton;
+ALTER TABLE public.vlogsched_auditlapse OWNER TO person0078;
 
 --
--- Name: vtblsched_audit; Type: VIEW; Schema: public; Owner: jburton
+-- Name: vtblsched_audit; Type: VIEW; Schema: public; Owner: person0078
 --
 
 CREATE VIEW vtblsched_audit AS
     SELECT l.deptcode, l.scheddate, l.schedhour, l.scannercode, CASE WHEN l.time_used THEN 1 ELSE 0 END AS used, CASE WHEN ((((date_part('dow'::text, l.scheddate) >= (1)::double precision) AND (date_part('dow'::text, l.scheddate) <= (5)::double precision)) AND (l.schedhour >= 8)) AND (l.schedhour <= 17)) THEN 'wdp'::text WHEN ((date_part('dow'::text, l.scheddate) >= (1)::double precision) AND (date_part('dow'::text, l.scheddate) <= (5)::double precision)) THEN 'wdn'::text WHEN ((l.schedhour >= 8) AND (l.schedhour <= 17)) THEN 'wep'::text ELSE 'wen'::text END AS slottype FROM tblsched l WHERE ((((l.deptcode)::text <> ''::text) AND (l.time_used IS NOT NULL)) AND ((l.deptcode)::text <> 'post'::text));
 
 
-ALTER TABLE public.vtblsched_audit OWNER TO jburton;
+ALTER TABLE public.vtblsched_audit OWNER TO person0078;
 
 --
 -- Name: vtblsched_audit_alloc; Type: VIEW; Schema: public; Owner: apache
@@ -582,7 +582,7 @@ COMMENT ON VIEW vtblsched_audit_total IS 'Used to determine total allocated time
 
 
 --
--- Name: tblsched_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tblsched_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tblsched
@@ -590,7 +590,7 @@ ALTER TABLE ONLY tblsched
 
 
 --
--- Name: tbltemplate_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -598,7 +598,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplate_scannercode_key1; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate_scannercode_key1; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -606,7 +606,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplates_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplates_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tbltemplates
@@ -614,7 +614,7 @@ ALTER TABLE ONLY tbltemplates
 
 
 --
--- Name: technicalscans_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: technicalscans_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY technicalscans
@@ -622,7 +622,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: technicalscans_scantime_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: technicalscans_scantime_key; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY technicalscans
@@ -630,7 +630,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: tlkpdept_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpdept
@@ -638,7 +638,7 @@ ALTER TABLE ONLY tlkpdept
 
 
 --
--- Name: tlkpinst_instshort_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpinst_instshort_key; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpinst
@@ -646,7 +646,7 @@ ALTER TABLE ONLY tlkpinst
 
 
 --
--- Name: tlkpinst_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpinst_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpinst
@@ -654,7 +654,7 @@ ALTER TABLE ONLY tlkpinst
 
 
 --
--- Name: tlkpresearcher_dept_code_key; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpresearcher_dept_code_key; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -662,7 +662,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -670,7 +670,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpscanner_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpscanner_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlkpscanner
@@ -678,7 +678,7 @@ ALTER TABLE ONLY tlkpscanner
 
 
 --
--- Name: tlogresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlogresearcher_pkey; Type: CONSTRAINT; Schema: public; Owner: person0078; Tablespace:
 --
 
 ALTER TABLE ONLY tlogresearcher
@@ -686,7 +686,7 @@ ALTER TABLE ONLY tlogresearcher
 
 
 --
--- Name: scann_template; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: scann_template; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE INDEX scann_template ON tbltemplates USING btree (scannercode, templatecode);
@@ -695,84 +695,84 @@ ALTER TABLE tbltemplates CLUSTER ON scann_template;
 
 
 --
--- Name: tblsched_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tblsched_scannercode_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tblsched_scannercode_key ON tblsched USING btree (scannercode, scheddate, schedhour);
 
 
 --
--- Name: tbltemplate_scannercode_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tbltemplate_scannercode_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE INDEX tbltemplate_scannercode_key ON tbltemplate USING btree (scannercode, templatecode, dow, "hour");
 
 
 --
--- Name: tlkpdept_dept_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept_dept_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpdept_dept_key ON tlkpdept USING btree (dept);
 
 
 --
--- Name: tlkpdept_dept_short_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpdept_dept_short_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpdept_dept_short_key ON tlkpdept USING btree (dept_short);
 
 
 --
--- Name: tlkpscanner_scanner_key; Type: INDEX; Schema: public; Owner: jburton; Tablespace:
+-- Name: tlkpscanner_scanner_key; Type: INDEX; Schema: public; Owner: person0078; Tablespace:
 --
 
 CREATE UNIQUE INDEX tlkpscanner_scanner_key ON tlkpscanner USING btree (scanner);
 
 
 --
--- Name: tblsched_ins; Type: RULE; Schema: public; Owner: jburton
+-- Name: tblsched_ins; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tblsched_ins AS ON INSERT TO tblsched DO INSERT INTO tlogsched (schedid, scannercode, scheddate, schedhour, deptcode, researchercode, time_used, chg_by) VALUES (new.schedid, new.scannercode, new.scheddate, new.schedhour, new.deptcode, new.researchercode, new.time_used, new.chg_by);
 
 
 --
--- Name: tblsched_updateon; Type: RULE; Schema: public; Owner: jburton
+-- Name: tblsched_updateon; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tblsched_updateon AS ON UPDATE TO tblsched DO INSERT INTO tlogsched (schedid, scannercode, scheddate, schedhour, deptcode, researchercode, time_used, scannercode_old, scheddate_old, schedhour_old, deptcode_old, researchercode_old, time_used_old, chg_at, chg_by) VALUES (new.schedid, new.scannercode, new.scheddate, new.schedhour, new.deptcode, new.researchercode, new.time_used, old.scannercode, old.scheddate, old.schedhour, old.deptcode, old.researchercode, old.time_used, ('now'::text)::timestamp(6) with time zone, new.chg_by);
 
 
 --
--- Name: template_fill; Type: RULE; Schema: public; Owner: jburton
+-- Name: template_fill; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE template_fill AS ON INSERT TO tbltemplates DO SELECT template_default_fill(new.scannercode, new.templatecode) AS template_default_fill;
 
 
 --
--- Name: tlkpresearcher_del; Type: RULE; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_del; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tlkpresearcher_del AS ON DELETE TO tlkpresearcher DO INSERT INTO tlogresearcher (chg_at, chg_by, researchercode_old, lname_old, fname_old, researchershort_old, dept_code__old) VALUES (('now'::text)::timestamp(6) with time zone, "current_user"(), old.researchercode, old.lname, old.fname, old.researchershort, old.dept_code);
 
 
 --
--- Name: tlkpresearcher_ins; Type: RULE; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_ins; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tlkpresearcher_ins AS ON INSERT TO tlkpresearcher DO INSERT INTO tlogresearcher (researchercode, lname, fname, researchershort, dept_code, chg_at, chg_by) VALUES (new.researchercode, new.lname, new.fname, new.researchershort, new.dept_code, ('now'::text)::timestamp(6) with time zone, "current_user"());
 
 
 --
--- Name: tlkpresearcher_upd; Type: RULE; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_upd; Type: RULE; Schema: public; Owner: person0078
 --
 
 CREATE RULE tlkpresearcher_upd AS ON UPDATE TO tlkpresearcher DO INSERT INTO tlogresearcher (researchercode, lname, fname, researchershort, dept_code, chg_at, chg_by, researchercode_old, lname_old, fname_old, researchershort_old, dept_code__old) VALUES (new.researchercode, new.lname, new.fname, new.researchershort, new.dept_code, ('now'::text)::timestamp(6) with time zone, "current_user"(), old.researchercode, old.lname, old.fname, old.researchershort, old.dept_code);
 
 
 --
--- Name: tblsched_billdeptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tblsched_billdeptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tblsched
@@ -780,7 +780,7 @@ ALTER TABLE ONLY tblsched
 
 
 --
--- Name: tblsched_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tblsched_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tblsched
@@ -788,7 +788,7 @@ ALTER TABLE ONLY tblsched
 
 
 --
--- Name: tbltemplate_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplate_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -796,7 +796,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplate_instcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplate_instcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -804,7 +804,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplate_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplate_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplate
@@ -812,7 +812,7 @@ ALTER TABLE ONLY tbltemplate
 
 
 --
--- Name: tbltemplates_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tbltemplates_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tbltemplates
@@ -820,7 +820,7 @@ ALTER TABLE ONLY tbltemplates
 
 
 --
--- Name: technicalscans_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: technicalscans_deptcode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY technicalscans
@@ -828,7 +828,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: technicalscans_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: technicalscans_scannercode_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY technicalscans
@@ -836,7 +836,7 @@ ALTER TABLE ONLY technicalscans
 
 
 --
--- Name: tlkpresearcher_dept_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_dept_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -844,7 +844,7 @@ ALTER TABLE ONLY tlkpresearcher
 
 
 --
--- Name: tlkpresearcher_lose_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: jburton
+-- Name: tlkpresearcher_lose_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: person0078
 --
 
 ALTER TABLE ONLY tlkpresearcher
@@ -862,12 +862,12 @@ GRANT ALL ON SCHEMA public TO PUBLIC;
 
 
 --
--- Name: tlkpdept; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlkpdept; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlkpdept FROM PUBLIC;
-REVOKE ALL ON TABLE tlkpdept FROM jburton;
-GRANT ALL ON TABLE tlkpdept TO jburton;
+REVOKE ALL ON TABLE tlkpdept FROM person0078;
+GRANT ALL ON TABLE tlkpdept TO person0078;
 GRANT ALL ON TABLE tlkpdept TO zope;
 GRANT SELECT ON TABLE tlkpdept TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tlkpdept TO apache;
@@ -877,12 +877,12 @@ GRANT ALL ON TABLE tlkpdept TO osmium_admin;
 
 
 --
--- Name: departments; Type: ACL; Schema: public; Owner: jburton
+-- Name: departments; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE departments FROM PUBLIC;
-REVOKE ALL ON TABLE departments FROM jburton;
-GRANT ALL ON TABLE departments TO jburton;
+REVOKE ALL ON TABLE departments FROM person0078;
+GRANT ALL ON TABLE departments TO person0078;
 GRANT SELECT ON TABLE departments TO PUBLIC;
 
 
@@ -897,12 +897,12 @@ GRANT SELECT ON TABLE departments_agt TO PUBLIC;
 
 
 --
--- Name: tblsched; Type: ACL; Schema: public; Owner: jburton
+-- Name: tblsched; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tblsched FROM PUBLIC;
-REVOKE ALL ON TABLE tblsched FROM jburton;
-GRANT ALL ON TABLE tblsched TO jburton;
+REVOKE ALL ON TABLE tblsched FROM person0078;
+GRANT ALL ON TABLE tblsched TO person0078;
 GRANT ALL ON TABLE tblsched TO zope;
 GRANT SELECT ON TABLE tblsched TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tblsched TO apache;
@@ -912,12 +912,12 @@ GRANT ALL ON TABLE tblsched TO osmium_admin;
 
 
 --
--- Name: tlkpresearcher; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlkpresearcher; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlkpresearcher FROM PUBLIC;
-REVOKE ALL ON TABLE tlkpresearcher FROM jburton;
-GRANT ALL ON TABLE tlkpresearcher TO jburton;
+REVOKE ALL ON TABLE tlkpresearcher FROM person0078;
+GRANT ALL ON TABLE tlkpresearcher TO person0078;
 GRANT ALL ON TABLE tlkpresearcher TO zope;
 GRANT SELECT ON TABLE tlkpresearcher TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tlkpresearcher TO apache;
@@ -926,12 +926,12 @@ GRANT SELECT ON TABLE tlkpresearcher TO fmrifstaff;
 
 
 --
--- Name: schedule; Type: ACL; Schema: public; Owner: jburton
+-- Name: schedule; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE schedule FROM PUBLIC;
-REVOKE ALL ON TABLE schedule FROM jburton;
-GRANT ALL ON TABLE schedule TO jburton;
+REVOKE ALL ON TABLE schedule FROM person0078;
+GRANT ALL ON TABLE schedule TO person0078;
 GRANT SELECT ON TABLE schedule TO PUBLIC;
 
 
@@ -946,22 +946,22 @@ GRANT SELECT ON TABLE schedule_agt TO PUBLIC;
 
 
 --
--- Name: tblsched_schedid_seq; Type: ACL; Schema: public; Owner: jburton
+-- Name: tblsched_schedid_seq; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tblsched_schedid_seq FROM PUBLIC;
-REVOKE ALL ON TABLE tblsched_schedid_seq FROM jburton;
-GRANT ALL ON TABLE tblsched_schedid_seq TO jburton;
+REVOKE ALL ON TABLE tblsched_schedid_seq FROM person0078;
+GRANT ALL ON TABLE tblsched_schedid_seq TO person0078;
 GRANT ALL ON TABLE tblsched_schedid_seq TO zope;
 
 
 --
--- Name: tbltemplate; Type: ACL; Schema: public; Owner: jburton
+-- Name: tbltemplate; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tbltemplate FROM PUBLIC;
-REVOKE ALL ON TABLE tbltemplate FROM jburton;
-GRANT ALL ON TABLE tbltemplate TO jburton;
+REVOKE ALL ON TABLE tbltemplate FROM person0078;
+GRANT ALL ON TABLE tbltemplate TO person0078;
 GRANT ALL ON TABLE tbltemplate TO zope;
 GRANT SELECT ON TABLE tbltemplate TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tbltemplate TO apache;
@@ -970,22 +970,22 @@ GRANT SELECT ON TABLE tbltemplate TO fmrifstaff;
 
 
 --
--- Name: tbltemplate_templateid_seq; Type: ACL; Schema: public; Owner: jburton
+-- Name: tbltemplate_templateid_seq; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tbltemplate_templateid_seq FROM PUBLIC;
-REVOKE ALL ON TABLE tbltemplate_templateid_seq FROM jburton;
-GRANT ALL ON TABLE tbltemplate_templateid_seq TO jburton;
+REVOKE ALL ON TABLE tbltemplate_templateid_seq FROM person0078;
+GRANT ALL ON TABLE tbltemplate_templateid_seq TO person0078;
 GRANT INSERT,SELECT,UPDATE ON TABLE tbltemplate_templateid_seq TO PUBLIC;
 
 
 --
--- Name: tbltemplates; Type: ACL; Schema: public; Owner: jburton
+-- Name: tbltemplates; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tbltemplates FROM PUBLIC;
-REVOKE ALL ON TABLE tbltemplates FROM jburton;
-GRANT ALL ON TABLE tbltemplates TO jburton;
+REVOKE ALL ON TABLE tbltemplates FROM person0078;
+GRANT ALL ON TABLE tbltemplates TO person0078;
 GRANT INSERT,SELECT ON TABLE tbltemplates TO PUBLIC;
 GRANT UPDATE ON TABLE tbltemplates TO zope;
 GRANT SELECT ON TABLE tbltemplates TO sean;
@@ -995,12 +995,12 @@ GRANT SELECT ON TABLE tbltemplates TO fmrifstaff;
 
 
 --
--- Name: technicalscans; Type: ACL; Schema: public; Owner: jburton
+-- Name: technicalscans; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE technicalscans FROM PUBLIC;
-REVOKE ALL ON TABLE technicalscans FROM jburton;
-GRANT ALL ON TABLE technicalscans TO jburton;
+REVOKE ALL ON TABLE technicalscans FROM person0078;
+GRANT ALL ON TABLE technicalscans TO person0078;
 
 
 --
@@ -1013,12 +1013,12 @@ GRANT ALL ON TABLE temp_timelapse TO zope;
 
 
 --
--- Name: tlkpinst; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlkpinst; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlkpinst FROM PUBLIC;
-REVOKE ALL ON TABLE tlkpinst FROM jburton;
-GRANT ALL ON TABLE tlkpinst TO jburton;
+REVOKE ALL ON TABLE tlkpinst FROM person0078;
+GRANT ALL ON TABLE tlkpinst TO person0078;
 GRANT SELECT ON TABLE tlkpinst TO PUBLIC;
 GRANT SELECT ON TABLE tlkpinst TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tlkpinst TO apache;
@@ -1027,22 +1027,22 @@ GRANT SELECT ON TABLE tlkpinst TO fmrifstaff;
 
 
 --
--- Name: template; Type: ACL; Schema: public; Owner: jburton
+-- Name: template; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE "template" FROM PUBLIC;
-REVOKE ALL ON TABLE "template" FROM jburton;
-GRANT ALL ON TABLE "template" TO jburton;
+REVOKE ALL ON TABLE "template" FROM person0078;
+GRANT ALL ON TABLE "template" TO person0078;
 GRANT SELECT ON TABLE "template" TO PUBLIC;
 
 
 --
--- Name: tlkpscanner; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlkpscanner; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlkpscanner FROM PUBLIC;
-REVOKE ALL ON TABLE tlkpscanner FROM jburton;
-GRANT ALL ON TABLE tlkpscanner TO jburton;
+REVOKE ALL ON TABLE tlkpscanner FROM person0078;
+GRANT ALL ON TABLE tlkpscanner TO person0078;
 GRANT ALL ON TABLE tlkpscanner TO zope;
 GRANT SELECT ON TABLE tlkpscanner TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tlkpscanner TO apache;
@@ -1052,12 +1052,12 @@ GRANT ALL ON TABLE tlkpscanner TO osmium_admin;
 
 
 --
--- Name: tlogresearcher; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlogresearcher; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlogresearcher FROM PUBLIC;
-REVOKE ALL ON TABLE tlogresearcher FROM jburton;
-GRANT ALL ON TABLE tlogresearcher TO jburton;
+REVOKE ALL ON TABLE tlogresearcher FROM person0078;
+GRANT ALL ON TABLE tlogresearcher TO person0078;
 GRANT ALL ON TABLE tlogresearcher TO zope;
 GRANT SELECT ON TABLE tlogresearcher TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tlogresearcher TO apache;
@@ -1065,22 +1065,22 @@ GRANT SELECT ON TABLE tlogresearcher TO shahsd;
 
 
 --
--- Name: tlogresearcher_logid_seq; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlogresearcher_logid_seq; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlogresearcher_logid_seq FROM PUBLIC;
-REVOKE ALL ON TABLE tlogresearcher_logid_seq FROM jburton;
-GRANT ALL ON TABLE tlogresearcher_logid_seq TO jburton;
+REVOKE ALL ON TABLE tlogresearcher_logid_seq FROM person0078;
+GRANT ALL ON TABLE tlogresearcher_logid_seq TO person0078;
 GRANT ALL ON TABLE tlogresearcher_logid_seq TO zope;
 
 
 --
--- Name: tlogsched; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlogsched; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlogsched FROM PUBLIC;
-REVOKE ALL ON TABLE tlogsched FROM jburton;
-GRANT ALL ON TABLE tlogsched TO jburton;
+REVOKE ALL ON TABLE tlogsched FROM person0078;
+GRANT ALL ON TABLE tlogsched TO person0078;
 GRANT ALL ON TABLE tlogsched TO PUBLIC;
 GRANT SELECT ON TABLE tlogsched TO sean;
 GRANT INSERT,SELECT,UPDATE ON TABLE tlogsched TO apache;
@@ -1089,42 +1089,42 @@ GRANT SELECT ON TABLE tlogsched TO fmrifstaff;
 
 
 --
--- Name: tlogsched_logid_seq; Type: ACL; Schema: public; Owner: jburton
+-- Name: tlogsched_logid_seq; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE tlogsched_logid_seq FROM PUBLIC;
-REVOKE ALL ON TABLE tlogsched_logid_seq FROM jburton;
-GRANT ALL ON TABLE tlogsched_logid_seq TO jburton;
+REVOKE ALL ON TABLE tlogsched_logid_seq FROM person0078;
+GRANT ALL ON TABLE tlogsched_logid_seq TO person0078;
 GRANT ALL ON TABLE tlogsched_logid_seq TO PUBLIC;
 GRANT ALL ON TABLE tlogsched_logid_seq TO zope;
 
 
 --
--- Name: vlogsched; Type: ACL; Schema: public; Owner: jburton
+-- Name: vlogsched; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE vlogsched FROM PUBLIC;
-REVOKE ALL ON TABLE vlogsched FROM jburton;
-GRANT ALL ON TABLE vlogsched TO jburton;
+REVOKE ALL ON TABLE vlogsched FROM person0078;
+GRANT ALL ON TABLE vlogsched TO person0078;
 GRANT SELECT ON TABLE vlogsched TO PUBLIC;
 
 
 --
--- Name: vlogsched_auditlapse; Type: ACL; Schema: public; Owner: jburton
+-- Name: vlogsched_auditlapse; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE vlogsched_auditlapse FROM PUBLIC;
-REVOKE ALL ON TABLE vlogsched_auditlapse FROM jburton;
-GRANT ALL ON TABLE vlogsched_auditlapse TO jburton;
+REVOKE ALL ON TABLE vlogsched_auditlapse FROM person0078;
+GRANT ALL ON TABLE vlogsched_auditlapse TO person0078;
 
 
 --
--- Name: vtblsched_audit; Type: ACL; Schema: public; Owner: jburton
+-- Name: vtblsched_audit; Type: ACL; Schema: public; Owner: person0078
 --
 
 REVOKE ALL ON TABLE vtblsched_audit FROM PUBLIC;
-REVOKE ALL ON TABLE vtblsched_audit FROM jburton;
-GRANT ALL ON TABLE vtblsched_audit TO jburton;
+REVOKE ALL ON TABLE vtblsched_audit FROM person0078;
+GRANT ALL ON TABLE vtblsched_audit TO person0078;
 
 
 --

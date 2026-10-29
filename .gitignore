@@ -1,8 +1,14 @@
 # do not save new data to be imported into db
 sql/*.csv
+!sql/*.sample.csv
+
+# Configuration files with credentials
+scheduler/static/config/entra-config.json
 
 .DS_Store
 node_modules/
+playwright/.auth/
+playwright-auth.json
 scheduler/.DS_Store
 scheduler/static/.DS_Store
 scheduler/templates/.DS_Store
@@ -123,7 +129,6 @@ celerybeat.pid
 
 # Environments
 .env
-.env.docker
 .venv
 env/
 venv/
@@ -173,3 +178,11 @@ cython_debug/
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
+
+# Local credentials, browser sessions, and generated response drafts
+.env.*
+!.env.sample.local
+!sql/.env.sample
+playwright-auth*.json
+output/
+tmp/

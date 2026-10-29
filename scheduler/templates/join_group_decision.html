@@ -1,0 +1,12 @@
+{% extends "page.html" %} {% block title %}{{ action }} membership request{%
+endblock %} {% block body %}
+<h1>{{ action|capitalize }} membership request</h1>
+<p>
+  Confirm that you want to {{ action }} {{ user_id }} for {{ group_label }}.
+</p>
+<form method="POST" action="{{ action_url }}">
+  {{ form.csrf_token }}
+  <button type="submit">{{ action|capitalize }}</button>
+  <a href="{{ cancel_url }}">Cancel</a>
+</form>
+{% endblock %}

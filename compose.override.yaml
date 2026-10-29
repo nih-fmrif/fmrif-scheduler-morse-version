@@ -1,0 +1,7 @@
+services:
+  scheduler:
+    labels:
+      - "com.fmrif.compose_wrapper=${FMRIF_COMPOSE_WRAPPER:?Set FMRIF_COMPOSE_WRAPPER=run-compose.sh and launch with ./run-compose.sh}"
+    volumes:
+      - ./scheduler:/app/scheduler
+      - ./sql:/sql:ro

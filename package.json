@@ -3,14 +3,19 @@
   "version": "1.0.0",
   "description": "End-to-end tests for the scheduler application",
   "scripts": {
-    "test": "playwright test",
-    "test:ui": "playwright test --ui",
-    "test:headed": "playwright test --headed",
+    "test": "playwright test tests/playwright/integration",
+    "test:integration": "playwright test tests/playwright/integration",
+    "test:auth-flow": "PLAYWRIGHT_AUTH_MODE=entra playwright test tests/playwright/integration tests/playwright/auth-flow/oauth.spec.ts",
+    "test:auth-storage": "PLAYWRIGHT_AUTH_MODE=entra playwright test tests/playwright/auth-flow/auth-storage.spec.ts --headed",
+    "test:live-incident": "PLAYWRIGHT_AUTH_MODE=entra playwright test tests/playwright/live-incident",
+    "test:ui": "playwright test tests/playwright/integration --ui",
+    "test:headed": "playwright test tests/playwright/integration --headed",
     "codegen": "playwright codegen http://localhost:5051"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
-    "@types/node": "^20.10.0"
+    "@types/node": "^20.10.0",
+    "dotenv": "^17.2.3"
   },
   "main": "index.js",
   "directories": {
@@ -18,7 +23,6 @@
     "test": "tests"
   },
   "dependencies": {
-    "fsevents": "^2.3.2",
     "playwright": "^1.49.1",
     "playwright-core": "^1.49.1",
     "typescript": "^5.7.2",

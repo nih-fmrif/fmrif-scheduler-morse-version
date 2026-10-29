@@ -1,0 +1,83 @@
+[workspace]
+name = "scheduler"
+version = "0.1.0"
+description = "NIH MRI Center scheduler"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "linux-aarch64"]
+requires-pixi = ">=0.66.0"
+
+[dependencies]
+python = "3.11.*"
+
+[pypi-dependencies]
+alembic = ">=1.13.1"
+blinker = "==1.9.0"
+cachelib = "==0.13.0"
+click = "==8.1.8"
+email-validator = "==2.2.0"
+erd = "==0.0.1"
+flask = "==3.1.1"
+flask-mail = "==0.9.1"
+flask-session = "==0.8.0"
+flask-sqlalchemy = "==3.1.1"
+flask-wtf = "==1.2.2"
+greenlet = "==3.1.1"
+gunicorn = ">=23,<24"
+itsdangerous = "==2.2.0"
+jinja2 = "==3.1.6"
+markupsafe = "==3.0.2"
+psycopg2-binary = "==2.9.10"
+pyjwt = { version = "==2.10.1", extras = ["crypto"] }
+python-dotenv = "==1.1.1"
+requests = "==2.32.5"
+sqlalchemy = "==2.0.40"
+werkzeug = "==3.1.3"
+wtforms = "==3.2.1"
+
+[feature.dev.dependencies]
+nodejs = "18.*"
+
+[feature.dev.pypi-dependencies]
+ipython = ">=8.31.0"
+locust = ">=2.31,<3"
+pdbpp = ">=0.10.3"
+pre-commit = ">=4.1.0"
+pytest = ">=8.3.4"
+pytest-cov = ">=6.0.0"
+pytest-xdist = ">=3.5.0"
+
+[environments]
+default = { features = [], solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[tasks]
+serve = "bash scripts/serve.sh"
+serve-gunicorn = "APP_SERVER=gunicorn bash scripts/serve.sh"
+install-js = "pixi run -e dev npm ci --no-optional"
+install-playwright = "pixi run -e dev npx playwright install --with-deps"
+pre-commit-install = "bash scripts/install-pre-commit-hook.sh"
+pre-commit = "pixi run -e dev bash -lc 'pre-commit run --all-files'"
+check-db-health = "python3 scripts/check-db-health.py"
+check-db-posture = "python3 scripts/check-db-posture.py"
+rehearse-initial-deployment = "python3 -m scheduler.deployment_rehearsal"
+test-unit = "pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py unit tests/unit \"not route\""
+test-unit-xdist = "pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py unit tests/unit \"not route\" -- -n auto --dist loadgroup"
+test-routes = "pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py routes tests/unit route"
+test-routes-xdist = "pixi run -e dev python3 scripts/run-target-aware-pytest-suite.py routes tests/unit route -- -n auto --dist loadgroup"
+install-browsers = "pixi run -e dev playwright install chromium"
+test-integration = "pixi run -e dev bash scripts/run-isolated-test-suite.sh integration python3 scripts/run-integration-playwright.py --grep-invert=@heavy"
+test-integration-headed = "pixi run -e dev bash scripts/run-isolated-test-suite.sh integration -- python3 scripts/run-integration-playwright.py --headed --grep-invert=@heavy"
+test-integration-ci = "pixi run -e dev bash scripts/run-isolated-test-suite.sh integration -- python3 scripts/run-integration-playwright.py --reporter=dot --grep-invert=@heavy"
+test-debian-smoke = "bash -lc 'bash scripts/run-debian-runtime-smoke.sh \"${DEBIAN_VERSION:-13.1}\"'"
+test-debian-integration = "bash -lc 'bash scripts/run-debian-runtime-integration.sh \"${DEBIAN_VERSION:-13.1}\"'"
+test-integration-heavy = "pixi run -e dev bash -lc 'PLAYWRIGHT_HEAVY_CONCURRENCY=6 bash scripts/run-isolated-test-suite.sh integration -- python3 scripts/run-integration-playwright.py --project=chromium --reporter=dot --workers=1 --grep=@heavy'"
+test-load-moderate = "pixi run -e dev bash scripts/run-isolated-test-suite.sh integration -- python3 scripts/run-locust-load.py"
+test-load-moderate-scheduler = "pixi run -e dev bash -lc 'LOAD_PROFILE=scheduler bash scripts/run-isolated-test-suite.sh integration -- python3 scripts/run-locust-load.py'"
+test-load-moderate-notify = "pixi run -e dev bash -lc 'LOAD_PROFILE=notify bash scripts/run-isolated-test-suite.sh integration -- python3 scripts/run-locust-load.py'"
+run-db-backup = "python3 scripts/run-db-backup.py"
+run-db-restore-drill = "python3 scripts/run-db-restore-drill.py"
+test-old-bootstrap-compat = "pixi run -e dev bash scripts/run-old-bootstrap-compat.sh"
+test-auth-flow-credentials = "pixi run -e dev env -u PLAYWRIGHT_STORAGE_STATE PLAYWRIGHT_AUTH_MODE=entra npx playwright test tests/playwright/auth-flow/oauth.spec.ts --workers=1"
+test-auth-flow-storage-state = "pixi run -e dev bash -c 'PLAYWRIGHT_AUTH_MODE=entra PLAYWRIGHT_STORAGE_STATE=\"${PLAYWRIGHT_STORAGE_STATE:-./playwright-auth.${FMRIF_RUNTIME_SCOPE:-default}.json}\" npx playwright test tests/playwright/auth-flow/oauth.spec.ts --workers=1'"
+generate-auth-storage-state = "pixi run -e dev bash -c 'PLAYWRIGHT_AUTH_MODE=entra PLAYWRIGHT_STORAGE_STATE=\"${PLAYWRIGHT_STORAGE_STATE:-./playwright-auth.${FMRIF_RUNTIME_SCOPE:-default}.json}\" npx playwright test tests/playwright/auth-flow/auth-storage.spec.ts --headed --workers=1'"
+test-live-incident = "pixi run -e dev env PLAYWRIGHT_AUTH_MODE=entra npx playwright test tests/playwright/live-incident --workers=1 --pass-with-no-tests"

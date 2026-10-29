@@ -1,0 +1,3 @@
+[submodule "fmrif-scheduler-docs"]
+	path = fmrif-scheduler-docs
+	url = ../fmrif-scheduler-docs.git

@@ -1,18 +1,32 @@
 {% extends "page.html" %} {% block title %}{{ title }}{% endblock %} {% block
 body %} {% if templates %}
-<ul class="list-with-description">
-  {% for t in templates %}
-  <li>
-    <a
-      href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}"
-      >{{ t.label }} ({{ t.id }})</a
-    >
-    {% if t.description %}
-    <p>{{ t.description }}</p>
-    {% endif %}
-  </li>
-  {% endfor %}
-</ul>
+<article class="list-with-description" aria-labelledby="list-lbl">
+  <h1 id="list-lbl">{{ title }}</h1>
+  <ul>
+    {% for t in templates %}
+    <li>
+      <a
+        href="{{ url_for('device_tmpl_schedule_edit', the_device=device.id, the_template=t.id) }}"
+        >{{ t.label }} ({{ t.id }})</a
+      >
+      {% if t.compatibility.blocking %}
+      <p><strong>repair required</strong></p>
+      <ul>
+        {% for summary in t.compatibility.summary %}
+        <li>{{ summary }}</li>
+        {% endfor %}
+      </ul>
+      {% elif not t.compatibility.can_apply %}
+      <p><strong>not applyable</strong></p>
+      {% else %}
+      <p><strong>ready</strong></p>
+      {% endif %} {% if t.description %}
+      <p>{{ t.description }}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</article>
 {% else %}
 <p class="none">no templates</p>
 {% endif %} {% endblock %}

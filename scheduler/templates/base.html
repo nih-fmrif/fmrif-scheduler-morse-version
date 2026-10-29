@@ -8,13 +8,20 @@
       rel="icon"
       href="data:image/x-icon;base64, AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAA/4QAAP///wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIiIiIiIiIAIREREREREgAhIhIiISISACEiEiIhIhIAIREREREREgAhIhIiISISACEiEgAhIhIAISISACEiEgAhIhIiISISACERERERERIAISISIiEiEgAhIhIiISISACERERERERIAIiIiIiIiIgAAAAAAAAAAD//wAAgAEAAIABAACAAQAAgAEAAIABAACAAQAAgAEAAIABAACAAQAAgAEAAIABAACAAQAAgAEAAIABAAD//wAA"
     />
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='base.css') }}"
-    />
+    <script
+      nonce="{{ current_csp_nonce() }}"
+      src="{{ static_asset_url('js/theme-init.js') }}"
+    ></script>
+    <link rel="stylesheet" href="{{ static_asset_url('base.css') }}" />
     {% block basehead %}{% endblock %}
   </head>
   <body>
+    <div id="app-feedback" class="app-feedback" aria-live="polite"></div>
     {% block basebody %}{% endblock %}
+    <script
+      nonce="{{ current_csp_nonce() }}"
+      type="module"
+      src="{{ static_asset_url('js/notifications-bootstrap.js') }}"
+    ></script>
   </body>
 </html>

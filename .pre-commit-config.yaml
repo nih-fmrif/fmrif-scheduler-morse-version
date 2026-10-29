@@ -28,16 +28,37 @@ repos:
         - id: eslint
           name: eslint
           files: "scheduler/static/.*\\.(js|jsx|ts|tsx)$"
+          exclude: "scheduler/static/(a11y-dialog|scroll-lock)/"
           args: ["--fix"]
+
+    - repo: local
+      hooks:
+        - id: no-unsafe-html-sinks
+          name: no unsafe html sinks
+          entry: bash scripts/check-no-unsafe-html-sinks.sh
+          language: system
+          pass_filenames: false
+        - id: csp-inline-style-nonce
+          name: no inline template styles
+          entry: bash scripts/check-csp-inline-style-nonce.sh
+          language: system
+          pass_filenames: false
+          files: "^scheduler/templates/.*\\.html$"
+        - id: no-global-route-app-import
+          name: no global route app import in unit tests
+          entry: bash scripts/check-no-global-route-app-import.sh
+          language: system
+          pass_filenames: false
+          files: "^tests/unit/test_.*\\.py$"
 
     - repo: https://github.com/pre-commit/pre-commit-hooks
       rev: v4.6.0
       hooks:
         - id: trailing-whitespace
-          exclude: "docs-basecamp-materials|tests/data"
+          exclude: "docs-basecamp-materials|tests/data|sql"
         - id: check-added-large-files
         - id: check-toml
         - id: check-yaml
         - id: check-json
         - id: end-of-file-fixer
-          exclude: "docs-basecamp-materials|tests/data"
+          exclude: "docs-basecamp-materials|tests/data|sql"

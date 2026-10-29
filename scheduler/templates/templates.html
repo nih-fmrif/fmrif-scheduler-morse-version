@@ -1,13 +1,32 @@
 {% extends "page.html" %} {% import "macros.html" as macros %} {% block title
 %}{{ title }}{% endblock %} {% block body %}
-<script id="device-groups" type="application/json">
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="device-groups"
+  type="application/json"
+>
   {{ device_groups_json|tojson }}
 </script>
-<script id="group-colors" type="application/json">
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="group-colors"
+  type="application/json"
+>
   {{ colors|tojson }}
 </script>
-<script id="human-hours" type="application/json">
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="human-hours"
+  type="application/json"
+>
   {{ hours|tojson }}
+</script>
+<script
+  nonce="{{ current_csp_nonce() }}"
+  id="schedule-off-hours"
+  type="application/json"
+>
+  {{ off_hours|tojson }}
 </script>
 {{ macros.datalist("institutes", institutes, "invalid institute") }} {{
 macros.datalist("groups", groups, "invalid group") }} {% for k, v in
@@ -17,85 +36,111 @@ member of " ~ k) }} {% endfor %}
 <div class="editor-container">
   <form class="editor template-editor">
     {{ form.csrf_token }}
-    <div id="caption" data-changed="false" data-error="false">
-      {{ title }}{{ macros.edit_icons("template") }}
-    </div>
-    <div id="scroll-container" aria-labelledby="caption" tabindex="0">
-      <table aria-labelledby="caption">
-        <thead>
-          <tr>
-            <td></td>
-            <th>Sun</th>
-            <th>Mon</th>
-            <th>Tue</th>
-            <th>Wed</th>
-            <th>Thu</th>
-            <th>Fri</th>
-            <th>Sat</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for xs in entries %} {% set h = loop.index-1 %}
-          <tr id="row-{{ h }}" data-hour="{{ h }}">
-            <th scope="row">{{ hours[h] }}</th>
-            {% for x in xs %}
-            <td>
-              <entry-cell
-                data-id="{{ x.id }}"
-                data-hour="{{ x.hour }}"
-                data-date="{{ x.dow }}"
-                data-can-edit="false"
-                data-changed="false"
-                data-error="false"
-              >
-                {{ macros.entry_legend(colors[x.group] if x.group) }}
-                <entry-editor>
-                  {{ macros.entry_text("ins-" ~ x.id, "institute", "institutes",
-                  x.inst) }} {{ macros.entry_text("grp-" ~ x.id, "group",
-                  "groups", x.group) }} {{ macros.entry_text("mem-" ~ x.id,
-                  "member", "none", x.user) }}
-                </entry-editor>
-                <entry-buttons
-                  ><button type="button" disabled data-reset>
-                    reset
-                  </button></entry-buttons
-                >
-                <entry-status>{{ macros.edit_icons("entry") }}</entry-status>
-              </entry-cell>
-            </td>
-            {% endfor %} {% endfor %}
-          </tr>
-        </tbody>
-      </table>
+    <p
+      id="editor-load-status"
+      class="editor-load-status"
+      aria-live="polite"
+      hidden
+    >
+      preparing template editor...
+    </p>
+    {{ macros.scheduler_status_card(schedule_label) }}
+    <p class="editor-model-note">
+      Group is the schedulable group code. Member must belong to that group.
+      Institute is stored separately on the template slot and is not inferred
+      from the selected group.
+    </p>
+    <div class="editor-workspace">
+      <div class="editor-scroll-shell">
+        <button
+          id="scroll-prev-day"
+          type="button"
+          class="scroll-edge-button scroll-edge-button-left"
+          aria-label="scroll schedule left"
+        >
+          <span aria-hidden="true">←</span>
+        </button>
+        <div id="scroll-container" aria-label="{{ title }}" tabindex="0">
+          <table aria-label="{{ title }}">
+            <thead>
+              <tr>
+                <td></td>
+                <th>Sun</th>
+                <th>Mon</th>
+                <th>Tue</th>
+                <th>Wed</th>
+                <th>Thu</th>
+                <th>Fri</th>
+                <th>Sat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for xs in entries %} {% set h = loop.index-1 %}
+              <tr id="row-{{ h }}" data-hour="{{ h }}" data-hydrated="false">
+                <th scope="row">{{ hours[h] }}</th>
+                {% for x in xs %}
+                <td>
+                  <entry-cell
+                    data-id="{{ x.id }}"
+                    data-hour="{{ x.hour }}"
+                    data-date="{{ x.dow }}"
+                    data-can-edit="false"
+                    data-changed="false"
+                    data-error="false"
+                    data-summary-kind="template"
+                  >
+                    {{ macros.entry_legend(x.group) }}
+                    <entry-summary
+                      title="group: {{ x.group or 'open' }}; member: {{ x.user or 'unassigned' }}; institute: {{ x.inst or 'none' }}"
+                    >
+                      <span class="entry-summary-primary"
+                        >{{ x.group or "open" }}</span
+                      >
+                      <span class="entry-summary-secondary"
+                        >{{ x.user or "unassigned" }}</span
+                      >
+                      <span class="entry-summary-tertiary"
+                        >institute: {{ x.inst or "none" }}</span
+                      >
+                    </entry-summary>
+                    <entry-detail>
+                      <entry-editor>
+                        {{ macros.entry_text("ins-" ~ x.id, "institute",
+                        "institutes", x.inst) }} {{ macros.entry_text("grp-" ~
+                        x.id, "group", "groups", x.group) }} {{
+                        macros.entry_text("mem-" ~ x.id, "member", "none",
+                        x.user) }}
+                      </entry-editor>
+                      <entry-buttons
+                        ><button type="button" disabled data-reset>
+                          reset
+                        </button></entry-buttons
+                      >
+                    </entry-detail>
+                    <entry-status
+                      >{{ macros.edit_icons("entry") }}</entry-status
+                    >
+                  </entry-cell>
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button
+          id="scroll-next-day"
+          type="button"
+          class="scroll-edge-button scroll-edge-button-right"
+          aria-label="scroll schedule right"
+        >
+          <span aria-hidden="true">→</span>
+        </button>
+      </div>
     </div>
     <div id="focus-trap"></div>
-    <button id="apply" type="submit" disabled>save</button>
   </form>
-  <figure class="legend">
-    <figcaption>legend</figcaption>
-    <dl>
-      <div>
-        <dt>state icons</dt>
-        <dd>
-          <dl>
-            <div>
-              <dt>{{ icons.pencil("pencil") }}</dt>
-              <dd>unsaved changes</dd>
-            </div>
-            <div>
-              <dt class="red">
-                {{ icons.exclaim_triangle("exclamation point in triangle")}}
-              </dt>
-              <dd>errors are present</dd>
-            </div>
-            <div>
-              <dt class="red">{{ icons.lock("lock") }}</dt>
-              <dd>server could not process request</dd>
-            </div>
-          </dl>
-        </dd>
-      </div>
-    </dl>
-  </figure>
+  {{ macros.schedule_legend_dialog(show_group_cues=true, show_daytime_cues=true)
+  }} {{ macros.selection_details_dialog() }}
 </div>
 {{ macros.save_dialogs() }} {% endblock %}

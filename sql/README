@@ -1,7 +1,13 @@
 # SQL Setup Scripts
 
-IMPORTANT: This directory contains scripts for setting up development databases only.
-For production environments, use Alembic migrations (see scheduler/alembic/).
+IMPORTANT: This directory is not the live-upgrade mechanism for an already
+deployed production database.
+
+The supported boundary is:
+- use this SQL bootstrap chain for local/dev rebuilds, tests, and the one-time
+  initial deployment bootstrap from a `003`-contract dump
+- establish Alembic ownership immediately after that bootstrap
+- use Alembic migrations for every live schema change after production exists
 
 ## Purpose
 
@@ -10,11 +16,18 @@ These SQL files are designed to:
 2. Provide a reference for the complete database schema
 3. Import synthetic test data for development
 
-## Important: Historical Data Required
+## Seed Data Contract
 
-The historical data is required for creating the development database and is not
-included in the repo. You must overwrite the various syntheticfiles that are used
-as placeholders in this directory such 003-import-data.sql.
+`003-import-data.sql` is a compact synthetic seed committed in this repository.
+It intentionally captures representative data complexity (null/non-null states,
+active/inactive entities, schedule/log variability) without historical volume.
+
+`900-import-new-data.sql` then maps `user-dept.csv`, `dev-dept.csv`, and
+`devperm.csv` into the auth model.
+
+Route tests enforce this contract in
+`tests/unit/test_seed_shape_contract.py` (under the `route` marker). If you
+change seed files, keep that test green or update it with an explicit rationale.
 
 ## Usage
 
@@ -22,16 +35,17 @@ To set up a development database:
 
 ```bash
 # Start fresh (drops existing database)
-DROP_DB=true bash 000-run-migrations.sh
+DROP_DB=true bash 000-init.sh
 
 # Try to run migrations on existing database
-bash 000-run-migrations.sh
+bash 000-init.sh
 ```
 
 ## Important Notes
 
-1. **Development Only**: These scripts are NOT meant for migrating live/production databases.
-   Use Alembic migrations for production schema changes.
+1. **Not A Live Upgrade Tool**: These scripts are not the supported mechanism
+   for upgrading an already deployed production database. Use Alembic for live
+   post-deployment schema changes.
 
 2. **Schema Management**:
    - The canonical schema is defined in SQLAlchemy models
@@ -41,7 +55,7 @@ bash 000-run-migrations.sh
 
 ## File Structure
 
-- `000-run-migrations.sh`: Main setup script
+- `000-init.sh`: Main setup script
 - `001-schema.sql`: Base schema definition
 - `[000-999]-*.sql`: Ordered migration files
 - `*.sample.sql`: Example data files
@@ -51,8 +65,9 @@ bash 000-run-migrations.sh
 - `generate-schemapdf.sh`: Creates a PDF of the ER diagram from schema.er
   (Requires the 'erd' tool to be installed)
 
-For production deployments and schema changes, refer to the Alembic
-migration documentation in scheduler/alembic/.
+For the supported initial-deployment rehearsal/bootstrap path, use
+`pixi run rehearse-initial-deployment`. For live production schema changes,
+refer to the Alembic migration documentation in `scheduler/alembic/`.
 
 N.B. the database schema should be managed by Alembic to support schema
 migrations of a live database. Currently the SQLAlchemy models fully capture the

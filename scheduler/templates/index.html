@@ -1,7 +1,126 @@
-{% extends "page.html" %} {% block title %}home{% endblock %} {% block body %}
-<ul class="index">
-  {% for name, url in routes %}
-  <li><a href="{{" url }}>{{ name }}</a></li>
-  {% endfor %}
-</ul>
+{% extends "page.html" %} {% import "svg/icons.html" as icons %} {% block title
+%}home{% endblock %} {% block body %}
+<h1>FMRIF Scheduler</h1>
+<div
+  class="home-panels"
+  data-home-filter-debounce-ms="200"
+  data-home-default-visible="5"
+  data-home-show-more-increment="10"
+  data-home-show-more-delay-ms="2000"
+>
+  <article class="list-with-description home-panel" data-home-section="devices">
+    <h2>{{ icons.mri_scanner() }} Devices</h2>
+    <div class="home-device-controls">
+      <label>
+        <input id="home-show-readonly" type="checkbox" />
+        show read-only devices
+      </label>
+    </div>
+    <div class="admin-filter-field home-search-field">
+      <label for="home-device-search">Search devices</label>
+      <input
+        id="home-device-search"
+        type="search"
+        autocomplete="off"
+        placeholder="Search by device name"
+      />
+    </div>
+    <ul data-home-list="devices">
+      {% for device in devices %} {% set perms =
+      device_permissions.get(device.id, {}) %} {% set can_edit =
+      perms.get("can_edit", False) %} {% set extra_privileges =
+      perms.get("extra_privileges", []) %}
+      <li
+        data-home-item="true"
+        data-home-item-name="{{ device.label }}"
+        {%
+        if
+        not
+        can_edit
+        %}data-home-readonly-device="true"
+        hidden{%
+        endif
+        %}
+      >
+        <a
+          class="list-card{% if not can_edit %} home-device-readonly{% endif %}"
+          data-device-permission="{% if can_edit %}editable{% else %}read-only{% endif %}"
+          href="{{ url_for('device', the_device=device.id) }}"
+        >
+          <strong>{{ device.label }}</strong>
+          {% if device.description %}
+          <p>{{ device.description }}</p>
+          {% endif %} {% if not can_edit or extra_privileges %}
+          <p class="home-device-perms">
+            {% if not can_edit %} {{ icons.lock() }} read-only {% endif %} {% if
+            extra_privileges %} {% if not can_edit %}
+            <span> · </span>
+            {% endif %}
+            <span>{{ extra_privileges|join(", ") }}</span>
+            {% endif %}
+          </p>
+          {% endif %}
+        </a>
+      </li>
+      {% else %}
+      <li>
+        <p class="none">No active devices are available.</p>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="admin-show-more-wrap">
+      <button
+        id="home-devices-show-more"
+        class="admin-show-more-button"
+        type="button"
+        hidden
+      >
+        Show more
+      </button>
+    </div>
+  </article>
+
+  <article class="list-with-description home-panel" data-home-section="groups">
+    <h2>{{ icons.people() }} Groups</h2>
+    {% if show_groups %}
+    <div class="admin-filter-field home-search-field">
+      <label for="home-group-search">Search groups</label>
+      <input
+        id="home-group-search"
+        type="search"
+        autocomplete="off"
+        placeholder="Search by group name"
+      />
+    </div>
+    <ul data-home-list="groups">
+      {% for group in groups %}
+      <li data-home-item="true" data-home-item-name="{{ group.label }}">
+        <a class="list-card" href="{{ url_for('group', the_group=group.id) }}">
+          <strong>{{ group.label }}</strong>
+          {% if group.description %}
+          <p>{{ group.description }}</p>
+          {% endif %}
+        </a>
+      </li>
+      {% else %}
+      <li>
+        <p class="none">No active groups are available for your account.</p>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="admin-show-more-wrap">
+      <button
+        id="home-groups-show-more"
+        class="admin-show-more-button"
+        type="button"
+        hidden
+      >
+        Show more
+      </button>
+    </div>
+    {% else %}
+    <p class="note">Groups are available only to active users.</p>
+    {% endif %}
+  </article>
+</div>
 {% endblock %}

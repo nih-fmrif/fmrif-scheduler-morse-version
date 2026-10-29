@@ -1,33 +1,24 @@
 {% extends "auth/base.html" %} {% block title %}Login{% endblock %} {% block
 body %}
 <div class="login-container">
-  <h1>Login</h1>
+  <h1>FMRIF Scheduler</h1>
 
   {% with messages = get_flashed_messages(with_categories=true) %} {% if
   messages %}
-  <div class="flash-messages">
-    {% for category, message in messages %}
-    <div class="flash-{{ category }}">{{ message }}</div>
-    {% endfor %}
-  </div>
+  <section class="flash-messages" aria-label="status messages">
+    <ul>
+      {% for category, message in messages %}
+      <li class="msg-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  </section>
   {% endif %} {% endwith %}
 
-  <form method="post" action="{{ url_for('auth.login') }}">
-    {{ form.csrf_token }}
-    <div class="form-group">
-      <label for="{{ form.username.id }}">NIH Username or Email</label>
-      {{ form.username(class="form-control", placeholder="Enter your NIH
-      username or email") }}
-      <small class="form-text text-muted">
-        You can use either:
-        <br />• NIH username <br />• NIH email address
-      </small>
-    </div>
-    <div class="form-group">
-      <label for="{{ form.password.id }}">Password</label>
-      {{ form.password(class="form-control") }}
-    </div>
-    <button type="submit">Login</button>
-  </form>
+  <div id="login-content">
+    <p>Sign in with your NIH credentials</p>
+    <a id="login-btn" class="login-link" href="{{ start_login_url }}">
+      Login with NIH Credentials
+    </a>
+  </div>
 </div>
 {% endblock %}

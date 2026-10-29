@@ -1,11 +1,13 @@
 {% extends "base.html" %} {% import "svg/icons.html" as icons %} {% block
 basehead %} {% block head %}
-<script id="app-root" type="application/json">
-  {{ config.APPLICATION_ROOT }}
-</script>
 <script
+  nonce="{{ current_csp_nonce() }}"
+  src="{{ static_asset_url('js/api-client.js') }}"
+></script>
+<script
+  nonce="{{ current_csp_nonce() }}"
   type="module"
-  src="{{ url_for('static', filename='script.js') }}"
+  src="{{ static_asset_url('script.js') }}"
 ></script>
 {% endblock %} {% endblock %} {% block basebody %}
 <nav class="skip-link" aria-label="skip link">
@@ -13,31 +15,127 @@ basehead %} {% block head %}
 </nav>
 <div class="top">
   <div class="top-inner">
-    <nav class="breadcrumb" aria-label="breadcrumb">
-      <ul>
-        {% for (name, url) in breadcrumb %}
-        <li>
-          <a
-            href="{{url}}"
-            {%
-            if
-            request.path=""
-            ="url"
-            %}
-            aria-current="page{%"
-            endif
-            %}
-            >{{name}}</a
-          >
-        </li>
+    {% set home_href = url_for('home') %}
+    <div class="header-left">
+      <a
+        class="menu-action home-link"
+        href="{{ home_href }}"
+        aria-label="Home"
+        {%
+        if
+        request.path
+        is
+        equalto(home_href)
+        %}aria-current="page"
+        {%
+        endif
+        %}
+      >
+        <span class="home-link-icon" aria-hidden="true"
+          >{{ icons.mri_scanner() }}</span
+        >
+        <span class="menu-action-label home-link-label">FMRIF scheduler</span>
+        <span class="home-link-label-compact" aria-hidden="true">Home</span>
+      </a>
+      {% if user %} {% if admin_menu_links %}
+      <nav class="admin-links" aria-label="admin pages">
+        {% for label, href, icon in admin_menu_links %}
+        <a
+          class="menu-action"
+          href="{{ href }}"
+          aria-label="{{ label }}"
+          {%
+          if
+          request.path
+          is
+          equalto(href)
+          %}aria-current="page"
+          {%
+          endif
+          %}
+        >
+          {% if icon == "rbac" %} {{ icons.shield() }} {% elif icon == "admin"
+          %} {{ icons.sliders() }} {% else %} {{ icons.gear() }} {% endif %}
+          <span class="menu-action-label">{{ label }}</span>
+        </a>
         {% endfor %}
-      </ul>
-    </nav>
+      </nav>
+      {% endif %} {% endif %}
+    </div>
     <section class="login-info" aria-label="login info">
-      <p>
-        {% if user %}logged in as {{user.id}}{% if not user.active %}
-        (inactive){% endif %}{% else %}not logged in{% endif %}
-      </p>
+      {% if user %}
+      <details class="user-menu">
+        <summary id="user-menu-toggle" aria-label="Account menu">
+          {{ icons.person_circle("account menu") }}
+          <span>{{ user.id }}</span>
+          {% if not user.active %}<small>(inactive)</small>{% endif %}
+        </summary>
+        <div class="user-menu-panel">
+          <div class="user-menu-title">{{ icons.gear() }} settings</div>
+          <div class="user-menu-section">
+            <div class="user-menu-section-title">Theme</div>
+            <div
+              class="theme-toggle"
+              data-theme-toggle
+              role="group"
+              aria-label="Theme"
+            >
+              <button
+                type="button"
+                class="theme-toggle-button"
+                data-theme-value="system"
+                aria-pressed="true"
+              >
+                Auto
+              </button>
+              <button
+                type="button"
+                class="theme-toggle-button"
+                data-theme-value="light"
+                aria-pressed="false"
+              >
+                Light
+              </button>
+              <button
+                type="button"
+                class="theme-toggle-button"
+                data-theme-value="dark"
+                aria-pressed="false"
+              >
+                Dark
+              </button>
+            </div>
+            <p
+              class="theme-toggle-status"
+              data-theme-status
+              aria-live="polite"
+            ></p>
+          </div>
+          <ul>
+            {% for label, href, icon in user_menu_links %}
+            <li>
+              <a class="menu-action" href="{{ href }}">
+                {% if icon == "form" %} {{ icons.clipboard_text() }} {% elif
+                icon == "rbac" %} {{ icons.shield() }} {% elif icon == "admin"
+                %} {{ icons.sliders() }} {% else %} {{ icons.envelope() }} {%
+                endif %}
+                <span>{{ label }}</span>
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+          <form method="post" action="{{ url_for('auth.logout') }}">
+            {{ logout_form.csrf_token }}
+            <button id="logout-btn" class="menu-action" type="submit">
+              {{ icons.box_arrow_right() }}
+              <span>Logout</span>
+            </button>
+          </form>
+        </div>
+      </details>
+      {% else %}
+      <p>not logged in</p>
+      {% endif %}
     </section>
   </div>
 </div>
@@ -46,9 +144,9 @@ basehead %} {% block head %}
   <ul>
     {% for cat, msg in msgs %}
     <li class="msg-{{ cat }}">
-      {% if cat == "info" or cat == "message" %} {{ icons.smiley_face(cat) }} {%
-      elif cat == "warning" %} {{ icons.neutral_face(cat) }} {% elif cat ==
-      "error" %} {{ icons.frowny_face(cat) }} {% endif %} {{ msg }}
+      {% if cat == "info" or cat == "message" %} {{ icons.info(cat) }} {% elif
+      cat == "warning" %} {{ icons.exclaim_triangle(cat) }} {% elif cat ==
+      "error" %} {{ icons.x_circle(cat) }} {% endif %} {{ msg }}
     </li>
     {% endfor %}
   </ul>
@@ -58,7 +156,9 @@ basehead %} {% block head %}
   {% if subpage_nav %}
   <nav class="subpage-nav" aria-labelledby="subpage-nav-title">
     <div class="subpage-nav-inner">
-      <span id="subpage-nav-title">{{ subpage_nav.title | safe }}</span>
+      <span id="subpage-nav-title" class="subpage-nav-title"
+        >{{ subpage_nav.title }}</span
+      >
       <ul>
         {% for link, href in subpage_nav.links %}
         <li>
@@ -66,13 +166,14 @@ basehead %} {% block head %}
             href="{{ href }}"
             {%
             if
-            request.path=""
-            ="href"
-            %}
-            aria-current="page{%"
+            request.path
+            is
+            equalto(href)
+            %}aria-current="page"
+            {%
             endif
             %}
-            >{{ link | safe}}</a
+            >{{ link }}</a
           >
         </li>
         {% endfor %}

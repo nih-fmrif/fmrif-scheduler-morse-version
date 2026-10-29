@@ -53,16 +53,87 @@
 
 {% macro validation_icons() %}
 	<div class=validation-icons>
-		{{ icons.exclaim() }}
-		{{ icons.check() }}
+		{{ icons.x_circle("invalid value") }}
+		{{ icons.check_circle("valid value") }}
 	</div>
+{% endmacro %}
+
+{% macro pending_status_token(typ="item") %}
+	<span class="status-token status-token-pending" title="Pending edits">
+		{{ icons.dot("pending edits to " ~ typ) }}
+	</span>
+{% endmacro %}
+
+{% macro error_status_token(typ="item") %}
+	<span class="status-token status-token-error" title="Validation or blocking errors">
+		{{ icons.exclaim_triangle("validation or blocking errors in " ~ typ) }}
+	</span>
+{% endmacro %}
+
+{% macro rejected_status_token(typ="item") %}
+	<span class="status-token status-token-rejected" title="Save rejected by server">
+		{{ icons.ban("save rejected by server for " ~ typ) }}
+	</span>
+{% endmacro %}
+
+{% macro readonly_status_token(typ="item", hidden=true) %}
+	<span
+		class="status-token status-token-readonly"
+		title="Booking is read only in this view"
+		{% if hidden %}hidden{% endif %}
+		data-readonly-cue="slot"
+	>
+		{{ icons.lock("read-only " ~ typ) }}
+	</span>
+{% endmacro %}
+
+{% macro support_status_token(typ="item", hidden=true) %}
+	<span
+		class="status-token status-token-support"
+		title="Support is requested here and still needs a handler"
+		{% if hidden %}hidden{% endif %}
+		data-support-cue="slot"
+	>
+		{{ icons.hand_index_thumb("unassigned support in " ~ typ) }}
+	</span>
+{% endmacro %}
+
+{% macro usage_status_token(state) %}
+	{% if state == "used" %}
+		<span class="status-token status-token-used" title="Slot recorded as used">
+			{{ icons.check_circle("slot recorded as used") }}
+		</span>
+	{% elif state == "unused" %}
+		<span class="status-token status-token-unused" title="Slot recorded as unused">
+			{{ icons.x_circle("slot recorded as unused") }}
+		</span>
+	{% else %}
+		<span class="status-token status-token-unrecorded" title="Usage not yet recorded">
+			{{ icons.clock("usage not yet recorded") }}
+		</span>
+	{% endif %}
 {% endmacro %}
 
 {% macro edit_icons(typ) %}
 	<div class=edit-icons>
-		{{ icons.lock("server rejected " ~ typ) }}
-		{{ icons.pencil("edits to " ~ typ) }}
-		{{ icons.exclaim_triangle("error in " ~ typ) }}
+		{{ support_status_token(typ) }}
+		{{ readonly_status_token(typ) }}
+		{{ rejected_status_token(typ) }}
+		{{ pending_status_token(typ) }}
+		{{ error_status_token(typ) }}
+	</div>
+{% endmacro %}
+
+{% macro caption_status_summary(typ="item") %}
+	<div class="caption-status-summary">
+		<span class="status-chip status-chip-pending">
+			{{ pending_status_token(typ) }}
+			<span class="status-chip-label">Pending edits</span>
+		</span>
+		<span class="status-chip status-chip-error">
+			{{ error_status_token(typ) }}
+			<span class="status-chip-label">Errors present</span>
+		</span>
 	</div>
 {% endmacro %}
 
@@ -114,8 +185,80 @@
 	{% endif %}
 {% endmacro %}
 
-{% macro entry_legend(color) %}
-	<entry-legend style="--swatch: {{ color or 'transparent' }}"></entry-legend>
+{% macro entry_legend(group_id) %}
+	{% if group_id %}
+		<entry-legend class="swatch-group-{{ group_id|css_token }}"></entry-legend>
+	{% else %}
+		<entry-legend class="swatch-group-none"></entry-legend>
+	{% endif %}
+{% endmacro %}
+
+{% macro schedule_legend(show_time_recorded=false, show_group_cues=false, show_daytime_cues=false) %}
+	<div class="legend-content">
+		<section class="legend-section" aria-labelledby="legend-section-status">
+			<h2 id="legend-section-status">What the badges mean</h2>
+			<ul class="legend-list">
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ support_status_token(hidden=false) }}</span>
+					<span class="legend-item-copy">Support has been requested here and still needs someone assigned.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ readonly_status_token(hidden=false) }}</span>
+					<span class="legend-item-copy">You can view this slot, but you cannot change the booking in this schedule.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ pending_status_token() }}</span>
+					<span class="legend-item-copy">You have unsaved edits for this slot.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ error_status_token() }}</span>
+					<span class="legend-item-copy">This slot still has a validation or blocking problem.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ rejected_status_token() }}</span>
+					<span class="legend-item-copy">The server rejected the last save for this slot.</span>
+				</li>
+			</ul>
+		</section>
+		{% if show_time_recorded %}
+		<section class="legend-section" aria-labelledby="legend-section-usage">
+			<h2 id="legend-section-usage">Usage status</h2>
+			<ul class="legend-list">
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ usage_status_token("unrecorded") }}</span>
+					<span class="legend-item-copy">No usage has been recorded for this slot yet.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ usage_status_token("unused") }}</span>
+					<span class="legend-item-copy">This slot was recorded as unused.</span>
+				</li>
+				<li class="legend-item">
+					<span class="legend-item-icon">{{ usage_status_token("used") }}</span>
+					<span class="legend-item-copy">This slot was recorded as used.</span>
+				</li>
+			</ul>
+		</section>
+		{% endif %}
+		{% if show_group_cues or show_daytime_cues %}
+		<section class="legend-section" aria-labelledby="legend-section-visual">
+			<h2 id="legend-section-visual">Other visual cues</h2>
+			<ul class="legend-list">
+				{% if show_group_cues %}
+				<li class="legend-item">
+					<span class="legend-item-icon"><span class="legend-inline-swatch" aria-hidden="true"></span></span>
+					<span class="legend-item-copy">The left stripe shows the assigned group color.</span>
+				</li>
+				{% endif %}
+				{% if show_daytime_cues %}
+				<li class="legend-item">
+					<span class="legend-item-icon"><span class="legend-inline-band" aria-hidden="true"></span></span>
+					<span class="legend-item-copy">Muted rows are outside the normal 7am to 10pm window.</span>
+				</li>
+				{% endif %}
+			</ul>
+		</section>
+		{% endif %}
+	</div>
 {% endmacro %}
 
 {% macro entry_text(id, lbl, list, value) %}
@@ -128,15 +271,231 @@
 	</input-set>
 {% endmacro %}
 
+{% macro scheduler_status_card(schedule_label) %}
+<div
+	class="editor-inspector"
+	aria-live="polite"
+	aria-label="selected slot details"
+>
+	<div class="editor-inspector-line">
+		<span class="editor-inspector-selected">
+			<span class="editor-inspector-schedule-label">{{ schedule_label }}</span>
+			<span class="editor-inspector-sep" aria-hidden="true">:</span>
+			<span class="editor-inspector-target">Select a time slot</span>
+		</span>
+	</div>
+	<div class="editor-inspector-actions">
+		<button
+			id="inspector-open"
+			type="button"
+			class="admin-show-more-button legend-toggle"
+			title="Open selection details"
+		>
+			<span
+				class="legend-toggle-icon"
+				data-support-cue="selection"
+				hidden
+				aria-hidden="true"
+			>
+				{{ icons.hand_index_thumb() }}
+			</span>
+			<span
+				class="legend-toggle-icon"
+				data-readonly-cue="selection"
+				hidden
+				aria-hidden="true"
+			>
+				{{ icons.lock() }}
+			</span>
+			<span class="legend-toggle-label">Details</span>
+		</button>
+		<button
+			id="legend-open"
+			type="button"
+			class="admin-show-more-button legend-toggle"
+			title="Open the schedule legend"
+		>
+			<span class="legend-toggle-label">Legend</span>
+		</button>
+		<button
+			id="review-pending"
+			type="button"
+			class="admin-show-more-button legend-toggle"
+			disabled
+			title="Review pending changes and issues"
+		>
+			<span class="legend-toggle-label">Review pending (0)</span>
+		</button>
+	</div>
+</div>
+{% endmacro %}
+
+{% macro schedule_legend_dialog(show_time_recorded=false, show_group_cues=false, show_daytime_cues=false) %}
+	<div
+		id="legend-dialog-container"
+		class="dialog-container"
+	aria-hidden="true"
+	aria-labelledby="legend-dialog-title"
+	>
+		<div class="dialog-overlay" data-a11y-dialog-hide></div>
+		<div class="dialog-box-container" role="document">
+			<h1 id="legend-dialog-title" class="dialog-title">How To Read This Schedule</h1>
+		<button type="button" data-a11y-dialog-hide>
+			{{ icons.close() }}
+			<sr-only>Close dialog</sr-only>
+		</button>
+		<div id="legend-dialog-content" class="dialog-content" tabindex="0">
+			{{ schedule_legend(show_time_recorded=show_time_recorded, show_group_cues=show_group_cues, show_daytime_cues=show_daytime_cues) }}
+		</div>
+	</div>
+</div>
+{% endmacro %}
+
+{% macro selection_details_dialog(include_duration=false, include_save=false) %}
+<div
+	id="inspector-dialog-container"
+	class="dialog-container"
+	aria-hidden="true"
+	aria-labelledby="inspector-dialog-title"
+>
+	<div class="dialog-overlay" data-a11y-dialog-hide></div>
+	<div class="dialog-box-container" role="document">
+		<h1 id="inspector-dialog-title" class="dialog-title">
+			Selection Details
+		</h1>
+		<button type="button" data-a11y-dialog-hide>
+			{{ icons.close() }}
+			<sr-only>Close dialog</sr-only>
+		</button>
+		<div id="inspector-dialog-content" class="dialog-content" tabindex="0">
+			<dl class="inspector-detail-content">
+				<div>
+					<dt>slot</dt>
+					<dd class="editor-inspector-detail-target">not selected</dd>
+				</div>
+				<div>
+					<dt>summary</dt>
+					<dd class="editor-inspector-detail-summary">not selected</dd>
+				</div>
+				<div>
+					<dt>mode</dt>
+					<dd class="editor-inspector-detail-mode">Read-only booking</dd>
+				</div>
+				<div>
+					<dt>pending</dt>
+					<dd class="editor-inspector-detail-pending">0 changes</dd>
+				</div>
+				<div>
+					<dt>errors</dt>
+					<dd class="editor-inspector-detail-errors">0 errors</dd>
+				</div>
+			</dl>
+			<ul id="inspector-error-list" class="inspector-error-list" hidden></ul>
+			<div
+				id="inspector-slot-editor"
+				class="inspector-slot-editor"
+				aria-live="polite"
+			></div>
+			{% if include_duration %}
+			<section id="inspector-duration" class="inspector-duration" hidden>
+				<p class="inspector-duration-title">Duration</p>
+				<div
+					class="inspector-duration-actions"
+					role="group"
+					aria-label="duration presets"
+				>
+					<button
+						id="inspector-duration-plus-1-hour"
+						type="button"
+						class="admin-show-more-button"
+						data-duration-slots="1"
+					>
+						+1 hour
+					</button>
+					<button
+						id="inspector-duration-plus-2-hours"
+						type="button"
+						class="admin-show-more-button"
+						data-duration-slots="2"
+					>
+						+2 hours
+					</button>
+					<button
+						id="inspector-duration-plus-3-hours"
+						type="button"
+						class="admin-show-more-button"
+						data-duration-slots="3"
+					>
+						+3 hours
+					</button>
+					<button
+						id="inspector-duration-plus-4-hours"
+						type="button"
+						class="admin-show-more-button"
+						data-duration-slots="4"
+					>
+						+4 hours
+					</button>
+				</div>
+				<input-set label-above shrink>
+					<label for="inspector-end-slot">End time</label>
+					<input-widget>
+						<select id="inspector-end-slot" aria-label="end time"></select>
+					</input-widget>
+				</input-set>
+				<dl class="inspector-affected-preview">
+					<div>
+						<dt>Start</dt>
+						<dd id="inspector-preview-start">not selected</dd>
+					</div>
+					<div>
+						<dt>End</dt>
+						<dd id="inspector-preview-end">not selected</dd>
+					</div>
+					<div>
+						<dt>Impacted slots</dt>
+						<dd id="inspector-preview-count">0 slots</dd>
+					</div>
+				</dl>
+			</section>
+			{% endif %}
+		</div>
+		<div class="dialog-form inspector-dialog-form">
+			{% if include_save %}
+			<button
+				id="inspector-save"
+				type="button"
+				class="admin-show-more-button"
+				hidden
+			>
+				Save
+			</button>
+			{% endif %}
+			<button
+				id="inspector-exit"
+				type="button"
+				class="admin-show-more-button"
+				data-a11y-dialog-hide
+			>
+				Exit
+			</button>
+		</div>
+	</div>
+</div>
+{% endmacro %}
+
 {% macro save_dialogs() %}
 <div id="save-dialog-container" class=dialog-container aria-hidden=true aria-labelledby=save-dialog-title>
 	<div class=dialog-overlay data-a11y-dialog-hide></div>
 	<div class=dialog-box-container role=document>
 		<h1 id="save-dialog-title" class=dialog-title></h1>
-		<button type=button data-a11y-dialog-hide>
-			{{ icons.close() }}
-			<sr-only>Close dialog</sr-only>
-		</button>
+		<div class="dialog-header-side">
+			<div class="dialog-header-actions"></div>
+			<button type=button data-a11y-dialog-hide>
+				{{ icons.close() }}
+				<sr-only>Close dialog</sr-only>
+			</button>
+		</div>
 		<div id="save-dialog-content" class=dialog-content tabindex=0><div class=dialog-content-inner></div></div>
 		<div class=dialog-form>
 			<input-set is-option hidden>

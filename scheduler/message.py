@@ -1,28 +1,142 @@
 from smtplib import SMTPException
-from typing import Optional
+from typing import Mapping, Optional
 
-from flask import current_app
+from flask import current_app, g, has_app_context, has_request_context, request
 from flask_mail import Mail, Message
+from sqlalchemy.exc import SQLAlchemyError
 
 mailer = Mail()
 
 
-def send(to: str, subj: str, msg: str, sender: Optional[str] = None) -> bool:
+def _default_sender() -> Optional[str]:
+    try:
+        from scheduler.logic._admin_config_settings import (
+            ADMIN_SETTING_KEY_DEFAULT_SENDER,
+            get_admin_setting,
+        )
+
+        sender = get_admin_setting(ADMIN_SETTING_KEY_DEFAULT_SENDER, "")
+    except Exception:
+        sender = ""
+    if _normalize_sender := str(sender).strip():
+        return _normalize_sender
+    if has_app_context():
+        configured = current_app.config.get("MAIL_DEFAULT_SENDER", "")
+        if isinstance(configured, tuple):
+            configured = configured[1] if len(configured) > 1 else configured[0]
+        normalized = str(configured).strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _request_client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "").strip()
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        if first:
+            return first
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    remote = (request.remote_addr or "").strip()
+    return remote or "unknown"
+
+
+def _mail_delivery_suppressed() -> bool:
+    if not has_app_context():
+        return False
+    return bool(current_app.config.get("MAIL_SUPPRESS_SEND", False))
+
+
+def send(
+    to: str,
+    subj: str,
+    msg: str,
+    sender: Optional[str] = None,
+    *,
+    audit_context: Optional[Mapping[str, str]] = None,
+) -> bool:
     m = Message()
-    m.subject = to
+    m.subject = subj
     m.body = msg
     addrs = [to]
     if "," in to:
         addrs = [s.strip() for s in to.split(",")]
     m.recipients = addrs
-    # we only need to change the sender for the list action form
-    if sender is not None:
+    resolved_sender = sender if sender else _default_sender()
+    if resolved_sender is not None:
+        m.sender = resolved_sender
+    if sender:
         m.sender = sender
+    ok = False
+    delivery_suppressed = _mail_delivery_suppressed()
     try:
         mailer.send(m)
-        if current_app.debug:
+        if delivery_suppressed:
+            current_app.logger.info("suppressed email to %s: %s / %s", to, subj, msg)
+        elif current_app.debug:
             current_app.logger.info("sent email to %s: %s / %s", to, subj, msg)
-        return True
-    except SMTPException as e:
-        current_app.logger.error(e)
-        return False
+        ok = True
+    except (SMTPException, OSError, AssertionError):
+        # SMTP/socket failures should not break request handlers that already
+        # persisted their primary DB-side changes.
+        current_app.logger.exception("failed to send email to %s", to)
+
+    metadata = dict(audit_context or {})
+    action = str(metadata.get("action") or "email.send")
+    how = str(metadata.get("how") or "general")
+    details = str(metadata.get("details") or "")
+    issue_key = str(metadata.get("issue_key") or "")
+    issue_state = str(metadata.get("issue_state") or "")
+    where = str(metadata.get("where") or "")
+    actor = str(metadata.get("actor") or "")
+    source_ip = str(metadata.get("source_ip") or "")
+
+    if has_request_context():
+        where = where or str(request.path or "")
+        if source_ip == "":
+            source_ip = _request_client_ip()
+        if actor == "":
+            current_user = getattr(g, "user", None)
+            actor = str(getattr(current_user, "id", "") or "")
+
+    where = where.strip() or "-"
+    actor = actor.strip() or "system"
+
+    try:
+        from scheduler.logic.rbac_audit_support import (
+            EMAIL_AUDIT_STATUS_FAILED,
+            EMAIL_AUDIT_STATUS_SENT,
+            EMAIL_AUDIT_STATUS_SKIPPED,
+            log_email_audit_event,
+        )
+
+        status = EMAIL_AUDIT_STATUS_FAILED
+        if ok:
+            status = (
+                EMAIL_AUDIT_STATUS_SKIPPED
+                if delivery_suppressed
+                else EMAIL_AUDIT_STATUS_SENT
+            )
+        log_email_audit_event(
+            action=action,
+            actor=actor,
+            where=where,
+            how=how,
+            status=status,
+            recipient=to,
+            subject=subj,
+            details=details,
+            issue_key=issue_key,
+            issue_state=issue_state,
+            source_ip=source_ip,
+        )
+    except (ImportError, AttributeError, RuntimeError, KeyError, SQLAlchemyError):
+        current_app.logger.exception(
+            "failed to persist email audit event action=%s recipient=%s",
+            action,
+            to,
+        )
+
+    return ok
