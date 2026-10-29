@@ -261,6 +261,6 @@ test.describe('Home Page', () => {
     await homePage.openUserMenu();
     await page.getByRole('button', { name: 'Logout' }).click();
     await expect(page).toHaveURL(/\/auth\/login(?:\?.*)?$/);
-    await expect(page.getByRole('button', { name: /Login with NIH Credentials/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Login with NIH Credentials/i })).toBeVisible();
   });
 });

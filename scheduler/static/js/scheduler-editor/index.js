@@ -2098,6 +2098,7 @@ function result_dialog(proc, options = {}) {
     con.classList.remove("dialog-loaded");
     body.replaceChildren();
     abort.abort();
+    options.onDismiss?.(payload, payloadMeta);
     if (changesSaved) {
       if (typeof onSuccess === "function") {
         onSuccess(payload, payloadMeta);
@@ -6466,6 +6467,13 @@ function wire_cell_editors() {
       },
       {
         reload: false,
+        onDismiss: (_payload, meta = {}) => {
+          // Reopen the draft only after the results are dismissed, so the
+          // inspector cannot cover the result dialog or take its focus.
+          if (closeInspectorOnSuccess && meta.failedIds?.length && activeEntry) {
+            showInspectorForEntry(activeEntry);
+          }
+        },
         onSettled: (_payload, meta = {}) => {
           const failedIds = new Set(meta.failedIds ?? []);
           const errorMap = meta.errorMap ?? {};
@@ -6519,9 +6527,6 @@ function wire_cell_editors() {
             failedIds.has(String(ensure_cell(activeEntry)?.id ?? ""))
           ) {
             update_inspector_selection(activeEntry);
-          }
-          if (closeInspectorOnSuccess && failedIds.size > 0 && activeEntry) {
-            showInspectorForEntry(activeEntry);
           }
           if (
             closeInspectorOnSuccess &&

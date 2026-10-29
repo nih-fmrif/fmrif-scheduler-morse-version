@@ -360,7 +360,7 @@ test('cloned rooted template preserves repair state through archive flow', async
   await expect(page.getByRole('link', { name: `Clone of i ${templateId} (${templateId})` })).toBeVisible();
   await expect(
     page.getByText(
-      `stale members in ${templateId}:person0075[OLD], person0076[OLD], person0082[OLD], person0086[OLD].`
+      `stale members in ${templateId}: person0075[OLD], person0076[OLD], person0082[OLD], person0086[OLD].`
     )
   ).toBeVisible();
   await expect(
