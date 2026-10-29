@@ -1,5 +1,8 @@
 # Static Review: `1596/fmrif-scheduler-morse-version` vs original `ade3/fmrif-scheduler-morse-version`
 
+> Historical design or review notes. This records earlier work and may not
+> describe the current application. Start with [the documentation index](../README.md).
+
 ## Scope
 
 - Static analysis only.
@@ -101,7 +104,7 @@ Preliminary conclusion:
 
 - Added a minimal `<noscript>` read-only summary to the device page so CSP or JS failures no longer strand the user on a fully placeholder-backed schedule grid.
 - Added a local nginx reverse proxy to the full compose stack so proxy header and CSP behavior can be exercised closer to deployment topology.
-- Created `csp-policy-improvements.md` to track the remaining work needed for proxy-aware CSP verification and future policy tightening.
+- Created `docs/history/csp-policy-improvements.md` to track the remaining work needed for proxy-aware CSP verification and future policy tightening.
 - Updated the local serving split so host mode remains Werkzeug-first for low-friction development while the full compose stack runs nginx in front of Gunicorn for better deployment parity.
 - Added `docs/deployment-considerations.md` to capture proxy/port/Gunicorn/CSP details that matter during deployment work but should not clutter the environment-specific runbook.
 - Replaced the temporary container-only `pip install gunicorn` workaround with a Pixi-managed app image, then simplified it again so Docker now resolves from the shared repository `pixi.toml` under `linux/amd64` emulation, narrowing the copied in-image manifest to `linux-64` instead of depending on the checked-in lockfile.

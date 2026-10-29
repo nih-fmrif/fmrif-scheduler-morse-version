@@ -37,17 +37,17 @@ Guidance for coding agents working in this repository.
 ## Read First
 - `README.md` (human/local quickstart)
 - `docs/testing-guide.md` (test command map)
-- `docs/agent-guidance-quickstart.md` (minimal agent workflow)
+- `docs/agents/quickstart.md` (minimal agent workflow)
 
 ## Deep Agent Docs (Only When Needed)
-- `docs/agent-guidance-isolation-validation.md` (isolation internals, lock/collision behavior, validation runbook)
-- `docs/agent-guidance-playwright.md` (browser-test specifics)
+- `docs/agents/isolation-validation.md` (isolation internals, lock/collision behavior, validation runbook)
+- `docs/agents/playwright.md` (browser-test specifics)
 
 ## MCP Browser Recovery
 - If the MCP browser fails with Chrome opening an existing session, free the shared MCP Chrome profile before retrying:
   - `bash scripts/reset-mcp-browser.sh`
 - The script only stops Chrome processes using `~/Library/Caches/ms-playwright/mcp-chrome`.
-- After a reset, retry MCP once. If the lock comes back or you need parallel browser work, use the repo Playwright path from `docs/agent-guidance-playwright.md`.
+- After a reset, retry MCP once. If the lock comes back or you need parallel browser work, use the repo Playwright path from `docs/agents/playwright.md`.
 
 ## Testing Rules
 - Add or update the narrowest relevant tests first, then expand only as needed.

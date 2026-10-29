@@ -178,3 +178,11 @@ cython_debug/
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
+
+# Local credentials, browser sessions, and generated response drafts
+.env.*
+!.env.sample.local
+!sql/.env.sample
+playwright-auth*.json
+output/
+tmp/

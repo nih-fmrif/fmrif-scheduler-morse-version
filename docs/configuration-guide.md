@@ -39,7 +39,7 @@ the session cookie name, and `AUTH_TEST__SHARED_SECRET`.
 
 Most humans do not need to think about `FMRIF_RUNTIME_SCOPE`; the deeper
 isolation rules are primarily for agent and parallel-test workflows and are
-documented in [agent-guidance-quickstart.md](agent-guidance-quickstart.md).
+documented in [agent quickstart](agents/quickstart.md).
 
 Supported `setup-dotenv.sh` profiles:
 

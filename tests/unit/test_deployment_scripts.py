@@ -64,7 +64,6 @@ def test_rehearsal_database_name_defaults_to_dedicated_scratch_database():
     )
 
 
-
 def test_docker_rehearsal_excludes_docs_submodule_git_metadata():
     dockerignore = (REPO_ROOT / ".dockerignore").read_text().splitlines()
 

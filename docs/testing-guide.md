@@ -104,4 +104,4 @@ pixi run test-old-bootstrap-compat
 Use [`testing-strategy.md`](testing-strategy.md) for suite boundaries and placement rules.
 
 ## Agent workflow
-Agents should use [`agent-guidance-quickstart.md`](agent-guidance-quickstart.md).
+Agents should use [agent quickstart](agents/quickstart.md).

@@ -1,5 +1,7 @@
 # Scheduler Project Documentation
 
+For the current staging PR, see the [review guide](review-guide.md).
+
 ## Start Here
 1. [Configuration Guide](configuration-guide.md)
 2. [Testing Guide](testing-guide.md)
@@ -13,16 +15,25 @@
 4. [Scheduler Design](scheduler-design.md)
 5. [RBAC Guide](RBAC.md)
 6. [Scheduler Editability Policy](scheduler-editability-policy.md)
-7. [Scheduler Editability Implementation Plan](scheduler-editability-implementation-plan.md)
-8. [UX Guidelines](ux-guidelines.md)
-9. [CSS Style Ownership](css-style-ownership.md)
-10. [SQL Bootstrap Compatibility](sql-bootstrap-compatibility.md)
-11. [Mapping Organizational Groups Resolution Path](mapping-organizational-groups-resolution-path.md)
+7. [Interface Design Specification](design-spec.md)
+8. [Organization Mapping Policy](mapping-organizational-groups-policy.md)
+9. [UX Guidelines](ux-guidelines.md)
+10. [CSS Style Ownership](css-style-ownership.md)
+11. [SQL Bootstrap Compatibility](sql-bootstrap-compatibility.md)
 
-## Agent guidance
-1. [Agent Guidance: Quickstart](agent-guidance-quickstart.md)
-2. [Agent Guidance: Isolation Validation](agent-guidance-isolation-validation.md)
-3. [Agent Guidance: Playwright](agent-guidance-playwright.md)
+## For coding agents
+
+These instructions are for assistants working on the code. Human developers
+should use the guides above.
+
+1. [Agent Guidance: Quickstart](agents/quickstart.md)
+2. [Agent Guidance: Isolation Validation](agents/isolation-validation.md)
+3. [Agent Guidance: Playwright](agents/playwright.md)
+
+## Historical design and review notes
+
+Earlier plans and reviews are in [history/](history/README.md). They explain
+previous work but are not current instructions.
 
 ## Operator Docs
 

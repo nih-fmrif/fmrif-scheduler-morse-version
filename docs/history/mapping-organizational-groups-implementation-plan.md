@@ -1,5 +1,8 @@
 # Mapping Organizational Groups Implementation Plan
 
+> Historical design or review notes. This records earlier work and may not
+> describe the current application. Start with [the documentation index](../README.md).
+
 ## Goal
 
 Implement a production-compatible institute and group harmonization layer that improves admin clarity, surfaces issues quickly, and avoids rewriting or over-constraining live data.
@@ -9,7 +12,7 @@ Implement a production-compatible institute and group harmonization layer that i
 Deliverables:
 
 - add inline admin help explaining that legacy CSV `dept` headers currently carry group ids
-- capture the policy in `mapping-organizational-groups-policy.md`
+- capture the policy in `docs/mapping-organizational-groups-policy.md`
 - keep current behavior unchanged
 
 Checks:

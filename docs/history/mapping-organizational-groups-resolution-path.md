@@ -1,5 +1,8 @@
 # Mapping Organizational Groups Resolution Path
 
+> Historical design or review notes. This records earlier work and may not
+> describe the current application. Start with [the documentation index](../README.md).
+
 ## Purpose
 
 This document defines what "fully resolved" means for organization mapping and

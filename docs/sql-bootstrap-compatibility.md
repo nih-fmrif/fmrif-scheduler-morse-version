@@ -177,8 +177,8 @@ What still matters is consistency:
 
 Two new artifacts exist so this does not rely on memory:
 
-- [verify-old-bootstrap-compat.py](/Users/johnlee/.codex/worktrees/7c23/fmrif-scheduler-morse-version/scripts/verify-old-bootstrap-compat.py)
-- [test_old_bootstrap_compat.py](/Users/johnlee/.codex/worktrees/7c23/fmrif-scheduler-morse-version/tests/unit/test_old_bootstrap_compat.py)
+- [verify-old-bootstrap-compat.py](../scripts/verify-old-bootstrap-compat.py)
+- [test_old_bootstrap_compat.py](../tests/unit/test_old_bootstrap_compat.py)
 
 What the verifier does:
 
@@ -256,3 +256,10 @@ If it fails, either:
 - fix the current chain to restore rooted compatibility, or
 - explicitly document the newly unsupported old-data pattern and why it is no
   longer supported.
+
+## Fixture data in the public repository
+
+The published fixtures use synthetic user identifiers, names, and contact
+details while retaining the relationships needed by the tests. Extracting
+fixtures from a client database can reintroduce personal data. Review and
+anonymize generated output before committing it; keep original dumps private.

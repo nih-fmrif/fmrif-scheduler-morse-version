@@ -5,7 +5,7 @@ Define the target UX and interaction behavior for the scheduler webapp, with emp
 
 ## 2. Source of Truth and Precedence
 1. `ui-fixes.md` (highest priority)
-2. This specification (`design-spec.md`)
+2. This specification (`docs/design-spec.md`)
 3. Existing interface behavior and implementation notes
 
 If an existing behavior conflicts with `ui-fixes.md`, implement the `ui-fixes.md` behavior.
@@ -740,7 +740,7 @@ Error object requirements (single schema for UI + API):
 
 ## 2026-03-10 rooted old-bootstrap findings
 
-- A full bootstrap of the old worktree now succeeds against a standalone Postgres 15 container via [bootstrap-old-compat-db.sh](/Users/johnlee/.codex/worktrees/be6d/fmrif-scheduler-morse-version/scripts/bootstrap-old-compat-db.sh), with only in-flight compatibility normalization for legacy `plpgsql` and `default_with_oids` syntax.
+- A full bootstrap of the old worktree now succeeds against a standalone Postgres 15 container via [bootstrap-old-compat-db.sh](../scripts/bootstrap-old-compat-db.sh), with only in-flight compatibility normalization for legacy `plpgsql` and `default_with_oids` syntax.
 - Concrete template-shape findings from the bootstrapped old database:
   - `138` templates total
   - every template is exactly `168` rows
@@ -748,7 +748,7 @@ Error object requirements (single schema for UI + API):
   - `8,288` template cells use `'(none)'` as the open-slot group sentinel
   - `114` templates are hidden
 - The old bootstrap confirms that `"[OLD]"` template references are produced by the migration chain, not intended as pre-`018` import literals. For current-seed generation, rooted template researchers must therefore be emitted in pre-`018` form and allowed to cascade to `"[OLD]"` during `018-invalidate-old-researchercodes.sql`.
-- A deterministic extractor now exists at [generate-rooted-template-seed.py](/Users/johnlee/.codex/worktrees/be6d/fmrif-scheduler-morse-version/scripts/generate-rooted-template-seed.py). It reads the bootstrapped old database and emits a rooted subset in pre-`018` seed form. The first checked-in derived artifact is [generated-rooted-template-subset.sql](/Users/johnlee/.codex/worktrees/be6d/fmrif-scheduler-morse-version/sql/generated-rooted-template-subset.sql).
+- A deterministic extractor now exists at [generate-rooted-template-seed.py](../scripts/generate-rooted-template-seed.py). It reads the bootstrapped old database and emits a rooted subset in pre-`018` seed form. The first checked-in derived artifact is [generated-rooted-template-subset.sql](../sql/generated-rooted-template-subset.sql).
 - Current rooted subset target:
   - `d/a` hidden legacy-heavy template
   - `d/i` visible template
@@ -760,7 +760,7 @@ Error object requirements (single schema for UI + API):
 
 ### Next implementation step
 
-- Replace the hand-authored template portion of [003-import-data.sql](/Users/johnlee/.codex/worktrees/be6d/fmrif-scheduler-morse-version/sql/003-import-data.sql) with a generated rooted subset derived from the old bootstrap, then re-run the current migration chain until it survives `015`, `018`, and `900` cleanly.
+- Replace the hand-authored template portion of [003-import-data.sql](../sql/003-import-data.sql) with a generated rooted subset derived from the old bootstrap, then re-run the current migration chain until it survives `015`, `018`, and `900` cleanly.
 
 ### 2026-03-10 current-chain validation note
 

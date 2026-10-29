@@ -1,5 +1,8 @@
 # CSP Policy Improvements
 
+> Historical design or review notes. This records earlier work and may not
+> describe the current application. Start with [the documentation index](../README.md).
+
 ## Current Baseline
 
 - Application responses set `Content-Security-Policy` in `scheduler/app.py`.

@@ -53,4 +53,4 @@ bash run-compose.sh --no-app --resume
 - If scope is already in use, pick a different `FMRIF_RUNTIME_SCOPE`.
 
 ## Deep dive
-For isolation internals and troubleshooting, see [`agent-guidance-isolation-validation.md`](agent-guidance-isolation-validation.md).
+For isolation internals and troubleshooting, see [runtime isolation guide](isolation-validation.md).

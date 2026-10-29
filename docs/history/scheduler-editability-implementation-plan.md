@@ -1,9 +1,12 @@
 # Scheduler Editability Implementation Plan
 
+> Historical design or review notes. This records earlier work and may not
+> describe the current application. Start with [the documentation index](../README.md).
+
 Status: pre-implementation plan as of 2026-03-12.
 
 This document turns the draft policy in
-[`docs/scheduler-editability-policy.md`](./scheduler-editability-policy.md)
+[`docs/scheduler-editability-policy.md`](../scheduler-editability-policy.md)
 into an implementation plan for the current worktree.
 
 ## Goal
@@ -37,15 +40,15 @@ The implementation should follow these rules:
 These are the main gaps between the agreed policy and the current worktree:
 
 - Support assignment data is only loaded when `perms.edit` is true in
-  [`scheduler/routes/entity_routes.py`](../scheduler/routes/entity_routes.py).
+  [`scheduler/routes/entity_routes.py`](../../scheduler/routes/entity_routes.py).
 - Support handler editing is currently gated by booking editability in
-  [`scheduler/static/js/scheduler-editor/index.js`](../scheduler/static/js/scheduler-editor/index.js).
+  [`scheduler/static/js/scheduler-editor/index.js`](../../scheduler/static/js/scheduler-editor/index.js).
 - The support fieldset is disabled based on request editability rather than
   support-fulfillment capability in
-  [`scheduler/static/js/scheduler-editor/index.js`](../scheduler/static/js/scheduler-editor/index.js).
+  [`scheduler/static/js/scheduler-editor/index.js`](../../scheduler/static/js/scheduler-editor/index.js).
 - The backend validation path still assumes support changes arrive through the
   same editing path as booking changes in
-  [`scheduler/logic/schedule_editor.py`](../scheduler/logic/schedule_editor.py).
+  [`scheduler/logic/schedule_editor.py`](../../scheduler/logic/schedule_editor.py).
 - There is no dedicated support-action cue in the grid or selected-slot UI.
 
 ## Ade3 Baseline
@@ -100,7 +103,7 @@ Scope:
 
 Target files:
 
-- [`scheduler/routes/entity_routes.py`](../scheduler/routes/entity_routes.py)
+- [`scheduler/routes/entity_routes.py`](../../scheduler/routes/entity_routes.py)
 
 ### 2. Frontend Capability Model
 
@@ -119,7 +122,7 @@ Scope:
 
 Target files:
 
-- [`scheduler/static/js/scheduler-editor/index.js`](../scheduler/static/js/scheduler-editor/index.js)
+- [`scheduler/static/js/scheduler-editor/index.js`](../../scheduler/static/js/scheduler-editor/index.js)
 
 ### 3. Visible Cues
 
@@ -139,9 +142,9 @@ Scope:
 
 Target files:
 
-- [`scheduler/templates/macros.html`](../scheduler/templates/macros.html)
-- [`scheduler/templates/svg/icons.html`](../scheduler/templates/svg/icons.html)
-- [`scheduler/static/js/scheduler-editor/index.js`](../scheduler/static/js/scheduler-editor/index.js)
+- [`scheduler/templates/macros.html`](../../scheduler/templates/macros.html)
+- [`scheduler/templates/svg/icons.html`](../../scheduler/templates/svg/icons.html)
+- [`scheduler/static/js/scheduler-editor/index.js`](../../scheduler/static/js/scheduler-editor/index.js)
 - relevant scheduler CSS if spacing or layout adjustments are needed
 
 ### 4. Backend Mutation Validation
@@ -161,7 +164,7 @@ Scope:
 
 Target files:
 
-- [`scheduler/logic/schedule_editor.py`](../scheduler/logic/schedule_editor.py)
+- [`scheduler/logic/schedule_editor.py`](../../scheduler/logic/schedule_editor.py)
 - any route-level helpers that package permissions for scheduler saves
 
 ### 5. Test Coverage
@@ -171,7 +174,7 @@ contract.
 
 ### Unit and route tests
 
-- Keep [`tests/unit/route_contract.py`](../tests/unit/route_contract.py)
+- Keep [`tests/unit/route_contract.py`](../../tests/unit/route_contract.py)
   coarse and role-based.
 - Add a dedicated, data-driven device-permission matrix test file.
 - Cover actor scenarios:
