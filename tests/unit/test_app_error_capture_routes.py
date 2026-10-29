@@ -8,6 +8,7 @@ from route_seed import (
     set_admin_session,
     set_session_user,
 )
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import logic, model
@@ -17,7 +18,10 @@ pytestmark = pytest.mark.route
 
 
 def _app_error_count() -> int:
-    return model.AppErrorEvent.query.count()
+    return int(
+        model.db.session.scalar(select(func.count()).select_from(model.AppErrorEvent))
+        or 0
+    )
 
 
 def _disable_exception_propagation(client, monkeypatch) -> None:
@@ -48,7 +52,9 @@ def test_unhandled_html_request_persists_app_error_event(route_client, monkeypat
     match = re.search(r"APP-ERR-[A-F0-9]{12}", body)
     assert match is not None
 
-    row = model.AppErrorEvent.query.order_by(model.AppErrorEvent.id.desc()).first()
+    row = model.db.session.scalars(
+        select(model.AppErrorEvent).order_by(model.AppErrorEvent.id.desc())
+    ).first()
     assert row is not None
     assert row.reference_id == match.group(0)
     assert row.actor == user_id
@@ -80,7 +86,9 @@ def test_unhandled_json_request_returns_reference_id(route_client, monkeypatch):
     assert payload["error"] == "Internal Server Error"
     reference_id = payload["reference_id"]
 
-    row = model.AppErrorEvent.query.order_by(model.AppErrorEvent.id.desc()).first()
+    row = model.db.session.scalars(
+        select(model.AppErrorEvent).order_by(model.AppErrorEvent.id.desc())
+    ).first()
     assert row is not None
     assert row.reference_id == reference_id
     assert row.actor == "test-admin"

@@ -1,29 +1,26 @@
 """
 Application configuration management.
 
-This module provides two main configuration interfaces: 1. AppConfig: Settings
-loaded directly into Flask app.config 2. Settings: Global application settings
-used throughout the codebase
+This module provides two main configuration interfaces:
+1. AppConfig: Settings loaded directly into Flask app.config
+2. Settings: Global application settings used throughout the codebase
 
 The separation allows for clear distinction between Flask-specific config and
 general application settings while maintaining a single source of truth.
-
-Pydantic-settings is used to load the environment variables from the .env file.
-- dotenv.load_dotenv() does not work to populate environment variables so we are
-  passing the file path in to pydantic
-
-- Nested settings are used. That means configuration are specified by a prefix
-  and the separator "__" e.g. DATABASE__HOST=postgres (where DATABASE is the
-  nested config class instance)
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
-from typing import Dict, List, Optional
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional
 from urllib.parse import SplitResult, quote, urlsplit, urlunsplit
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import dotenv_values
+from email_validator import EmailNotValidError, validate_email
 
 from scheduler.find_env_file import find_envfile
 
@@ -38,6 +35,19 @@ APP_ENV_DEFAULT = "development"
 PRODUCTION_ENVIRONMENTS = {"prod", "production", "stage", "staging"}
 DEVELOPMENT_ENVIRONMENTS = {"dev", "development", "local", "test", "testing"}
 AUTH_CALLBACK_PATH = "/auth/callback"
+_NESTED_SETTING_NAMES = frozenset(
+    {
+        "core",
+        "server",
+        "database",
+        "mail",
+        "session",
+        "security",
+        "logging",
+        "entra",
+        "auth_test",
+    }
+)
 
 
 def normalize_app_env(value: str | None) -> str:
@@ -88,30 +98,245 @@ def derive_entra_edge_base_url(value: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
-class EntraConfig(BaseModel):
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    raise ValueError(f"Invalid boolean value: {value!r}")
+
+
+def _coerce_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a valid integer")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a valid integer") from exc
+
+
+def _coerce_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def normalize_email_address(value: Any, *, field_name: str) -> str:
+    text = _coerce_str(value).strip()
+    if not text:
+        raise ValueError(f"{field_name} must be a valid email address")
+    try:
+        validated = validate_email(text, check_deliverability=False)
+    except EmailNotValidError as exc:
+        raise ValueError(f"{field_name} must be a valid email address") from exc
+    normalized = getattr(validated, "normalized", None) or getattr(
+        validated, "email", None
+    )
+    if not normalized:
+        raise ValueError(f"{field_name} must be a valid email address")
+    return str(normalized)
+
+
+def _normalize_optional_email(value: Any, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    text = _coerce_str(value).strip()
+    if not text:
+        return None
+    return normalize_email_address(text, field_name=field_name)
+
+
+def _coerce_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized == "":
+            return []
+        if normalized.startswith("["):
+            parsed = json.loads(normalized)
+            if not isinstance(parsed, list):
+                raise ValueError("Expected a JSON list")
+            return [_coerce_str(item) for item in parsed]
+        return [item.strip() for item in normalized.split(",") if item.strip()]
+    if isinstance(value, (list, tuple, set)):
+        return [
+            _coerce_str(item).strip() for item in value if _coerce_str(item).strip()
+        ]
+    raise ValueError(f"Expected a list-like value, got {type(value).__name__}")
+
+
+def _coerce_mapping(value: Any, field_name: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized == "":
+            return {}
+        try:
+            parsed = json.loads(normalized)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{field_name} must be valid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{field_name} must be a JSON object")
+        return {str(key): item for key, item in parsed.items()}
+    if isinstance(value, Mapping):
+        return {str(key): item for key, item in value.items()}
+    raise ValueError(f"{field_name} must be a mapping")
+
+
+def _deep_merge(target: dict[str, Any], source: Mapping[str, Any]) -> None:
+    for key, value in source.items():
+        if (
+            key in target
+            and isinstance(target[key], dict)
+            and isinstance(value, Mapping)
+        ):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
+
+
+def _set_nested_value(target: dict[str, Any], path: list[str], value: Any) -> None:
+    current = target
+    for part in path[:-1]:
+        next_value = current.get(part)
+        if not isinstance(next_value, dict):
+            next_value = {}
+            current[part] = next_value
+        current = next_value
+    current[path[-1]] = value
+
+
+def _load_env_file_values(path: str | os.PathLike[str] | None) -> dict[str, str]:
+    if path is None:
+        return {}
+    env_path = Path(path)
+    if not env_path.is_file():
+        return {}
+    parsed = dotenv_values(env_path)
+    return {
+        str(key): str(value)
+        for key, value in parsed.items()
+        if key is not None and value is not None
+    }
+
+
+def _raw_values_from_env(source: Mapping[str, str]) -> dict[str, Any]:
+    raw: dict[str, Any] = {}
+    for key, value in source.items():
+        if key == "APP_ENV":
+            raw["app_env"] = value
+            continue
+        if key in {"PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"}:
+            raw[key] = value
+            continue
+        if "__" not in key:
+            continue
+        parts = key.split("__")
+        root = parts[0].lower()
+        if root not in _NESTED_SETTING_NAMES:
+            continue
+        path = [root] + [part.lower() for part in parts[1:]]
+        _set_nested_value(raw, path, value)
+    return raw
+
+
+def _normalize_explicit_values(values: Mapping[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in values.items():
+        if key == "_env_file":
+            continue
+        if key == "APP_ENV":
+            normalized["app_env"] = value
+            continue
+        if key == "app_env":
+            normalized["app_env"] = value
+            continue
+        if key in {"PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"}:
+            normalized[key] = value
+            continue
+        if key in _NESTED_SETTING_NAMES:
+            if is_dataclass(value):
+                normalized[key] = asdict(value)
+            elif isinstance(value, Mapping):
+                normalized[key] = dict(value)
+            else:
+                raise ValueError(f"{key} must be provided as a mapping")
+    return normalized
+
+
+def _instantiate_section(section_cls: type[Any], value: Any) -> Any:
+    if isinstance(value, section_cls):
+        return value
+    if value is None:
+        return section_cls()
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{section_cls.__name__} must be provided as a mapping")
+    allowed = {field_def.name for field_def in fields(section_cls)}
+    filtered = {key: item for key, item in value.items() if key in allowed}
+    return section_cls(**filtered)
+
+
+@dataclass
+class EntraConfig:
     """Microsoft Entra / Azure AD application configuration."""
 
     client_id: str = ""
     tenant_id: str = ""
-    client_secret: str = (
-        ""  # For confidential client token exchange (optional for PKCE public clients)
-    )
+    client_secret: str = ""
     discovery_url: str = ""
     redirect_uri: str = ""
-    allowed_audiences: List[str] = Field(default_factory=list)
-    allowed_algorithms: List[str] = Field(default_factory=lambda: ["RS256"])
+    allowed_audiences: List[str] = field(default_factory=list)
+    allowed_algorithms: List[str] = field(default_factory=lambda: ["RS256"])
     bearer_auto_provision_enabled: bool = False
-    bearer_auto_provision_domains: List[str] = Field(default_factory=list)
-    bearer_auto_provision_groups: List[str] = Field(default_factory=list)
-    scope: str = "openid profile email offline_access"  # OAuth 2.0 OIDC scopes + offline_access for refresh tokens
-    jwks_cache_ttl: int = 60 * 60  # seconds
+    bearer_auto_provision_domains: List[str] = field(default_factory=list)
+    bearer_auto_provision_groups: List[str] = field(default_factory=list)
+    scope: str = "openid profile email offline_access"
+    jwks_cache_ttl: int = 60 * 60
 
-    @field_validator("allowed_algorithms")
-    @classmethod
-    def validate_allowed_algorithms(cls, value: List[str]) -> List[str]:
-        normalized: List[str] = []
+    def __post_init__(self) -> None:
+        self.client_id = _coerce_str(self.client_id)
+        self.tenant_id = _coerce_str(self.tenant_id)
+        self.client_secret = _coerce_str(self.client_secret)
+        self.discovery_url = _coerce_str(self.discovery_url)
+        self.redirect_uri = _coerce_str(self.redirect_uri).strip()
+        self.allowed_audiences = [
+            item
+            for item in (
+                _coerce_str(v).strip()
+                for v in _coerce_string_list(self.allowed_audiences)
+            )
+            if item
+        ]
+        self.allowed_algorithms = self._normalize_allowed_algorithms(
+            _coerce_string_list(self.allowed_algorithms)
+        )
+        self.bearer_auto_provision_enabled = _coerce_bool(
+            self.bearer_auto_provision_enabled
+        )
+        self.bearer_auto_provision_domains = self._normalize_domains(
+            _coerce_string_list(self.bearer_auto_provision_domains)
+        )
+        self.bearer_auto_provision_groups = self._normalize_groups(
+            _coerce_string_list(self.bearer_auto_provision_groups)
+        )
+        self.scope = _coerce_str(self.scope)
+        self.jwks_cache_ttl = _coerce_int(self.jwks_cache_ttl, "ENTRA__JWKS_CACHE_TTL")
+        if self.redirect_uri:
+            parse_entra_redirect_uri(self.redirect_uri)
+
+    @staticmethod
+    def _normalize_allowed_algorithms(value: list[str]) -> list[str]:
+        normalized: list[str] = []
         for alg in value:
-            token = str(alg).strip().upper()
+            token = _coerce_str(alg).strip().upper()
             if token and token not in normalized:
                 normalized.append(token)
         if not normalized:
@@ -120,45 +345,32 @@ class EntraConfig(BaseModel):
             )
         return normalized
 
-    @field_validator("redirect_uri")
-    @classmethod
-    def validate_redirect_uri(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            return ""
-        parse_entra_redirect_uri(normalized)
-        return normalized
-
-    @field_validator("bearer_auto_provision_domains")
-    @classmethod
-    def normalize_bearer_auto_provision_domains(cls, value: List[str]) -> List[str]:
-        normalized: List[str] = []
+    @staticmethod
+    def _normalize_domains(value: list[str]) -> list[str]:
+        normalized: list[str] = []
         for domain in value:
-            token = str(domain).strip().lower().lstrip("@")
+            token = _coerce_str(domain).strip().lower().lstrip("@")
             if token and token not in normalized:
                 normalized.append(token)
         return normalized
 
-    @field_validator("bearer_auto_provision_groups")
-    @classmethod
-    def normalize_bearer_auto_provision_groups(cls, value: List[str]) -> List[str]:
-        normalized: List[str] = []
+    @staticmethod
+    def _normalize_groups(value: list[str]) -> list[str]:
+        normalized: list[str] = []
         for group in value:
-            token = str(group).strip().lower()
+            token = _coerce_str(group).strip().lower()
             if token and token not in normalized:
                 normalized.append(token)
         return normalized
 
     @property
     def issuer(self) -> str:
-        """Expected issuer for tokens from this tenant."""
         if not self.tenant_id:
             return ""
         return f"https://login.microsoftonline.com/{self.tenant_id}/v2.0"
 
     @property
     def audiences(self) -> List[str]:
-        """Compute the set of acceptable audiences for JWT validation."""
         audiences = [aud for aud in self.allowed_audiences if aud]
         if self.client_id and self.client_id not in audiences:
             audiences.append(self.client_id)
@@ -174,29 +386,42 @@ class EntraConfig(BaseModel):
         return derive_entra_edge_base_url(self.redirect_uri)
 
 
-class DatabaseConfig(BaseModel):
-    # Required credentials with development defaults
+@dataclass
+class DatabaseConfig:
     echo: bool = False
     track_modifications: bool = False
 
+    def __post_init__(self) -> None:
+        self.echo = _coerce_bool(self.echo)
+        self.track_modifications = _coerce_bool(self.track_modifications)
 
-class CoreConfig(BaseModel):
+
+@dataclass
+class CoreConfig:
     """Core application settings"""
 
     debug: bool = True
     secret_key: str = "dev-key-change-in-prod"
     listserv: str = "listserv@example.com"
 
+    def __post_init__(self) -> None:
+        self.debug = _coerce_bool(self.debug)
+        self.secret_key = _coerce_str(self.secret_key)
+        self.listserv = _coerce_str(self.listserv)
 
-class ServerConfig(BaseModel):
+
+@dataclass
+class ServerConfig:
     """Server configuration settings"""
 
-    server_name: str = (
-        ""  # Empty allows Flask to work with reverse proxies (nginx, etc.)
-    )
+    server_name: str = ""
+
+    def __post_init__(self) -> None:
+        self.server_name = _coerce_str(self.server_name)
 
 
-class MailConfig(BaseModel):
+@dataclass
+class MailConfig:
     """Email server configuration"""
 
     server: str = "localhost"
@@ -206,29 +431,61 @@ class MailConfig(BaseModel):
     username: str = ""
     password: str = ""
     suppress_send: bool = False
-    default_sender: Optional[EmailStr] = None
-    mailing_lists: Dict[str, str] = {
-        "list 1": "Description of list 1",
-        "list 2": "Description of list 2",
-    }
+    default_sender: Optional[str] = None
+    mailing_lists: Dict[str, str] = field(
+        default_factory=lambda: {
+            "list 1": "Description of list 1",
+            "list 2": "Description of list 2",
+        }
+    )
+
+    def __post_init__(self) -> None:
+        self.server = _coerce_str(self.server)
+        self.port = _coerce_int(self.port, "MAIL__PORT")
+        self.use_tls = _coerce_bool(self.use_tls)
+        self.use_ssl = _coerce_bool(self.use_ssl)
+        self.username = _coerce_str(self.username)
+        self.password = _coerce_str(self.password)
+        self.suppress_send = _coerce_bool(self.suppress_send)
+        self.default_sender = _normalize_optional_email(
+            self.default_sender, field_name="MAIL__DEFAULT_SENDER"
+        )
+        self.mailing_lists = {
+            _coerce_str(key): _coerce_str(value)
+            for key, value in _coerce_mapping(
+                self.mailing_lists, "MAIL__MAILING_LISTS"
+            ).items()
+        }
 
 
-class SessionConfig(BaseModel):
+@dataclass
+class SessionConfig:
     """Flask session configuration"""
 
     cookie_name: str = "dsid"
     cookie_secure: bool = True
     cookie_httponly: bool = True
     cookie_samesite: str = "Strict"
-    permanent_lifetime: int = 8 * 60 * 60  # 8 hours
+    permanent_lifetime: int = 8 * 60 * 60
     type: str = "sqlalchemy"
     use_signer: bool = True
     sqlalchemy_table: str = "site_sessions"
 
-    @field_validator("cookie_samesite")
-    @classmethod
-    def validate_cookie_samesite(cls, value: str) -> str:
-        normalized = value.strip().lower()
+    def __post_init__(self) -> None:
+        self.cookie_name = _coerce_str(self.cookie_name)
+        self.cookie_secure = _coerce_bool(self.cookie_secure)
+        self.cookie_httponly = _coerce_bool(self.cookie_httponly)
+        self.cookie_samesite = self._normalize_cookie_samesite(self.cookie_samesite)
+        self.permanent_lifetime = _coerce_int(
+            self.permanent_lifetime, "SESSION__PERMANENT_LIFETIME"
+        )
+        self.type = _coerce_str(self.type)
+        self.use_signer = _coerce_bool(self.use_signer)
+        self.sqlalchemy_table = _coerce_str(self.sqlalchemy_table)
+
+    @staticmethod
+    def _normalize_cookie_samesite(value: Any) -> str:
+        normalized = _coerce_str(value).strip().lower()
         allowed = {"strict", "lax", "none"}
         if normalized not in allowed:
             raise ValueError(
@@ -237,11 +494,12 @@ class SessionConfig(BaseModel):
         return normalized.capitalize()
 
 
-class SecurityConfig(BaseModel):
+@dataclass
+class SecurityConfig:
     """Baseline HTTP response header settings."""
 
     enable_hsts: bool = True
-    hsts_max_age: int = 63072000  # 2 years
+    hsts_max_age: int = 63072000
     hsts_include_subdomains: bool = True
     hsts_preload: bool = False
     frame_options: str = "DENY"
@@ -267,10 +525,30 @@ class SecurityConfig(BaseModel):
     auth_rate_limit_window_seconds: int = 60
     auth_rate_limit_max_requests: int = 30
 
-    @field_validator("csp_policy")
-    @classmethod
-    def validate_csp_policy(cls, value: str) -> str:
-        normalized = value.strip()
+    def __post_init__(self) -> None:
+        self.enable_hsts = _coerce_bool(self.enable_hsts)
+        self.hsts_max_age = _coerce_int(self.hsts_max_age, "SECURITY__HSTS_MAX_AGE")
+        self.hsts_include_subdomains = _coerce_bool(self.hsts_include_subdomains)
+        self.hsts_preload = _coerce_bool(self.hsts_preload)
+        self.frame_options = _coerce_str(self.frame_options)
+        self.content_type_options = _coerce_str(self.content_type_options)
+        self.referrer_policy = _coerce_str(self.referrer_policy)
+        self.enable_csp = _coerce_bool(self.enable_csp)
+        self.csp_report_only = _coerce_bool(self.csp_report_only)
+        self.csp_policy = self._validate_csp_policy(self.csp_policy)
+        self.auth_rate_limit_enabled = _coerce_bool(self.auth_rate_limit_enabled)
+        self.auth_rate_limit_window_seconds = _coerce_int(
+            self.auth_rate_limit_window_seconds,
+            "SECURITY__AUTH_RATE_LIMIT_WINDOW_SECONDS",
+        )
+        self.auth_rate_limit_max_requests = _coerce_int(
+            self.auth_rate_limit_max_requests,
+            "SECURITY__AUTH_RATE_LIMIT_MAX_REQUESTS",
+        )
+
+    @staticmethod
+    def _validate_csp_policy(value: Any) -> str:
+        normalized = _coerce_str(value).strip()
         lowered = normalized.lower()
         if "report-uri" in lowered or "report-to" in lowered:
             raise ValueError(
@@ -280,17 +558,22 @@ class SecurityConfig(BaseModel):
         return normalized
 
 
-class LoggingConfig(BaseModel):
+@dataclass
+class LoggingConfig:
     """Application logging controls."""
 
     level: str = "INFO"
     reveal_sensitive_data: bool = False
     redaction_text: str = "[REDACTED]"
 
-    @field_validator("level")
-    @classmethod
-    def validate_level(cls, value: str) -> str:
-        normalized = value.strip().upper()
+    def __post_init__(self) -> None:
+        self.level = self._normalize_level(self.level)
+        self.reveal_sensitive_data = _coerce_bool(self.reveal_sensitive_data)
+        self.redaction_text = _coerce_str(self.redaction_text)
+
+    @staticmethod
+    def _normalize_level(value: Any) -> str:
+        normalized = _coerce_str(value).strip().upper()
         allowed = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
         if normalized not in allowed:
             raise ValueError(
@@ -299,18 +582,32 @@ class LoggingConfig(BaseModel):
         return normalized
 
 
-class AuthTestProfile(BaseModel):
+@dataclass
+class AuthTestProfile:
     """Test-only auth profile for CI/playwright integration."""
 
     username: str
-    email: EmailStr
+    email: str
     display_name: str = ""
     active: bool = True
     admin: bool = False
-    groups: List[str] = Field(default_factory=list)
-    pi_groups: List[str] = Field(default_factory=list)
+    groups: List[str] = field(default_factory=list)
+    pi_groups: List[str] = field(default_factory=list)
     technologist: bool = False
     test_scanner_tech: bool = False
+
+    def __post_init__(self) -> None:
+        self.username = _coerce_str(self.username)
+        self.email = normalize_email_address(
+            self.email, field_name="AUTH_TEST__PROFILES__EMAIL"
+        )
+        self.display_name = _coerce_str(self.display_name)
+        self.active = _coerce_bool(self.active)
+        self.admin = _coerce_bool(self.admin)
+        self.groups = _coerce_string_list(self.groups)
+        self.pi_groups = _coerce_string_list(self.pi_groups)
+        self.technologist = _coerce_bool(self.technologist)
+        self.test_scanner_tech = _coerce_bool(self.test_scanner_tech)
 
 
 def _default_auth_test_profiles() -> Dict[str, AuthTestProfile]:
@@ -369,18 +666,39 @@ def _default_auth_test_profiles() -> Dict[str, AuthTestProfile]:
     }
 
 
-class AuthTestConfig(BaseModel):
+@dataclass
+class AuthTestConfig:
     """Test-only auth settings used for CI/local integration suites."""
 
     enabled: bool = False
     shared_secret: str = ""
     seed_groups: str = "DEV"
-    profiles: Dict[str, AuthTestProfile] = Field(
+    profiles: Dict[str, AuthTestProfile] = field(
         default_factory=_default_auth_test_profiles
     )
 
+    def __post_init__(self) -> None:
+        self.enabled = _coerce_bool(self.enabled)
+        self.shared_secret = _coerce_str(self.shared_secret)
+        self.seed_groups = _coerce_str(self.seed_groups)
+        self.profiles = self._normalize_profiles(self.profiles)
 
-class ProxyConfig(BaseModel):
+    @staticmethod
+    def _normalize_profiles(value: Any) -> Dict[str, AuthTestProfile]:
+        raw_profiles = _coerce_mapping(value, "AUTH_TEST__PROFILES")
+        normalized: dict[str, AuthTestProfile] = {}
+        for key, item in raw_profiles.items():
+            if isinstance(item, AuthTestProfile):
+                normalized[str(key)] = item
+                continue
+            if not isinstance(item, Mapping):
+                raise ValueError("AUTH_TEST__PROFILES entries must be mappings")
+            normalized[str(key)] = AuthTestProfile(**dict(item))
+        return normalized
+
+
+@dataclass
+class ProxyConfig:
     """Proxy configuration settings"""
 
     x_forwarded_for: int = 0
@@ -389,55 +707,71 @@ class ProxyConfig(BaseModel):
     x_forwarded_port: int = 0
     x_forwarded_prefix: int = 0
 
-    @field_validator("*")
-    @classmethod
-    def validate_nonnegative(cls, v: int) -> int:
-        """Validate that all proxy counts are non-negative"""
-        if v < 0:
+    def __post_init__(self) -> None:
+        self.x_forwarded_for = self._validate_nonnegative(
+            self.x_forwarded_for, "MMSCHED_X_FORWARDED_FOR"
+        )
+        self.x_forwarded_proto = self._validate_nonnegative(
+            self.x_forwarded_proto, "MMSCHED_X_FORWARDED_PROTO"
+        )
+        self.x_forwarded_host = self._validate_nonnegative(
+            self.x_forwarded_host, "MMSCHED_X_FORWARDED_HOST"
+        )
+        self.x_forwarded_port = self._validate_nonnegative(
+            self.x_forwarded_port, "MMSCHED_X_FORWARDED_PORT"
+        )
+        self.x_forwarded_prefix = self._validate_nonnegative(
+            self.x_forwarded_prefix, "MMSCHED_X_FORWARDED_PREFIX"
+        )
+
+    @staticmethod
+    def _validate_nonnegative(value: Any, field_name: str) -> int:
+        parsed = _coerce_int(value, field_name)
+        if parsed < 0:
             raise ValueError("Proxy count must be non-negative")
-        return v
+        return parsed
 
 
-class Settings(BaseSettings):
-    """Main settings container that coordinates all configuration"""
+class Settings:
+    """Main settings container that coordinates all configuration."""
 
-    app_env: str = Field(default=APP_ENV_DEFAULT, alias="APP_ENV")
+    def __init__(
+        self, _env_file: str | os.PathLike[str] | None = ".env", **kwargs: Any
+    ):
+        raw: dict[str, Any] = {}
+        _deep_merge(raw, _raw_values_from_env(_load_env_file_values(_env_file)))
+        _deep_merge(raw, _raw_values_from_env(os.environ))
+        _deep_merge(raw, _normalize_explicit_values(kwargs))
 
-    model_config = SettingsConfigDict(
-        env_nested_delimiter="__",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",  # To ignore extra fields
-        populate_by_name=True,
-    )
+        self.app_env = normalize_app_env(
+            _coerce_str(raw.get("app_env", APP_ENV_DEFAULT))
+        )
 
-    # Nested configs
-    core: CoreConfig = CoreConfig()
-    server: ServerConfig = ServerConfig()
-    database: DatabaseConfig = DatabaseConfig()
-    mail: MailConfig = MailConfig()
-    session: SessionConfig = SessionConfig()
-    security: SecurityConfig = SecurityConfig()
-    logging: LoggingConfig = LoggingConfig()
-    entra: EntraConfig = EntraConfig()
-    auth_test: AuthTestConfig = AuthTestConfig()
+        self.core = _instantiate_section(CoreConfig, raw.get("core"))
+        self.server = _instantiate_section(ServerConfig, raw.get("server"))
+        self.database = _instantiate_section(DatabaseConfig, raw.get("database"))
+        self.mail = _instantiate_section(MailConfig, raw.get("mail"))
+        self.session = _instantiate_section(SessionConfig, raw.get("session"))
+        self.security = _instantiate_section(SecurityConfig, raw.get("security"))
+        self.logging = _instantiate_section(LoggingConfig, raw.get("logging"))
+        self.entra = _instantiate_section(EntraConfig, raw.get("entra"))
+        self.auth_test = _instantiate_section(AuthTestConfig, raw.get("auth_test"))
 
-    """Database connection settings using standard PG* variables"""
-    PGHOST: str = "postgres"
-    PGPORT: int = 5432
-    PGUSER: str = "postgres"
-    PGPASSWORD: str = "postgres"
-    PGDATABASE: str = "scheduler"
+        self.PGHOST = _coerce_str(raw.get("PGHOST", "postgres"))
+        self.PGPORT = _coerce_int(raw.get("PGPORT", 5432), "PGPORT")
+        self.PGUSER = _coerce_str(raw.get("PGUSER", "postgres"))
+        self.PGPASSWORD = _coerce_str(raw.get("PGPASSWORD", "postgres"))
+        self.PGDATABASE = _coerce_str(raw.get("PGDATABASE", "scheduler"))
+
+        self.validate_required_settings()
 
     @property
     def database_url(self) -> str:
-        """Generate database URL with proper URL encoding of special characters"""
         return (
             f"postgresql+psycopg2://{quote(self.PGUSER)}:{quote(self.PGPASSWORD)}"
             f"@{self.PGHOST}:{self.PGPORT}/{quote(self.PGDATABASE)}"
         )
 
-    @model_validator(mode="after")
     def validate_required_settings(self) -> "Settings":
         app_env = normalize_app_env(self.app_env)
         self.app_env = app_env
@@ -510,7 +844,6 @@ class Settings(BaseSettings):
         return self
 
     def get_proxy_count(self) -> Optional[Dict[str, int]]:
-        """Get proxy configuration counts from environment variables"""
         proxy_vars = {
             "x_for": "MMSCHED_X_FORWARDED_FOR",
             "x_proto": "MMSCHED_X_FORWARDED_PROTO",
@@ -527,10 +860,10 @@ class Settings(BaseSettings):
                     if value < 0:
                         raise ValueError(f"{env_var} must be nonnegative integer")
                     counts[key] = value
-                except ValueError as e:
-                    if "must be nonnegative" in str(e):
+                except ValueError as exc:
+                    if "must be nonnegative" in str(exc):
                         raise
-                    raise ValueError(f"{env_var} must be a valid integer")
+                    raise ValueError(f"{env_var} must be a valid integer") from exc
 
         return counts if counts else None
 
@@ -553,11 +886,7 @@ class AppConfig(dict):
             "MAIL_USERNAME": settings.mail.username,
             "MAIL_PASSWORD": settings.mail.password,
             "MAIL_SUPPRESS_SEND": settings.mail.suppress_send,
-            "MAIL_DEFAULT_SENDER": (
-                str(settings.mail.default_sender)
-                if settings.mail.default_sender is not None
-                else None
-            ),
+            "MAIL_DEFAULT_SENDER": settings.mail.default_sender,
             "SESSION_COOKIE_NAME": settings.session.cookie_name,
             "SESSION_COOKIE_SECURE": settings.session.cookie_secure,
             "SESSION_COOKIE_HTTPONLY": settings.session.cookie_httponly,
@@ -594,7 +923,6 @@ class AppConfig(dict):
             "LOG_REDACTION_TEXT": settings.logging.redaction_text,
         }
 
-        # Only set SERVER_NAME if not empty (for reverse proxy compatibility)
         if settings.server.server_name.strip():
             config_dict["SERVER_NAME"] = settings.server.server_name
 
@@ -603,8 +931,8 @@ class AppConfig(dict):
     def __getattr__(self, name):
         try:
             return self[name]
-        except KeyError:
-            raise AttributeError(f"'AppConfig' has no attribute '{name}'")
+        except KeyError as exc:
+            raise AttributeError(f"'AppConfig' has no attribute '{name}'") from exc
 
 
 # Create configuration objects for the application

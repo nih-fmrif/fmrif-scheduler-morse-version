@@ -5,7 +5,7 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 from flask import url_for
-from sqlalchemy import or_
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql import func
 
@@ -37,13 +37,12 @@ def _user_map(user_ids: List[str]) -> Dict[str, model.User]:
     if len(unique_user_ids) == 0:
         return {}
 
-    rows = (
-        model.User.query.options(
-            load_only(model.User.id, model.User.active, model.User.addr)
-        )
-        .filter(model.User.id.in_(unique_user_ids))
-        .all()
+    statement = (
+        select(model.User)
+        .options(load_only(model.User.id, model.User.active, model.User.addr))
+        .where(model.User.id.in_(unique_user_ids))
     )
+    rows = model.db.session.execute(statement).scalars().all()
     return {row.id: row for row in rows}
 
 
@@ -93,9 +92,13 @@ def _build_potential_issues() -> List[Dict[str, str]]:
         )
 
     failed_group_notifications = (
-        model.GroupMember.query.filter(model.GroupMember.approved.is_(None))
-        .filter(model.GroupMember.email_status == logic.EMAIL_STATUS_FAILED)
-        .order_by(model.GroupMember.group, model.GroupMember.user)
+        model.db.session.execute(
+            select(model.GroupMember)
+            .where(model.GroupMember.approved.is_(None))
+            .where(model.GroupMember.email_status == logic.EMAIL_STATUS_FAILED)
+            .order_by(model.GroupMember.group, model.GroupMember.user)
+        )
+        .scalars()
         .all()
     )
     for row in failed_group_notifications:
@@ -116,9 +119,13 @@ def _build_potential_issues() -> List[Dict[str, str]]:
         )
 
     failed_tech_notifications = (
-        model.Technologist.query.filter(model.Technologist.approved_on.is_(None))
-        .filter(model.Technologist.email_status == logic.EMAIL_STATUS_FAILED)
-        .order_by(model.Technologist.user)
+        model.db.session.execute(
+            select(model.Technologist)
+            .where(model.Technologist.approved_on.is_(None))
+            .where(model.Technologist.email_status == logic.EMAIL_STATUS_FAILED)
+            .order_by(model.Technologist.user)
+        )
+        .scalars()
         .all()
     )
     for row in failed_tech_notifications:
@@ -139,18 +146,26 @@ def _build_potential_issues() -> List[Dict[str, str]]:
         )
 
     joinable_groups = (
-        model.Group.query.filter(model.Group.active)
-        .filter(model.Group.has_membership)
-        .filter(model.Group.is_joinable)
-        .order_by(model.Group.label, model.Group.id)
+        model.db.session.execute(
+            select(model.Group)
+            .where(model.Group.active)
+            .where(model.Group.has_membership)
+            .where(model.Group.is_joinable)
+            .order_by(model.Group.label, model.Group.id)
+        )
+        .scalars()
         .all()
     )
 
     pi_memberships = (
-        model.Membership.query.filter(model.Membership.pi)
-        .filter(model.Membership.approved)
-        .filter(model.Membership.group_active)
-        .filter(model.Membership.user_active)
+        model.db.session.execute(
+            select(model.Membership)
+            .where(model.Membership.pi)
+            .where(model.Membership.approved)
+            .where(model.Membership.group_active)
+            .where(model.Membership.user_active)
+        )
+        .scalars()
         .all()
     )
     pi_by_group: Dict[str, List[str]] = {}
@@ -160,15 +175,15 @@ def _build_potential_issues() -> List[Dict[str, str]]:
         [user_id for user_ids in pi_by_group.values() for user_id in user_ids]
     )
 
-    pending_counts_rows = (
-        model.db.session.query(
+    pending_counts_rows = model.db.session.execute(
+        select(
             model.GroupMember.group,
             func.count(model.GroupMember.user),
         )
-        .filter(model.GroupMember.approved.is_(None))
+        .where(model.GroupMember.approved.is_(None))
         .group_by(model.GroupMember.group)
-        .all()
     )
+    pending_counts_rows = pending_counts_rows.all()
     pending_counts = {group_id: int(count) for group_id, count in pending_counts_rows}
 
     for group in joinable_groups:
@@ -359,9 +374,15 @@ def reconcile_notification_incidents(
     existing_rows: Dict[str, model.NotificationIncident] = {}
 
     if len(keys) > 0:
-        rows = model.NotificationIncident.query.filter(
-            model.NotificationIncident.issue_key.in_(keys)
-        ).all()
+        rows = (
+            model.db.session.execute(
+                select(model.NotificationIncident).where(
+                    model.NotificationIncident.issue_key.in_(keys)
+                )
+            )
+            .scalars()
+            .all()
+        )
         existing_rows = {row.issue_key: row for row in rows}
 
     for issue in normalized:
@@ -443,14 +464,14 @@ def reconcile_notification_incidents(
 
         model.db.session.add(row)
 
-    stale_query = model.NotificationIncident.query.filter(
+    stale_statement = select(model.NotificationIncident).where(
         model.NotificationIncident.active.is_(True)
     )
     if len(keys) > 0:
-        stale_query = stale_query.filter(
+        stale_statement = stale_statement.where(
             ~model.NotificationIncident.issue_key.in_(keys)
         )
-    stale_rows = stale_query.all()
+    stale_rows = model.db.session.execute(stale_statement).scalars().all()
 
     for row in stale_rows:
         row.active = False
@@ -465,8 +486,8 @@ def reconcile_notification_incidents(
         model.db.session.add(row)
 
     cutoff = now - datetime.timedelta(days=NOTIFICATION_INCIDENT_RETENTION_DAYS)
-    stats["expired"] = int(
-        model.NotificationIncident.query.filter(
+    expired_result = model.db.session.execute(
+        delete(model.NotificationIncident).where(
             model.NotificationIncident.active.is_(False),
             func.coalesce(
                 model.NotificationIncident.last_resolved_at,
@@ -474,8 +495,9 @@ def reconcile_notification_incidents(
                 model.NotificationIncident.first_seen_at,
             )
             < cutoff,
-        ).delete(synchronize_session=False)
+        )
     )
+    stats["expired"] = int(expired_result.rowcount or 0)
 
     return stats
 
@@ -559,12 +581,11 @@ def notification_incident_category_values() -> List[str]:
     if not logic.notification_incident_table_available():
         return []
 
-    rows = (
-        model.db.session.query(model.NotificationIncident.category)
+    rows = model.db.session.execute(
+        select(model.NotificationIncident.category)
         .distinct()
         .order_by(model.NotificationIncident.category.asc())
-        .all()
-    )
+    ).all()
     categories: List[str] = []
     for row in rows:
         category = (row[0] or "").strip()
@@ -596,20 +617,22 @@ def notification_incident_rows(
     if len(allowed_states) == 0:
         return []
 
-    query = model.NotificationIncident.query.filter(
+    statement = select(model.NotificationIncident).where(
         model.NotificationIncident.state.in_(allowed_states)
     )
 
     category_token = (category or "").strip()
     if category_token != "" and category_token.lower() != "all":
-        query = query.filter(model.NotificationIncident.category == category_token)
+        statement = statement.where(
+            model.NotificationIncident.category == category_token
+        )
 
     search_token = (search or "").strip()
     if search_token != "":
         search_like = f"%{search_token}%"
         field = _notification_incident_search_field(search_field, default="all")
         if field == "all":
-            query = query.filter(
+            statement = statement.where(
                 or_(
                     model.NotificationIncident.title.ilike(search_like),
                     model.NotificationIncident.detail.ilike(search_like),
@@ -618,30 +641,40 @@ def notification_incident_rows(
                 )
             )
         elif field == "title":
-            query = query.filter(model.NotificationIncident.title.ilike(search_like))
+            statement = statement.where(
+                model.NotificationIncident.title.ilike(search_like)
+            )
         elif field == "detail":
-            query = query.filter(model.NotificationIncident.detail.ilike(search_like))
+            statement = statement.where(
+                model.NotificationIncident.detail.ilike(search_like)
+            )
         elif field == "issue_key":
-            query = query.filter(
+            statement = statement.where(
                 model.NotificationIncident.issue_key.ilike(search_like)
             )
         else:
-            query = query.filter(model.NotificationIncident.category.ilike(search_like))
+            statement = statement.where(
+                model.NotificationIncident.category.ilike(search_like)
+            )
 
-    rows = query.order_by(
+    statement = statement.order_by(
         model.NotificationIncident.category.asc(),
         model.NotificationIncident.last_seen_at.desc(),
-    ).all()
+    )
+    rows = model.db.session.execute(statement).scalars().all()
     return [_notification_incident_payload(row) for row in rows]
 
 
 def notification_scan_last_updated_at() -> Optional[datetime.datetime]:
     if logic.rbac_audit_table_available():
         row = (
-            model.RbacAuditLog.query.filter(
-                model.RbacAuditLog.action == "notifications.scan.run"
+            model.db.session.execute(
+                select(model.RbacAuditLog)
+                .where(model.RbacAuditLog.action == "notifications.scan.run")
+                .order_by(model.RbacAuditLog.occurred_at.desc())
+                .limit(1)
             )
-            .order_by(model.RbacAuditLog.occurred_at.desc())
+            .scalars()
             .first()
         )
         if row is not None and row.occurred_at is not None:
@@ -650,20 +683,20 @@ def notification_scan_last_updated_at() -> Optional[datetime.datetime]:
     if not logic.notification_incident_table_available():
         return None
 
-    latest_detected_at = model.db.session.query(
-        func.max(model.NotificationIncident.last_detected_at)
+    latest_detected_at = model.db.session.execute(
+        select(func.max(model.NotificationIncident.last_detected_at))
     ).scalar()
     if latest_detected_at is not None:
         return latest_detected_at
 
-    latest_state_change = model.db.session.query(
-        func.max(model.NotificationIncident.state_changed_at)
+    latest_state_change = model.db.session.execute(
+        select(func.max(model.NotificationIncident.state_changed_at))
     ).scalar()
     if latest_state_change is not None:
         return latest_state_change
 
-    return model.db.session.query(
-        func.max(model.NotificationIncident.last_seen_at)
+    return model.db.session.execute(
+        select(func.max(model.NotificationIncident.last_seen_at))
     ).scalar()
 
 

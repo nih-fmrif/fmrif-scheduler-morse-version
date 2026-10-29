@@ -1,5 +1,7 @@
 import datetime
 
+from sqlalchemy import select
+
 from scheduler import logic, model
 
 
@@ -21,11 +23,11 @@ def test_record_app_error_event_persists_payload(app_context):
     )
 
     assert stored is True
-    row = (
-        model.AppErrorEvent.query.filter_by(reference_id="APP-ERR-UNIT0001")
+    row = model.db.session.scalars(
+        select(model.AppErrorEvent)
+        .where(model.AppErrorEvent.reference_id == "APP-ERR-UNIT0001")
         .order_by(model.AppErrorEvent.id.desc())
-        .first()
-    )
+    ).first()
     assert row is not None
     assert row.actor == "test-user"
     assert row.where_path == "/test/path"
@@ -73,10 +75,18 @@ def test_record_app_error_event_prunes_expired_rows(app_context):
     )
 
     assert (
-        model.AppErrorEvent.query.filter_by(reference_id="APP-ERR-OLD0001").first()
+        model.db.session.scalars(
+            select(model.AppErrorEvent).where(
+                model.AppErrorEvent.reference_id == "APP-ERR-OLD0001"
+            )
+        ).first()
         is None
     )
     assert (
-        model.AppErrorEvent.query.filter_by(reference_id="APP-ERR-NEW0001").first()
+        model.db.session.scalars(
+            select(model.AppErrorEvent).where(
+                model.AppErrorEvent.reference_id == "APP-ERR-NEW0001"
+            )
+        ).first()
         is not None
     )

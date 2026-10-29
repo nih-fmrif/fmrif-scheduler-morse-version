@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import inspect, or_
+from sqlalchemy import inspect, or_, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -123,32 +123,34 @@ def app_error_event_rows(
     if not app_error_event_table_available():
         return []
 
-    query = model.AppErrorEvent.query
+    statement = select(model.AppErrorEvent)
 
     actor_token = (actor or "").strip()
     if actor_token != "":
-        query = query.filter(model.AppErrorEvent.actor.ilike(f"%{actor_token}%"))
+        statement = statement.where(model.AppErrorEvent.actor.ilike(f"%{actor_token}%"))
 
     reference_token = (reference_id or "").strip()
     if reference_token != "":
-        query = query.filter(
+        statement = statement.where(
             model.AppErrorEvent.reference_id.ilike(f"%{reference_token}%")
         )
 
     exception_token = (exception_type or "").strip()
     if exception_token != "":
-        query = query.filter(
+        statement = statement.where(
             model.AppErrorEvent.exception_type.ilike(f"%{exception_token}%")
         )
 
     where_token = (where_path or "").strip()
     if where_token != "":
-        query = query.filter(model.AppErrorEvent.where_path.ilike(f"%{where_token}%"))
+        statement = statement.where(
+            model.AppErrorEvent.where_path.ilike(f"%{where_token}%")
+        )
 
     search_token = (search or "").strip()
     if search_token != "":
         search_like = f"%{search_token}%"
-        query = query.filter(
+        statement = statement.where(
             or_(
                 model.AppErrorEvent.reference_id.ilike(search_like),
                 model.AppErrorEvent.actor.ilike(search_like),
@@ -160,14 +162,12 @@ def app_error_event_rows(
             )
         )
 
-    return (
-        query.order_by(
-            model.AppErrorEvent.occurred_at.desc(),
-            model.AppErrorEvent.id.desc(),
-        )
-        .limit(max(1, int(limit)))
-        .all()
+    statement = statement.order_by(
+        model.AppErrorEvent.occurred_at.desc(),
+        model.AppErrorEvent.id.desc(),
     )
+    statement = statement.limit(max(1, int(limit)))
+    return model.db.session.execute(statement).scalars().all()
 
 
 def app_error_event_payload(row: model.AppErrorEvent) -> Dict[str, Any]:

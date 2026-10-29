@@ -11,9 +11,8 @@ import jwt
 import requests
 from flask import current_app
 from jwt import InvalidTokenError
-from pydantic import EmailStr, TypeAdapter, ValidationError
 
-from scheduler.config import settings
+from scheduler.config import normalize_email_address, settings
 
 from .models import SessionUser
 
@@ -32,7 +31,6 @@ class _JWKSCache:
 
 
 _CACHE = _JWKSCache()
-_EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
 
 def _log_debug(message: str, *args: object) -> None:
@@ -178,9 +176,11 @@ def user_from_claims(claims: Dict) -> SessionUser:
         raise ValueError("JWT claims missing preferred_username")
     try:
         preferred_username = str(
-            _EMAIL_ADAPTER.validate_python(preferred_username_raw)
+            normalize_email_address(
+                preferred_username_raw, field_name="preferred_username"
+            )
         ).lower()
-    except ValidationError:
+    except ValueError:
         _log_error(
             "JWT preferred_username is not a valid email address; keys=%s",
             sorted(claims.keys()),

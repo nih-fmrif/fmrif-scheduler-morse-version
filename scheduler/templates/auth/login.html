@@ -16,10 +16,7 @@ body %}
 
   <div id="login-content">
     <p>Sign in with your NIH credentials</p>
-    <form
-      method="get"
-      action="{% if next_url %}{{ url_for('auth.start_login', next=next_url) }}{% else %}{{ url_for('auth.start_login') }}{% endif %}"
-    >
+    <form method="get" action="{{ start_login_url }}">
       <button id="login-btn" class="btn btn-primary" type="submit">
         Login with NIH Credentials
       </button>

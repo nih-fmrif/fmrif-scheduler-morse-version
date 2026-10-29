@@ -27,12 +27,20 @@ from route_seed import (
     set_group_membership,
     set_session_user,
 )
+from sqlalchemy import select
 
 import scheduler.message as scheduler_message
 from scheduler import logic, model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
+
+
+def _latest_email_audit(*criteria):
+    statement = select(model.EmailAuditLog).order_by(model.EmailAuditLog.id.desc())
+    for criterion in criteria:
+        statement = statement.where(criterion)
+    return model.db.session.scalars(statement).first()
 
 
 def _capture_rbac_events(
@@ -204,14 +212,9 @@ def test_rbac_mutate_batch_group_membership_sent_resends_notification(
             row = model.get(model.GroupMember, (group_id, user_id))
             assert row is not None
             assert row.email_status == "sent"
-            resolution = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.issue.resolved"
-                )
-                .filter(
-                    model.EmailAuditLog.issue_key == f"join-group:{group_id}:{user_id}"
-                )
-                .first()
+            resolution = _latest_email_audit(
+                model.EmailAuditLog.action == "email.issue.resolved",
+                model.EmailAuditLog.issue_key == f"join-group:{group_id}:{user_id}",
             )
             assert resolution is not None
             assert resolution.status == "resolved"
@@ -409,12 +412,9 @@ def test_rbac_mutate_batch_technologist_sent_resends_notification(
             assert row is not None
             assert row.approved_on is None
             assert row.email_status == "sent"
-            resolution = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.issue.resolved"
-                )
-                .filter(model.EmailAuditLog.issue_key == f"join-tech:DEV:{user_id}")
-                .first()
+            resolution = _latest_email_audit(
+                model.EmailAuditLog.action == "email.issue.resolved",
+                model.EmailAuditLog.issue_key == f"join-tech:DEV:{user_id}",
             )
             assert resolution is not None
             assert resolution.status == "resolved"

@@ -2,6 +2,7 @@ import json
 
 import pytest
 from route_seed import ensure_admin_user, set_admin_session
+from sqlalchemy import func, select
 
 from scheduler import logic, model
 
@@ -34,7 +35,12 @@ def test_csp_report_route_ignores_legacy_payload(route_client):
     )
 
     assert response.status_code == 204
-    assert model.CspViolationEvent.query.count() == 0
+    assert (
+        model.db.session.scalar(
+            select(func.count()).select_from(model.CspViolationEvent)
+        )
+        == 0
+    )
 
 
 def test_csp_report_route_persists_reporting_api_payload(route_client):
@@ -67,8 +73,8 @@ def test_csp_report_route_persists_reporting_api_payload(route_client):
     )
 
     assert response.status_code == 204
-    row = model.CspViolationEvent.query.order_by(
-        model.CspViolationEvent.id.desc()
+    row = model.db.session.scalars(
+        select(model.CspViolationEvent).order_by(model.CspViolationEvent.id.desc())
     ).first()
     assert row is not None
     assert row.report_type == "csp-violation"

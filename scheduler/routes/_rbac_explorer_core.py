@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from flask import abort, url_for
+from sqlalchemy import select
 from sqlalchemy.orm import Load, load_only
 
 from scheduler import logic, model
@@ -44,20 +45,27 @@ def _rbac_actor(user: Optional[model.User]) -> Dict[str, Any]:
     managed_groups: Set[str] = set()
     if not is_admin:
         M = model.Membership
-        q = M.query.options(load_only(M.group))
-        q = q.filter(M.user == user.id)
-        q = q.filter(M.user_active)
-        q = q.filter(M.approved)
-        q = q.filter(M.pi)
-        q = q.filter(M.group_active)
-        managed_groups = {row.group for row in q.all()}
-    else:
+        membership_statement = (
+            select(M)
+            .options(load_only(M.group))
+            .where(M.user == user.id)
+            .where(M.user_active)
+            .where(M.approved)
+            .where(M.pi)
+            .where(M.group_active)
+        )
         managed_groups = {
-            row.group
-            for row in model.Membership.query.options(load_only(model.Membership.group))
-            .filter(model.Membership.user == user.id)
-            .filter(model.Membership.pi)
-            .all()
+            row.group for row in model.db.session.scalars(membership_statement).all()
+        }
+    else:
+        membership_statement = (
+            select(model.Membership)
+            .options(load_only(model.Membership.group))
+            .where(model.Membership.user == user.id)
+            .where(model.Membership.pi)
+        )
+        managed_groups = {
+            row.group for row in model.db.session.scalars(membership_statement).all()
         }
     managed_groups.update(get_auth_test_session_pi_groups(user))
 
@@ -191,12 +199,14 @@ def _rbac_entities(
     include_inactive: bool = False,
 ) -> List[Dict[str, Any]]:
     if scope == "group":
-        query = model.Group.query.options(
-            load_only(model.Group.id, model.Group.label, model.Group.active)
-        ).order_by(model.Group.label, model.Group.id)
+        statement = (
+            select(model.Group)
+            .options(load_only(model.Group.id, model.Group.label, model.Group.active))
+            .order_by(model.Group.label, model.Group.id)
+        )
         if not include_inactive:
-            query = query.filter(model.Group.active)
-        groups = query.all()
+            statement = statement.where(model.Group.active)
+        groups = model.db.session.scalars(statement).all()
         return [
             {
                 "id": group.id,
@@ -207,12 +217,16 @@ def _rbac_entities(
         ]
 
     if scope == "device":
-        query = model.Device.query.options(
-            load_only(model.Device.id, model.Device.label, model.Device.active)
-        ).order_by(model.Device.label, model.Device.id)
+        statement = (
+            select(model.Device)
+            .options(
+                load_only(model.Device.id, model.Device.label, model.Device.active)
+            )
+            .order_by(model.Device.label, model.Device.id)
+        )
         if not include_inactive:
-            query = query.filter(model.Device.active)
-        devices = query.all()
+            statement = statement.where(model.Device.active)
+        devices = model.db.session.scalars(statement).all()
         return [
             {
                 "id": device.id,
@@ -223,12 +237,14 @@ def _rbac_entities(
         ]
 
     if scope == "user":
-        query = model.User.query.options(
-            load_only(model.User.id, model.User.label, model.User.active)
-        ).order_by(model.User.active.desc(), model.User.id)
+        statement = (
+            select(model.User)
+            .options(load_only(model.User.id, model.User.label, model.User.active))
+            .order_by(model.User.active.desc(), model.User.id)
+        )
         if not include_inactive:
-            query = query.filter(model.User.active)
-        users = query.all()
+            statement = statement.where(model.User.active)
+        users = model.db.session.scalars(statement).all()
         return [
             {
                 "id": user.id,
@@ -257,16 +273,15 @@ def _rbac_entities_for_actor(
         managed_groups = sorted(_rbac_actor_managed_groups(actor))
         if len(managed_groups) == 0:
             return []
-        q = (
-            model.Group.query.options(
-                load_only(model.Group.id, model.Group.label, model.Group.active)
-            )
-            .filter(model.Group.id.in_(managed_groups))
+        statement = (
+            select(model.Group)
+            .options(load_only(model.Group.id, model.Group.label, model.Group.active))
+            .where(model.Group.id.in_(managed_groups))
             .order_by(model.Group.label, model.Group.id)
         )
         if not include_inactive:
-            q = q.filter(model.Group.active)
-        groups = q.all()
+            statement = statement.where(model.Group.active)
+        groups = model.db.session.scalars(statement).all()
         return [
             {
                 "id": group.id,
@@ -279,13 +294,16 @@ def _rbac_entities_for_actor(
     if scope == "device":
         if not bool(actor.get("is_dev_pi")):
             return []
-        q = model.Device.query.options(
-            load_only(model.Device.id, model.Device.label, model.Device.active)
+        statement = (
+            select(model.Device)
+            .options(
+                load_only(model.Device.id, model.Device.label, model.Device.active)
+            )
+            .order_by(model.Device.label, model.Device.id)
         )
-        q = q.order_by(model.Device.label, model.Device.id)
         if not include_inactive:
-            q = q.filter(model.Device.active)
-        devices = q.all()
+            statement = statement.where(model.Device.active)
+        devices = model.db.session.scalars(statement).all()
         return [
             {
                 "id": device.id,
@@ -381,8 +399,9 @@ def _rbac_group_detail(
     *,
     include_inactive: bool = False,
 ) -> Dict[str, Any]:
-    memberships_query = (
-        model.Membership.query.options(
+    memberships_statement = (
+        select(model.Membership)
+        .options(
             load_only(
                 model.Membership.group,
                 model.Membership.user,
@@ -393,23 +412,24 @@ def _rbac_group_detail(
                 model.Membership.user_active,
             )
         )
-        .filter(model.Membership.group == group.id)
+        .where(model.Membership.group == group.id)
         .order_by(model.Membership.user)
     )
     if not include_inactive:
-        memberships_query = memberships_query.filter(model.Membership.user_active)
-    memberships = memberships_query.all()
-    devices_query = (
-        model.Device.query.options(
-            load_only(model.Device.id, model.Device.label, model.Device.active)
+        memberships_statement = memberships_statement.where(
+            model.Membership.user_active
         )
+    memberships = model.db.session.scalars(memberships_statement).all()
+    devices_statement = (
+        select(model.Device)
+        .options(load_only(model.Device.id, model.Device.label, model.Device.active))
         .join(model.DeviceGroup, model.DeviceGroup.device == model.Device.id)
-        .filter(model.DeviceGroup.group == group.id)
+        .where(model.DeviceGroup.group == group.id)
         .order_by(model.Device.label, model.Device.id)
     )
     if not include_inactive:
-        devices_query = devices_query.filter(model.Device.active)
-    devices = devices_query.all()
+        devices_statement = devices_statement.where(model.Device.active)
+    devices = model.db.session.scalars(devices_statement).all()
     membership_by_user = {row.user: row for row in memberships}
     linked_device_ids = {device.id for device in devices}
 
@@ -474,12 +494,14 @@ def _rbac_group_detail(
             }
         )
 
-    all_devices_query = model.Device.query.options(
-        load_only(model.Device.id, model.Device.label, model.Device.active)
-    ).order_by(model.Device.label, model.Device.id)
+    all_devices_statement = (
+        select(model.Device)
+        .options(load_only(model.Device.id, model.Device.label, model.Device.active))
+        .order_by(model.Device.label, model.Device.id)
+    )
     if not include_inactive:
-        all_devices_query = all_devices_query.filter(model.Device.active)
-    all_devices = all_devices_query.all()
+        all_devices_statement = all_devices_statement.where(model.Device.active)
+    all_devices = model.db.session.scalars(all_devices_statement).all()
     device_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
     for device in all_devices:
         linked = device.id in linked_device_ids
@@ -515,12 +537,14 @@ def _rbac_group_detail(
         device_matrix_rows, limit=_RBAC_MATRIX_ROW_LIMIT
     )
 
-    all_users_query = model.User.query.options(
-        load_only(model.User.id, model.User.label, model.User.active)
-    ).order_by(model.User.label, model.User.id)
+    all_users_statement = (
+        select(model.User)
+        .options(load_only(model.User.id, model.User.label, model.User.active))
+        .order_by(model.User.label, model.User.id)
+    )
     if not include_inactive:
-        all_users_query = all_users_query.filter(model.User.active)
-    all_users = all_users_query.all()
+        all_users_statement = all_users_statement.where(model.User.active)
+    all_users = model.db.session.scalars(all_users_statement).all()
     current_pi_user = next((row.user for row in memberships if row.pi), "")
     eligible_pi_user_ids = sorted(
         {row.user for row in memberships if row.approved and row.user_active}
@@ -602,13 +626,12 @@ def _rbac_group_detail(
     status_note = "Edit group metadata, PI assignment, and active state in one row."
     if not can_toggle_active:
         status_note = "Special groups are always active and cannot be deactivated."
-    institutes = (
-        model.Inst.query.options(
-            load_only(model.Inst.id, model.Inst.label, model.Inst.active)
-        )
+    institute_statement = (
+        select(model.Inst)
+        .options(load_only(model.Inst.id, model.Inst.label, model.Inst.active))
         .order_by(model.Inst.label, model.Inst.id)
-        .all()
     )
+    institutes = model.db.session.scalars(institute_statement).all()
     inst_options = [{"value": "", "label": "none"}]
     for inst in institutes:
         label = inst.label
@@ -848,8 +871,9 @@ def _rbac_device_detail(
     *,
     include_inactive: bool = False,
 ) -> Dict[str, Any]:
-    groups_query = (
-        model.Group.query.options(
+    groups_statement = (
+        select(model.Group)
+        .options(
             load_only(
                 model.Group.id,
                 model.Group.label,
@@ -858,14 +882,14 @@ def _rbac_device_detail(
             )
         )
         .join(model.DeviceGroup, model.DeviceGroup.group == model.Group.id)
-        .filter(model.DeviceGroup.device == device.id)
+        .where(model.DeviceGroup.device == device.id)
         .order_by(model.Group.label, model.Group.id)
     )
     if not include_inactive:
-        groups_query = groups_query.filter(model.Group.active)
-    groups = groups_query.all()
-    user_perms_query = (
-        model.db.session.query(model.UserDevice, model.User)
+        groups_statement = groups_statement.where(model.Group.active)
+    groups = model.db.session.scalars(groups_statement).all()
+    user_perms_statement = (
+        select(model.UserDevice, model.User)
         .join(model.User, model.User.id == model.UserDevice.user)
         .options(
             Load(model.UserDevice).load_only(
@@ -881,12 +905,12 @@ def _rbac_device_detail(
                 model.User.id, model.User.label, model.User.active
             ),
         )
-        .filter(model.UserDevice.device == device.id)
+        .where(model.UserDevice.device == device.id)
         .order_by(model.User.id)
     )
     if not include_inactive:
-        user_perms_query = user_perms_query.filter(model.User.active)
-    user_perms = user_perms_query.all()
+        user_perms_statement = user_perms_statement.where(model.User.active)
+    user_perms = model.db.session.execute(user_perms_statement).all()
 
     source_nodes: List[Dict[str, str]] = []
     group_rows: List[Dict[str, Any]] = []
@@ -942,17 +966,21 @@ def _rbac_device_detail(
         )
 
     linked_group_ids = {group.id for group in groups}
-    all_groups_query = model.Group.query.options(
-        load_only(
-            model.Group.id,
-            model.Group.label,
-            model.Group.active,
-            model.Group.department,
+    all_groups_statement = (
+        select(model.Group)
+        .options(
+            load_only(
+                model.Group.id,
+                model.Group.label,
+                model.Group.active,
+                model.Group.department,
+            )
         )
-    ).order_by(model.Group.label, model.Group.id)
+        .order_by(model.Group.label, model.Group.id)
+    )
     if not include_inactive:
-        all_groups_query = all_groups_query.filter(model.Group.active)
-    all_groups = all_groups_query.all()
+        all_groups_statement = all_groups_statement.where(model.Group.active)
+    all_groups = model.db.session.scalars(all_groups_statement).all()
     group_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
     for group in all_groups:
         linked = group.id in linked_group_ids
@@ -988,37 +1016,39 @@ def _rbac_device_detail(
         group_matrix_rows, limit=_RBAC_MATRIX_ROW_LIMIT
     )
 
-    dev_users_query = (
-        model.User.query.options(
-            load_only(model.User.id, model.User.label, model.User.active)
-        )
+    dev_users_statement = (
+        select(model.User)
+        .options(load_only(model.User.id, model.User.label, model.User.active))
         .join(model.Membership, model.Membership.user == model.User.id)
-        .filter(model.Membership.group == "DEV")
-        .filter(model.Membership.approved)
+        .where(model.Membership.group == "DEV")
+        .where(model.Membership.approved)
         .order_by(model.User.id)
     )
     if not include_inactive:
-        dev_users_query = dev_users_query.filter(model.Membership.user_active).filter(
-            model.User.active
-        )
-    dev_users = dev_users_query.all()
+        dev_users_statement = dev_users_statement.where(
+            model.Membership.user_active
+        ).where(model.User.active)
+    dev_users = model.db.session.scalars(dev_users_statement).all()
     dev_user_ids = {user.id for user in dev_users}
-    tech_user_ids = {
-        user_id
-        for (user_id,) in model.Technologist.query.with_entities(
-            model.Technologist.user
-        )
-        .filter(model.Technologist.approved_on.isnot(None))
-        .all()
-    }
+    tech_user_statement = select(model.Technologist.user).where(
+        model.Technologist.approved_on.is_not(None)
+    )
+    tech_user_ids = set(model.db.session.scalars(tech_user_statement).all())
     user_overrides = {ud.user: ud for ud, _ in user_perms}
     user_matrix_ids = sorted(set(dev_user_ids).union(set(user_overrides.keys())))
-    users_by_id_query = model.User.query.options(
-        load_only(model.User.id, model.User.label, model.User.active)
-    ).filter(model.User.id.in_(user_matrix_ids))
-    if not include_inactive:
-        users_by_id_query = users_by_id_query.filter(model.User.active)
-    users_by_id = {user.id: user for user in users_by_id_query.all()}
+    users_by_id: Dict[str, model.User] = {}
+    if user_matrix_ids:
+        users_by_id_statement = (
+            select(model.User)
+            .options(load_only(model.User.id, model.User.label, model.User.active))
+            .where(model.User.id.in_(user_matrix_ids))
+        )
+        if not include_inactive:
+            users_by_id_statement = users_by_id_statement.where(model.User.active)
+        users_by_id = {
+            user.id: user
+            for user in model.db.session.scalars(users_by_id_statement).all()
+        }
     user_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
     for user_id in user_matrix_ids:
         user = users_by_id.get(user_id)
@@ -1327,8 +1357,9 @@ def _rbac_user_detail(
     *,
     include_inactive: bool = False,
 ) -> Dict[str, Any]:
-    memberships_query = (
-        model.Membership.query.options(
+    memberships_statement = (
+        select(model.Membership)
+        .options(
             load_only(
                 model.Membership.group,
                 model.Membership.user,
@@ -1339,14 +1370,16 @@ def _rbac_user_detail(
                 model.Membership.user_active,
             )
         )
-        .filter(model.Membership.user == user.id)
+        .where(model.Membership.user == user.id)
         .order_by(model.Membership.group)
     )
     if not include_inactive:
-        memberships_query = memberships_query.filter(model.Membership.group_active)
-    memberships = memberships_query.all()
-    user_perms_query = (
-        model.db.session.query(model.UserDevice, model.Device)
+        memberships_statement = memberships_statement.where(
+            model.Membership.group_active
+        )
+    memberships = model.db.session.scalars(memberships_statement).all()
+    user_perms_statement = (
+        select(model.UserDevice, model.Device)
         .join(model.Device, model.Device.id == model.UserDevice.device)
         .options(
             Load(model.UserDevice).load_only(
@@ -1362,16 +1395,15 @@ def _rbac_user_detail(
                 model.Device.id, model.Device.label, model.Device.active
             ),
         )
-        .filter(model.UserDevice.user == user.id)
+        .where(model.UserDevice.user == user.id)
         .order_by(model.Device.label, model.Device.id)
     )
     if not include_inactive:
-        user_perms_query = user_perms_query.filter(model.Device.active)
-    user_perms = user_perms_query.all()
+        user_perms_statement = user_perms_statement.where(model.Device.active)
+    user_perms = model.db.session.execute(user_perms_statement).all()
     device_groups: Dict[str, set[str]] = {}
-    for device_id, group_id in model.DeviceGroup.query.with_entities(
-        model.DeviceGroup.device, model.DeviceGroup.group
-    ).all():
+    device_group_statement = select(model.DeviceGroup.device, model.DeviceGroup.group)
+    for device_id, group_id in model.db.session.execute(device_group_statement).all():
         device_groups.setdefault(device_id, set()).add(group_id)
     user_perms_by_device = {ud.device: ud for ud, _ in user_perms}
     memberships_by_group = {row.group: row for row in memberships}
@@ -1456,17 +1488,21 @@ def _rbac_user_detail(
             }
         )
 
-    all_groups_query = model.Group.query.options(
-        load_only(
-            model.Group.id,
-            model.Group.label,
-            model.Group.active,
-            model.Group.has_membership,
+    all_groups_statement = (
+        select(model.Group)
+        .options(
+            load_only(
+                model.Group.id,
+                model.Group.label,
+                model.Group.active,
+                model.Group.has_membership,
+            )
         )
-    ).order_by(model.Group.label, model.Group.id)
+        .order_by(model.Group.label, model.Group.id)
+    )
     if not include_inactive:
-        all_groups_query = all_groups_query.filter(model.Group.active)
-    all_groups = all_groups_query.all()
+        all_groups_statement = all_groups_statement.where(model.Group.active)
+    all_groups = model.db.session.scalars(all_groups_statement).all()
     membership_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
     for group in all_groups:
         membership = memberships_by_group.get(group.id)
@@ -1523,12 +1559,14 @@ def _rbac_user_detail(
         membership_matrix_rows, limit=_RBAC_MATRIX_ROW_LIMIT
     )
 
-    all_devices_query = model.Device.query.options(
-        load_only(model.Device.id, model.Device.label, model.Device.active)
-    ).order_by(model.Device.label, model.Device.id)
+    all_devices_statement = (
+        select(model.Device)
+        .options(load_only(model.Device.id, model.Device.label, model.Device.active))
+        .order_by(model.Device.label, model.Device.id)
+    )
     if not include_inactive:
-        all_devices_query = all_devices_query.filter(model.Device.active)
-    all_devices = all_devices_query.all()
+        all_devices_statement = all_devices_statement.where(model.Device.active)
+    all_devices = model.db.session.scalars(all_devices_statement).all()
     permission_matrix_rows_ranked: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
     for device in all_devices:
         if not show_device_permissions:

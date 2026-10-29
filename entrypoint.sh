@@ -5,6 +5,7 @@ export PGHOST="${DB_CONTAINER_HOST:-postgres}"
 export PGPORT="${DB_CONTAINER_PORT:-5432}"
 container_port="${CONTAINER_APP_PORT:-5051}"
 app_server="${APP_SERVER:-flask}"
+python_bin="${PYTHON_BIN:-python3}"
 
 build_gunicorn_command() {
   local bind_addr="0.0.0.0:${container_port}"
@@ -14,6 +15,8 @@ build_gunicorn_command() {
   local threads="${GUNICORN_THREADS:-}"
 
   local -a command=(
+    "$python_bin"
+    -m
     gunicorn
     --bind
     "$bind_addr"
@@ -79,12 +82,12 @@ bootstrap_if_missing() {
 >&2 echo "Postgres is up - starting application"
 bootstrap_if_missing
 # Run database migrations
-alembic upgrade head
+"$python_bin" -m alembic upgrade head
 # Start the application
 case "$app_server" in
   flask)
     export FLASK_APP="${FLASK_APP:-scheduler.app:create_app}"
-    exec flask run --host 0.0.0.0 --port "$container_port"
+    exec "$python_bin" -m flask run --host 0.0.0.0 --port "$container_port"
     ;;
   gunicorn)
     mapfile -t gunicorn_command < <(build_gunicorn_command)

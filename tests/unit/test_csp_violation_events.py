@@ -1,5 +1,7 @@
 import datetime
 
+from sqlalchemy import select
+
 from scheduler import logic, model
 
 
@@ -25,8 +27,8 @@ def test_record_csp_violation_event_persists_payload(app_context):
     )
 
     assert stored is True
-    row = model.CspViolationEvent.query.order_by(
-        model.CspViolationEvent.id.desc()
+    row = model.db.session.scalars(
+        select(model.CspViolationEvent).order_by(model.CspViolationEvent.id.desc())
     ).first()
     assert row is not None
     assert row.actor == "test-user"
@@ -83,5 +85,19 @@ def test_record_csp_violation_event_prunes_expired_rows(app_context):
         report_body={"document-uri": "https://app.example.test/new"},
     )
 
-    assert model.CspViolationEvent.query.filter_by(actor="old-user").first() is None
-    assert model.CspViolationEvent.query.filter_by(actor="new-user").first() is not None
+    assert (
+        model.db.session.scalars(
+            select(model.CspViolationEvent).where(
+                model.CspViolationEvent.actor == "old-user"
+            )
+        ).first()
+        is None
+    )
+    assert (
+        model.db.session.scalars(
+            select(model.CspViolationEvent).where(
+                model.CspViolationEvent.actor == "new-user"
+            )
+        ).first()
+        is not None
+    )

@@ -1,6 +1,7 @@
 from urllib.parse import parse_qs, urlparse
 
 from flask import Flask
+from sqlalchemy import select
 
 from scheduler import model
 from scheduler.auth import views
@@ -105,7 +106,10 @@ def test_consume_oauth_state_returns_and_deletes_code_verifier(app_context):
     assert payload is not None
     assert payload["code_verifier"] == "pkce-delete-me"
     assert (
-        model.OAuthState.query.filter_by(state="state-delete-me").one_or_none() is None
+        model.db.session.execute(
+            select(model.OAuthState).where(model.OAuthState.state == "state-delete-me")
+        ).scalar_one_or_none()
+        is None
     )
 
 
@@ -114,6 +118,8 @@ def test_create_oauth_state_persists_code_verifier(app_context):
 
     assert state is not None
     assert nonce is not None
-    record = model.OAuthState.query.filter_by(state=state).one_or_none()
+    record = model.db.session.execute(
+        select(model.OAuthState).where(model.OAuthState.state == state)
+    ).scalar_one_or_none()
     assert record is not None
     assert record.code_verifier == "pkce-persist-me"

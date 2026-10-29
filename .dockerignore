@@ -1,0 +1,13 @@
+.git
+other-scheduler-docs/.git
+.coverage
+.coverage*
+.pixi
+.playwright-cli
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__/
+other-scheduler-docs/__pycache__/
+node_modules/
+test-results/

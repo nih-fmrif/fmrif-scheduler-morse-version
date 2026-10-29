@@ -2,9 +2,9 @@
 
 from typing import Any, Generator, List, Optional, Tuple
 
-from flask import current_app
-from flask.helpers import url_for
+from flask import current_app, url_for
 from flask_wtf import FlaskForm
+from sqlalchemy import select
 from wtforms import Form, fields, validators
 
 from scheduler import message, model
@@ -28,11 +28,12 @@ def _get_user(user_id: str) -> Optional[model.User]:
 
 def _get_dev_pi_recipient() -> Optional[model.User]:
     membership_model = model.Membership
-    membership = (
-        membership_model.query.filter(membership_model.group == "DEV")
-        .filter(membership_model.pi)
-        .first()
+    membership_statement = (
+        select(membership_model)
+        .where(membership_model.group == "DEV")
+        .where(membership_model.pi)
     )
+    membership = model.db.session.scalars(membership_statement).first()
     if membership is None:
         current_app.logger.warning("no DEV PI found")
         return None
@@ -225,11 +226,12 @@ def notify_group_pi_of_join_form(user: model.User, group: str) -> str:
     current_app.logger.info("%s has requested to join %s", user.id, group)
 
     membership_model = model.Membership
-    membership = (
-        membership_model.query.filter(membership_model.group == group)
-        .filter(membership_model.pi)
-        .first()
+    membership_statement = (
+        select(membership_model)
+        .where(membership_model.group == group)
+        .where(membership_model.pi)
     )
+    membership = model.db.session.scalars(membership_statement).first()
     if membership is None:
         current_app.logger.warning("no PI to notify for %s joining %s", user.id, group)
         return EMAIL_STATUS_FAILED

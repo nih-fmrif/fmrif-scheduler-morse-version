@@ -1,4 +1,5 @@
 from flask import g
+from sqlalchemy import select
 
 from scheduler import logic, model
 from scheduler.app import admin_only, login_required
@@ -218,6 +219,8 @@ def test_upsert_user_proactively_migrates_to_requested_id(app_context):
     assert model.get(model.GroupMember, ("DEV", target_id)) is not None
     assert model.get(model.GroupMember, ("DEV", legacy_id)) is None
 
-    canonical = model.User.query.filter_by(addr=email).one_or_none()
+    canonical = model.db.session.execute(
+        select(model.User).where(model.User.addr == email)
+    ).scalar_one_or_none()
     assert canonical is not None
     assert canonical.id == target_id

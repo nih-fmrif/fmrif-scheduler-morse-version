@@ -5,7 +5,6 @@ from typing import Any, Generator
 from urllib.parse import quote
 
 import pytest
-from pydantic import ValidationError
 
 from scheduler.config import (
     AUTH_CALLBACK_PATH,
@@ -109,7 +108,7 @@ def test_config_field_validation(
 
     # Test invalid value
     if invalid_value is not None:
-        with pytest.raises((ValidationError, ValueError)):
+        with pytest.raises(ValueError):
             config_class(**{field: invalid_value})
 
 
@@ -328,7 +327,7 @@ def test_entra_redirect_uri_helpers():
 def test_entra_redirect_uri_validation_rejects_invalid_values(
     redirect_uri: str, expected_message: str
 ):
-    with pytest.raises((ValidationError, ValueError), match=expected_message):
+    with pytest.raises(ValueError, match=expected_message):
         EntraConfig(redirect_uri=redirect_uri)
 
 
@@ -481,7 +480,7 @@ def test_security_config_validation():
     ],
 )
 def test_security_config_rejects_custom_reporting_directives(policy, message):
-    with pytest.raises(ValidationError, match=message):
+    with pytest.raises(ValueError, match=message):
         SecurityConfig(csp_policy=policy)
 
 
@@ -495,7 +494,7 @@ def _valid_entra_settings() -> dict[str, str]:
 
 
 def test_settings_production_rejects_debug_enabled():
-    with pytest.raises((ValidationError, ValueError), match="CORE__DEBUG"):
+    with pytest.raises(ValueError, match="CORE__DEBUG"):
         Settings(
             app_env="production",
             _env_file=None,
@@ -507,7 +506,7 @@ def test_settings_production_rejects_debug_enabled():
 
 
 def test_settings_production_rejects_default_secret():
-    with pytest.raises((ValidationError, ValueError), match="CORE__SECRET_KEY"):
+    with pytest.raises(ValueError, match="CORE__SECRET_KEY"):
         Settings(
             app_env="production",
             _env_file=None,
@@ -519,7 +518,7 @@ def test_settings_production_rejects_default_secret():
 
 
 def test_settings_production_requires_secure_cookie():
-    with pytest.raises((ValidationError, ValueError), match="SESSION__COOKIE_SECURE"):
+    with pytest.raises(ValueError, match="SESSION__COOKIE_SECURE"):
         Settings(
             app_env="production",
             _env_file=None,
@@ -532,7 +531,7 @@ def test_settings_production_requires_secure_cookie():
 
 
 def test_settings_production_rejects_auth_test_enabled():
-    with pytest.raises((ValidationError, ValueError), match="AUTH_TEST__ENABLED"):
+    with pytest.raises(ValueError, match="AUTH_TEST__ENABLED"):
         Settings(
             app_env="production",
             _env_file=None,
@@ -544,7 +543,7 @@ def test_settings_production_rejects_auth_test_enabled():
 
 
 def test_settings_production_rejects_mailpit():
-    with pytest.raises((ValidationError, ValueError), match="Mailpit"):
+    with pytest.raises(ValueError, match="Mailpit"):
         Settings(
             app_env="production",
             _env_file=None,
@@ -557,7 +556,7 @@ def test_settings_production_rejects_mailpit():
 
 
 def test_settings_production_requires_root_auth_callback_redirect_uri():
-    with pytest.raises((ValidationError, ValueError), match="root callback path"):
+    with pytest.raises(ValueError, match="root callback path"):
         Settings(
             app_env="production",
             _env_file=None,
@@ -585,7 +584,7 @@ def test_settings_development_enables_auth_test():
 
 def test_settings_requires_mail_default_sender(monkeypatch):
     monkeypatch.delenv("MAIL__DEFAULT_SENDER", raising=False)
-    with pytest.raises((ValidationError, ValueError), match="MAIL__DEFAULT_SENDER"):
+    with pytest.raises(ValueError, match="MAIL__DEFAULT_SENDER"):
         Settings(
             auth_test={"enabled": True, "shared_secret": "test-secret"},
             _env_file=None,
@@ -638,13 +637,13 @@ def test_settings_with_invalid_env_values(temp_env_file, monkeypatch):
     monkeypatch.setenv("PGPORT", "invalid")
     monkeypatch.setenv("MAIL__PORT", "-1")
 
-    # Verify that invalid values raise ValidationError
-    with pytest.raises((ValidationError, ValueError)):
+    # Verify that invalid values raise a validation error
+    with pytest.raises(ValueError):
         make_settings()
 
 
 def test_auth_test_requires_shared_secret():
-    with pytest.raises((ValidationError, ValueError)):
+    with pytest.raises(ValueError):
         Settings(
             _env_file=None,
             app_env="production",

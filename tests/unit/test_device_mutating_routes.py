@@ -17,12 +17,49 @@ from route_seed import (
     set_group_membership,
     set_session_user,
 )
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import logic, model
 from scheduler.logic.schedule_editor import _clear_reference_data_cache
 
 pytestmark = pytest.mark.route
+
+
+def _schedule_entry_count(device_id: str) -> int:
+    return int(
+        model.db.session.scalar(
+            select(func.count())
+            .select_from(model.ScheduleEntry)
+            .where(model.ScheduleEntry.device == device_id)
+        )
+        or 0
+    )
+
+
+def _schedule_entries_for_device(device_id: str) -> list[model.ScheduleEntry]:
+    return (
+        model.db.session.execute(
+            select(model.ScheduleEntry).where(model.ScheduleEntry.device == device_id)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+
+def _active_inst(*, exclude_id: str | None = None) -> model.Inst | None:
+    statement = select(model.Inst).where(model.Inst.active).order_by(model.Inst.id)
+    if exclude_id:
+        statement = statement.where(model.Inst.id != exclude_id)
+    return model.db.session.scalars(statement).first()
+
+
+def _email_audit_rows(*criteria):
+    statement = select(model.EmailAuditLog)
+    for criterion in criteria:
+        statement = statement.where(criterion)
+    return model.db.session.scalars(statement).all()
 
 
 @pytest.mark.covers_route("/device/<the_device>", "GET")
@@ -213,7 +250,7 @@ def _prepare_template_apply_data(
     member_id = f"mem{uuid.uuid4().hex[:5]}"
     ensure_active_user(member_id, f"{member_id}@example.com", member_id)
     set_group_membership(group_id, member_id, approved=True, pi=False)
-    inst = model.Inst.query.filter(model.Inst.active).first()
+    inst = _active_inst()
     if inst is None:
         inst = model.Inst(
             id="I001",
@@ -357,7 +394,7 @@ def test_device_templates_apply_post_rejects_invalid_template_code(
     assert 'class="template-apply"' in body
     assert 'data-initial-state="dirty"' in body
     assert 'data-has-server-errors="1"' in body
-    assert model.ScheduleEntry.query.filter_by(device=device_id).count() == 0
+    assert _schedule_entry_count(device_id) == 0
 
 
 @pytest.mark.covers_route("/device/<the_device>/templates", "POST")
@@ -384,7 +421,7 @@ def test_device_templates_apply_post_preserves_required_field_error_state(
     assert 'class="template-apply"' in body
     assert 'data-initial-state="dirty"' in body
     assert 'data-has-server-errors="1"' in body
-    assert model.ScheduleEntry.query.filter_by(device=device_id).count() == 0
+    assert _schedule_entry_count(device_id) == 0
 
 
 @pytest.mark.covers_route("/device/<the_device>/templates", "POST")
@@ -410,7 +447,7 @@ def test_device_templates_apply_post_applies_valid_template(
     assert post_response.headers["Location"].endswith(
         f"/device/{device_id}?start={logic.next_sunday().isoformat()}"
     )
-    assert model.ScheduleEntry.query.filter_by(device=device_id).count() == 168
+    assert _schedule_entry_count(device_id) == 168
 
 
 @pytest.mark.covers_route("/device/<the_device>/templates", "POST")
@@ -455,7 +492,7 @@ def test_device_templates_apply_post_aligns_midweek_start_to_sunday(
 
     templated_entries = [
         entry
-        for entry in model.ScheduleEntry.query.filter_by(device=device_id).all()
+        for entry in _schedule_entries_for_device(device_id)
         if entry.template is not None
     ]
     assert len(templated_entries) == 168
@@ -625,7 +662,7 @@ def test_seeded_template_apply_post_rejects_legacy_member_assignments(
     stale_summary = next(
         summary for summary in report["summary"] if "stale member" in summary.lower()
     )
-    existing_entries = model.ScheduleEntry.query.filter_by(device=device_id).count()
+    existing_entries = _schedule_entry_count(device_id)
 
     get_response = route_client.get(f"/device/{device_id}/templates")
     csrf_token = extract_csrf_token(get_response.get_data(as_text=True))
@@ -638,10 +675,7 @@ def test_seeded_template_apply_post_rejects_legacy_member_assignments(
 
     assert post_response.status_code == 200
     assert stale_summary in post_response.get_data(as_text=True)
-    assert (
-        model.ScheduleEntry.query.filter_by(device=device_id).count()
-        == existing_entries
-    )
+    assert _schedule_entry_count(device_id) == existing_entries
 
 
 @pytest.mark.covers_route("/device/<the_device>/templates/edit/<the_template>", "POST")
@@ -662,15 +696,9 @@ def test_seeded_template_edit_post_blocks_save_until_legacy_member_is_resolved(
     )
     entry = model.get(model.TemplateEntry, entry_id)
     assert entry is not None
-    replacement_inst = (
-        model.Inst.query.filter(model.Inst.active, model.Inst.id != (entry.inst or ""))
-        .order_by(model.Inst.id)
-        .first()
-    )
+    replacement_inst = _active_inst(exclude_id=(entry.inst or ""))
     if replacement_inst is None:
-        replacement_inst = (
-            model.Inst.query.filter(model.Inst.active).order_by(model.Inst.id).first()
-        )
+        replacement_inst = _active_inst()
     assert replacement_inst is not None
 
     get_response = route_client.get(f"/device/{device_id}/templates/edit/{template_id}")
@@ -813,7 +841,7 @@ def test_device_schedule_post_creates_synthetic_slot_and_returns_id_map(
     assert entry.hour == 8
     assert entry.group == group_id
     assert entry.user == member_id
-    audit_rows = model.EmailAuditLog.query.filter(
+    audit_rows = _email_audit_rows(
         model.EmailAuditLog.action == "email.scheduler.notification"
-    ).all()
+    )
     assert audit_rows == []

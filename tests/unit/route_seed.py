@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Sequence
 
 from flask import has_app_context
+from sqlalchemy import delete, select
 
 from scheduler import logic, model
 from scheduler.app import create_app
@@ -159,7 +160,14 @@ def seeded_scanner_id() -> str:
                 return scanner_id
 
         active = (
-            model.Device.query.filter_by(active=True).order_by(model.Device.id).first()
+            model.db.session.execute(
+                select(model.Device)
+                .where(model.Device.active.is_(True))
+                .order_by(model.Device.id)
+                .limit(1)
+            )
+            .scalars()
+            .first()
         )
         if active is not None:
             return active.id
@@ -169,7 +177,13 @@ def seeded_scanner_id() -> str:
             if scanner is not None:
                 return scanner_id
 
-        any_device = model.Device.query.order_by(model.Device.id).first()
+        any_device = (
+            model.db.session.execute(
+                select(model.Device).order_by(model.Device.id).limit(1)
+            )
+            .scalars()
+            .first()
+        )
         if any_device is not None:
             return any_device.id
 
@@ -268,7 +282,16 @@ def seeded_dev_user_id() -> str:
         if row is not None:
             return row[0]
 
-        user = model.User.query.filter_by(active=True).order_by(model.User.id).first()
+        user = (
+            model.db.session.execute(
+                select(model.User)
+                .where(model.User.active.is_(True))
+                .order_by(model.User.id)
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
         if user is not None:
             return user.id
 
@@ -278,16 +301,16 @@ def seeded_dev_user_id() -> str:
 def seeded_group_scanner_id(group_id: str) -> str:
     """Return an active scanner linked to the requested group when possible."""
     with _route_app_context():
-        row = (
-            model.db.session.query(model.Device.id)
+        scanner_id = model.db.session.execute(
+            select(model.Device.id)
             .join(model.DeviceGroup, model.DeviceGroup.device == model.Device.id)
-            .filter(model.Device.active)
-            .filter(model.DeviceGroup.group == group_id)
+            .where(model.Device.active)
+            .where(model.DeviceGroup.group == group_id)
             .order_by(model.Device.id)
-            .first()
-        )
-        if row is not None:
-            return str(row[0])
+            .limit(1)
+        ).scalar()
+        if scanner_id is not None:
+            return str(scanner_id)
 
     return seeded_scanner_id()
 
@@ -342,15 +365,22 @@ def set_group_membership(
 
         pi_entry = model.get(model.PrimaryGroupMember, (group_id, user_id))
         if pi:
-            current_pi = model.PrimaryGroupMember.query.filter_by(
-                group=group_id
-            ).first()
+            current_pi = (
+                model.db.session.execute(
+                    select(model.PrimaryGroupMember)
+                    .where(model.PrimaryGroupMember.group == group_id)
+                    .limit(1)
+                )
+                .scalars()
+                .first()
+            )
             if current_pi is not None and current_pi.user != user_id:
                 # DB schema enforces one PI per group (deptcode uniqueness).
-                # Use direct SQL delete so delete happens before insert in this txn.
-                model.execute(
-                    "delete from primarygroupmember where deptcode = :group_id",
-                    {"group_id": group_id},
+                # Use an explicit delete so it happens before insert in this txn.
+                model.db.session.execute(
+                    delete(model.PrimaryGroupMember).where(
+                        model.PrimaryGroupMember.group == group_id
+                    )
                 )
                 model.db.session.flush()
             if pi_entry is None:

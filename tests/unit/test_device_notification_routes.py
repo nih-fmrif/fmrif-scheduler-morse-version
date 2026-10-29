@@ -23,6 +23,7 @@ from route_seed import (
     set_group_membership,
     set_session_user,
 )
+from sqlalchemy import func, select
 
 import scheduler.message as scheduler_message
 from scheduler import logic, model
@@ -87,8 +88,37 @@ def _mailpit_message_for_recipient(cfg, recipient: str) -> dict:
     return get_mailpit_message(cfg, str(summary["ID"]))
 
 
+def _email_audit_rows(*criteria):
+    statement = select(model.EmailAuditLog).order_by(model.EmailAuditLog.id.asc())
+    for criterion in criteria:
+        statement = statement.where(criterion)
+    return model.db.session.scalars(statement).all()
+
+
+def _support_request_for_entry(entry_id: int, supportkind: int) -> model.SupportRequest:
+    return model.db.session.execute(
+        select(model.SupportRequest)
+        .where(model.SupportRequest.schedid == entry_id)
+        .where(model.SupportRequest.supportkind == supportkind)
+    ).scalar_one()
+
+
+def _support_request_count(entry_id: int, supportkind: int) -> int:
+    return int(
+        model.db.session.scalar(
+            select(func.count())
+            .select_from(model.SupportRequest)
+            .where(model.SupportRequest.schedid == entry_id)
+            .where(model.SupportRequest.supportkind == supportkind)
+        )
+        or 0
+    )
+
+
 def _active_inst_id() -> str:
-    inst = model.Inst.query.filter(model.Inst.active).order_by(model.Inst.id).first()
+    inst = model.db.session.scalars(
+        select(model.Inst).where(model.Inst.active).order_by(model.Inst.id)
+    ).first()
     if inst is None:
         inst = model.Inst(id="I001", label="Test Institute", active=True)
         model.db.session.add(inst)
@@ -229,13 +259,9 @@ def test_device_schedule_post_delivers_support_notifications_to_mailpit(
             assert "new request" in medical_text
             assert "Support Requests" not in medical_text
 
-            audit_rows = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.scheduler.notification"
-                )
-                .filter(model.EmailAuditLog.details.like(f"%device={device_id}%"))
-                .order_by(model.EmailAuditLog.id.asc())
-                .all()
+            audit_rows = _email_audit_rows(
+                model.EmailAuditLog.action == "email.scheduler.notification",
+                model.EmailAuditLog.details.like(f"%device={device_id}%"),
             )
             assert len(audit_rows) == 2
             assert {row.recipient for row in audit_rows} == {
@@ -371,10 +397,15 @@ def test_device_schedule_post_notify_false_suppresses_support_emails(
             assert payload is not None
             assert payload["notifications"] == []
             assert list_mailpit_messages(cfg) == []
-            audit_rows = model.EmailAuditLog.query.filter(
-                model.EmailAuditLog.action == "email.scheduler.notification"
-            ).filter(model.EmailAuditLog.details.like(f"%device={device_id}%"))
-            assert audit_rows.count() == 0
+            assert (
+                len(
+                    _email_audit_rows(
+                        model.EmailAuditLog.action == "email.scheduler.notification",
+                        model.EmailAuditLog.details.like(f"%device={device_id}%"),
+                    )
+                )
+                == 0
+            )
         finally:
             clear_mailpit_messages(cfg)
 
@@ -423,13 +454,9 @@ def test_device_schedule_post_reports_missing_support_address_without_false_send
             )
             assert "Support Requests" in str(schedule_detail.get("Text", ""))
 
-            audit_rows = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.scheduler.notification"
-                )
-                .filter(model.EmailAuditLog.details.like(f"%device={device_id}%"))
-                .order_by(model.EmailAuditLog.id.asc())
-                .all()
+            audit_rows = _email_audit_rows(
+                model.EmailAuditLog.action == "email.scheduler.notification",
+                model.EmailAuditLog.details.like(f"%device={device_id}%"),
             )
             assert len(audit_rows) == 1
             assert (
@@ -484,9 +511,7 @@ def test_support_only_user_can_assign_existing_medical_request(
     assert payload is not None
     assert payload["saved"] == 1
 
-    updated_request = model.SupportRequest.query.filter_by(
-        schedid=entry_id, supportkind=1
-    ).one()
+    updated_request = _support_request_for_entry(entry_id, 1)
     assert updated_request.fulfilled_by == support_user
     assert updated_request.approved is True
     assert updated_request.modified_by == support_user
@@ -545,7 +570,4 @@ def test_support_only_user_cannot_create_new_medical_request(
     assert payload["errors"][str(entry_id)][0]["message"] == (
         "this change requires booking edit access"
     )
-    assert (
-        model.SupportRequest.query.filter_by(schedid=entry_id, supportkind=1).count()
-        == 0
-    )
+    assert _support_request_count(entry_id, 1) == 0

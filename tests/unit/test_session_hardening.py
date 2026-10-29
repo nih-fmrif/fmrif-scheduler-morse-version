@@ -16,10 +16,18 @@ def _build_test_app() -> Flask:
 
 def test_store_session_rotates_identifier():
     app = _build_test_app()
+    regenerated = {"count": 0}
+
+    class _RotatingSessionInterface(SecureCookieSessionInterface):
+        def regenerate(self, active_session):
+            regenerated["count"] += 1
+            active_session.sid = "rotated-session-id"
+            active_session.modified = True
+
     app.session_interface = type(
         "_RotatingSessionInterface",
-        (SecureCookieSessionInterface,),
-        {"_generate_sid": staticmethod(lambda: "rotated-session-id")},
+        (_RotatingSessionInterface,),
+        {},
     )()
 
     with app.test_request_context("/"):
@@ -33,6 +41,7 @@ def test_store_session_rotates_identifier():
 
         session_helpers._store_session(user)
 
+        assert regenerated["count"] == 1
         assert session.sid == "rotated-session-id"
         assert session["user_name"] == "session-user"
         assert session["email"] == "session-user@example.com"

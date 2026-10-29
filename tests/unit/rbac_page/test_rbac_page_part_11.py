@@ -14,6 +14,7 @@ from route_seed import (
     extract_csrf_token,
     set_admin_session,
 )
+from sqlalchemy import select
 
 from scheduler import logic, model
 
@@ -278,7 +279,7 @@ def test_app_issues_page_and_export_show_recent_history_issues(route_client):
     )
     model.db.session.commit()
     template_id = (
-        model.db.session.query(model.func.max(model.TemplateEntry.id)).scalar() or 0
+        model.db.session.scalar(select(model.func.max(model.TemplateEntry.id))) or 0
     ) + 1
 
     model.db.session.add_all(

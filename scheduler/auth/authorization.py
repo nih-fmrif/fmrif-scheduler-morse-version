@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Optional
 
 from flask import abort, g
+from sqlalchemy import select
 
 from scheduler import logic, model
 
@@ -12,7 +13,8 @@ def get_user_by_email(email: str) -> Optional[model.User]:
     """Fetch a user by email address."""
     if not email:
         return None
-    return model.User.query.filter_by(addr=email).first()
+    statement = select(model.User).where(model.User.addr == email).limit(1)
+    return model.db.session.execute(statement).scalars().first()
 
 
 def ensure_user(email: str, username: str, display_name: str) -> model.User:

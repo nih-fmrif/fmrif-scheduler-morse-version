@@ -7,6 +7,7 @@ from functools import lru_cache
 from typing import DefaultDict, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple
 
 from flask_wtf import FlaskForm
+from sqlalchemy import select
 from sqlalchemy.sql.functions import func
 from wtforms import fields, validators
 
@@ -63,42 +64,53 @@ def schedule_for(
     device: model.Device, start: datetime.date, end: datetime.date
 ) -> List[model.ScheduleEntry]:
     entry_model = model.ScheduleEntry
-    query = entry_model.query.filter(entry_model.device == device.id)
-    query = query.filter(entry_model.date.between(start, end))
-    query = query.order_by(entry_model.date, entry_model.hour)
-    return query.all()
+    statement = (
+        select(entry_model)
+        .where(entry_model.device == device.id)
+        .where(entry_model.date.between(start, end))
+        .order_by(entry_model.date, entry_model.hour)
+    )
+    return model.db.session.execute(statement).unique().scalars().all()
 
 
 def schedule_for_hours(
     device: model.Device, start: datetime.date, end: datetime.date, hours: List[int]
 ) -> List[model.ScheduleEntry]:
     entry_model = model.ScheduleEntry
-    query = entry_model.query.filter(entry_model.device == device.id)
-    query = query.filter(entry_model.date.between(start, end))
-    query = query.filter(entry_model.hour.in_(hours))
-    query = query.order_by(entry_model.hour, entry_model.date)
-    return query.all()
+    statement = (
+        select(entry_model)
+        .where(entry_model.device == device.id)
+        .where(entry_model.date.between(start, end))
+        .where(entry_model.hour.in_(hours))
+        .order_by(entry_model.hour, entry_model.date)
+    )
+    return model.db.session.execute(statement).unique().scalars().all()
 
 
 def schedule_exists_for(
     device: model.Device, start: datetime.date, end: datetime.date
 ) -> bool:
     entry_model = model.ScheduleEntry
-    query = model.db.session.query(entry_model.id)
-    query = query.filter(entry_model.device == device.id)
-    query = query.filter(entry_model.date.between(start, end))
-    return query.first() is not None
+    statement = (
+        select(entry_model.id)
+        .where(entry_model.device == device.id)
+        .where(entry_model.date.between(start, end))
+        .limit(1)
+    )
+    return model.db.session.execute(statement).first() is not None
 
 
 def schedule_used_hours_for(
     device: model.Device, start: datetime.date, end: datetime.date
 ) -> Set[int]:
     entry_model = model.ScheduleEntry
-    query = model.db.session.query(entry_model.hour).filter(
-        entry_model.device == device.id
+    statement = (
+        select(entry_model.hour)
+        .where(entry_model.device == device.id)
+        .where(entry_model.date.between(start, end))
+        .distinct()
     )
-    query = query.filter(entry_model.date.between(start, end)).distinct()
-    return set(hour for (hour,) in query.all())
+    return set(model.db.session.execute(statement).scalars())
 
 
 def group_schedule_entries(
@@ -133,11 +145,11 @@ def device_schedule_extreme_dates(
 ) -> Tuple[Optional[datetime.date], Optional[datetime.date]]:
     """Return the first and last scheduled day for a device."""
     entry_model = model.ScheduleEntry
-    return (
-        model.db.session.query(func.min(entry_model.date), func.max(entry_model.date))
-        .filter(entry_model.device == device.id)
-        .first()
+    statement = select(func.min(entry_model.date), func.max(entry_model.date)).where(
+        entry_model.device == device.id
     )
+    first_date, last_date = model.db.session.execute(statement).one()
+    return first_date, last_date
 
 
 def next_schedule_day(
@@ -146,17 +158,17 @@ def next_schedule_day(
     """Find the nearest scheduled day before or after ``from_date`` for a device."""
     entry_model = model.ScheduleEntry
     if direction == 1:
-        query = model.db.session.query(func.min(entry_model.date)).filter(
+        statement = select(func.min(entry_model.date)).where(
             entry_model.device == device.id,
             entry_model.date > from_date,
         )
     else:
-        query = model.db.session.query(func.max(entry_model.date)).filter(
+        statement = select(func.max(entry_model.date)).where(
             entry_model.device == device.id,
             entry_model.date < from_date,
         )
 
-    return query.scalar()
+    return model.db.session.execute(statement).scalar()
 
 
 def date_or_today(date: Optional[datetime.date]) -> datetime.date:
@@ -205,9 +217,7 @@ def user_datalist_entry(user_id: str, name: str) -> str:
 
 def get_device_from_schedid(entry_id) -> Optional[model.Device]:
     schedule_entry_model = model.ScheduleEntry
-    entry = schedule_entry_model.query.filter(
-        schedule_entry_model.id == entry_id
-    ).first()
+    entry = model.get(schedule_entry_model, entry_id)
     if entry is None:
         return None
     return model.get(model.Device, entry.device)

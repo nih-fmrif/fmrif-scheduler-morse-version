@@ -7,6 +7,29 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_COMPOSE = REPO_ROOT / "run-compose.sh"
+INHERITED_RUNTIME_ENV_KEYS = (
+    "APP_PORT",
+    "AUTH_TEST__SHARED_SECRET",
+    "COMPOSE_PROJECT_NAME",
+    "FMRIF_RUNTIME_SCOPE",
+    "FMRIF_RUNTIME_SCOPE_OFFSET",
+    "INTEGRATION_APP_PORT",
+    "MAILPIT__PORT",
+    "MAILPIT__SMTP_PORT",
+    "MAILPIT_INTEGRATION__PORT",
+    "MAILPIT_INTEGRATION__SMTP_PORT",
+    "MAILPIT_ROUTES__PORT",
+    "MAILPIT_ROUTES__SMTP_PORT",
+    "MAILPIT_UNIT__PORT",
+    "MAILPIT_UNIT__SMTP_PORT",
+    "PGDATABASE",
+    "PGHOST",
+    "PGPASSWORD",
+    "PGPORT",
+    "PGUSER",
+    "RUNTIME_SCOPE_DIR",
+    "SESSION__COOKIE_NAME",
+)
 
 
 def _write_fake_docker(tmp_path: Path) -> tuple[Path, Path]:
@@ -147,6 +170,8 @@ def _run_compose(
     *args: str, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     run_env = os.environ.copy()
+    for key in INHERITED_RUNTIME_ENV_KEYS:
+        run_env.pop(key, None)
     if env:
         run_env.update(env)
     return subprocess.run(

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Literal, Optional, Set, Tuple, cast
 
 from flask import g
 from flask_wtf import FlaskForm
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import func
@@ -220,7 +221,9 @@ def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
     if old_id == new_id:
         return
 
-    memberships = model.GroupMember.query.filter_by(user=old_id).all()
+    memberships = model.db.session.scalars(
+        select(model.GroupMember).where(model.GroupMember.user == old_id)
+    ).all()
     for row in memberships:
         existing = model.get(model.GroupMember, (row.group, new_id))
         if existing is not None:
@@ -232,7 +235,9 @@ def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
         row.user = new_id
         model.db.session.add(row)
 
-    primary_memberships = model.PrimaryGroupMember.query.filter_by(user=old_id).all()
+    primary_memberships = model.db.session.scalars(
+        select(model.PrimaryGroupMember).where(model.PrimaryGroupMember.user == old_id)
+    ).all()
     for row in primary_memberships:
         existing = model.get(model.PrimaryGroupMember, (row.group, new_id))
         if existing is not None:
@@ -249,7 +254,9 @@ def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
             technologist.user = new_id
             model.db.session.add(technologist)
 
-    permissions = model.UserDevice.query.filter_by(user=old_id).all()
+    permissions = model.db.session.scalars(
+        select(model.UserDevice).where(model.UserDevice.user == old_id)
+    ).all()
     for row in permissions:
         existing = model.get(model.UserDevice, (new_id, row.device))
         if existing is not None:
@@ -264,20 +271,30 @@ def _rekey_user_foreign_keys(old_id: str, new_id: str) -> None:
         row.user = new_id
         model.db.session.add(row)
 
-    model.ScheduleEntry.query.filter_by(user=old_id).update(
-        {"user": new_id}, synchronize_session=False
+    model.db.session.execute(
+        update(model.ScheduleEntry)
+        .where(model.ScheduleEntry.user == old_id)
+        .values(user=new_id)
     )
-    model.TemplateEntry.query.filter_by(user=old_id).update(
-        {"user": new_id}, synchronize_session=False
+    model.db.session.execute(
+        update(model.TemplateEntry)
+        .where(model.TemplateEntry.user == old_id)
+        .values(user=new_id)
     )
-    model.SupportRequest.query.filter_by(filed_by=old_id).update(
-        {"filed_by": new_id}, synchronize_session=False
+    model.db.session.execute(
+        update(model.SupportRequest)
+        .where(model.SupportRequest.filed_by == old_id)
+        .values(filed_by=new_id)
     )
-    model.SupportRequest.query.filter_by(fulfilled_by=old_id).update(
-        {"fulfilled_by": new_id}, synchronize_session=False
+    model.db.session.execute(
+        update(model.SupportRequest)
+        .where(model.SupportRequest.fulfilled_by == old_id)
+        .values(fulfilled_by=new_id)
     )
-    model.SupportRequest.query.filter_by(modified_by=old_id).update(
-        {"modified_by": new_id}, synchronize_session=False
+    model.db.session.execute(
+        update(model.SupportRequest)
+        .where(model.SupportRequest.modified_by == old_id)
+        .values(modified_by=new_id)
     )
 
 
@@ -346,8 +363,8 @@ def upsert_user(
 
     # Email is authoritative when present. Reuse any existing record for it.
     if normalized_mail:
-        existing_by_mail = model.User.query.filter(
-            func.lower(model.User.addr) == normalized_mail
+        existing_by_mail = model.db.session.scalars(
+            select(model.User).where(func.lower(model.User.addr) == normalized_mail)
         ).first()
         if existing_by_mail is not None:
             if migrate_to_requested_id and existing_by_mail.id != requested_id:
@@ -423,13 +440,15 @@ def get_memberships(user: Any) -> List[str]:
         if cached is not None:
             return list(cached)
 
-    q = model.Membership.query
-    q = q.filter(model.Membership.user == user_id)
-    # inactive users are effectively not in any group
-    q = q.filter(model.Membership.user_active)
-    q = q.filter(model.Membership.group_active)
-    q = q.filter(model.Membership.approved)
-    ms = q.order_by(model.Membership.group).all()
+    membership_statement = (
+        select(model.Membership)
+        .where(model.Membership.user == user_id)
+        .where(model.Membership.user_active)
+        .where(model.Membership.group_active)
+        .where(model.Membership.approved)
+        .order_by(model.Membership.group)
+    )
+    ms = model.db.session.scalars(membership_statement).all()
     memberships = [m.group for m in ms]
 
     # Keep the request-scoped cache populated so app-level helpers and downstream
@@ -449,42 +468,51 @@ def get_group(which: str) -> Optional[model.Group]:
 
 def pi_of_group(group: str) -> str:
     M = model.Membership
-    m = M.query.filter(M.group == group).filter(M.pi).first()
+    m = model.db.session.scalars(select(M).where(M.group == group).where(M.pi)).first()
     return m.user
 
 
 def change_pi_of_group(group: model.Group, user: model.User) -> None:
     m = model.PrimaryGroupMember
-    m.query.filter(m.group == group.id).delete()
+    model.db.session.execute(delete(m).where(m.group == group.id))
     new = m(group=group.id, user=user.id)
     model.db.session.add(new)
 
 
 def get_all_groups_with_members(active: bool) -> List[model.Group]:
-    q = model.Group.query
-    q = q.filter(model.Group.active == active)
-    q = q.filter(model.Group.has_membership)
-    return q.order_by(model.Group.label).all()
+    statement = (
+        select(model.Group)
+        .where(model.Group.active == active)
+        .where(model.Group.has_membership)
+        .order_by(model.Group.label)
+    )
+    return model.db.session.scalars(statement).all()
 
 
 def get_groups(which: List[str]) -> List[model.Group]:
     # sqlalchemy metaclass has confused mypy but it's fine so we ignore
     id_col = cast(Any, model.Group.id)
-    q = model.Group.query
-    q = q.filter(model.Group.active)
-    q = q.filter(id_col.in_(which))
-    return q.order_by(model.Group.label).all()
+    statement = (
+        select(model.Group)
+        .where(model.Group.active)
+        .where(id_col.in_(which))
+        .order_by(model.Group.label)
+    )
+    return model.db.session.scalars(statement).all()
 
 
 def get_members_of_group(
     group: model.Group, all: bool = False
 ) -> List[Tuple[str, bool, bool]]:
-    q = model.Membership.query
-    q = q.filter(model.Membership.group == group.id)
-    q = q.filter(model.Membership.user_active)
+    statement = (
+        select(model.Membership)
+        .where(model.Membership.group == group.id)
+        .where(model.Membership.user_active)
+    )
     if not all:
-        q = q.filter(model.Membership.approved)
-    return [(r.user, r.pi, r.approved) for r in q.all()]
+        statement = statement.where(model.Membership.approved)
+    memberships = model.db.session.scalars(statement).all()
+    return [(r.user, r.pi, r.approved) for r in memberships]
 
 
 def remove_user_from_group(user: model.User, group: model.Group) -> None:
@@ -500,19 +528,21 @@ Group_leader_kind = Set[Literal["group_pi", "dev_pi", "admin"]]
 def get_group_leader_kind(user: model.User, group: model.Group) -> Group_leader_kind:
     session_pi_groups = get_auth_test_session_pi_groups(user)
     M = model.Membership
-    q = M.query
-    q = q.filter(M.user == user.id)
-    q = q.filter(M.user_active)
-    q = q.filter(M.approved)
-    q = q.filter(
-        or_(
-            and_(M.group == group.id, M.pi),  # pi of current group
-            and_(M.group == "DEV", M.pi),  # pi of DEV group
-            M.group == "admin",  # any admin
+    statement = (
+        select(M)
+        .where(M.user == user.id)
+        .where(M.user_active)
+        .where(M.approved)
+        .where(
+            or_(
+                and_(M.group == group.id, M.pi),  # pi of current group
+                and_(M.group == "DEV", M.pi),  # pi of DEV group
+                M.group == "admin",  # any admin
+            )
         )
     )
     result: Group_leader_kind = set()
-    for r in q.all():
+    for r in model.db.session.scalars(statement).all():
         if r.group == group.id and r.pi:
             result.add("group_pi")
         elif r.group == "DEV" and r.pi:
@@ -627,9 +657,9 @@ def get_institutes_datalist() -> Datalist:
 @lru_cache(maxsize=1)
 def _cached_institutes_datalist() -> Tuple[Tuple[str, str], ...]:
     m = model.Inst
-    q = m.query.filter(m.active)
+    institutes = model.db.session.scalars(select(m).where(m.active)).all()
     r = []
-    for i in q.all():
+    for i in institutes:
         lbl = i.label
         if lbl != i.id:
             # if the label and id are distinct append the id to the end of the label
@@ -751,11 +781,12 @@ def get_device(id: str) -> Optional[model.Device]:
 
 
 def get_devices(active: bool) -> List[model.Device]:
-    return (
-        model.Device.query.filter(model.Device.active == active)
+    statement = (
+        select(model.Device)
+        .where(model.Device.active == active)
         .order_by(model.Device.label)
-        .all()
     )
+    return model.db.session.scalars(statement).all()
 
 
 class DevicePerms(object):
@@ -846,17 +877,19 @@ def get_dev_perms(user: model.User, device: model.Device) -> DevicePerms:
     if has_auth_test_session_pi_group(user, "DEV"):
         is_dpi = True
     M = model.Membership
-    q = M.query
-    q = q.filter(M.user == user.id)
-    q = q.filter(M.user_active)
-    q = q.filter(M.approved)
-    q = q.filter(
-        or_(
-            and_(M.group == "DEV", M.pi),  # pi of DEV group
-            M.group == "admin",  # any admin
+    membership_statement = (
+        select(M)
+        .where(M.user == user.id)
+        .where(M.user_active)
+        .where(M.approved)
+        .where(
+            or_(
+                and_(M.group == "DEV", M.pi),  # pi of DEV group
+                M.group == "admin",  # any admin
+            )
         )
     )
-    for r in q.all():
+    for r in model.db.session.scalars(membership_statement).all():
         if r.group == "DEV" and r.pi:
             is_dpi = True
         elif r.group == "admin":

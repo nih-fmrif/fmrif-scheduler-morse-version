@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, cast
 
 from flask_wtf import FlaskForm
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.functions import func
 from wtforms import fields, validators
@@ -45,21 +46,24 @@ def templates_of_device(
     device: model.Device, archived: bool = False
 ) -> List[model.Template]:
     template_model = model.Template
-    query = (
-        template_model.query.filter(template_model.device == device.id)
-        .filter(template_model.hidden == archived)
+    statement = (
+        select(template_model)
+        .where(template_model.device == device.id)
+        .where(template_model.hidden == archived)
         .order_by(template_model.label)
     )
-    return query.all()
+    return model.db.session.scalars(statement).all()
 
 
 def all_templates_of_device(device: model.Device) -> Datalist:
     template_model = model.Template
-    query = template_model.query.filter(template_model.device == device.id).order_by(
-        template_model.hidden, template_model.label
+    statement = (
+        select(template_model)
+        .where(template_model.device == device.id)
+        .order_by(template_model.hidden, template_model.label)
     )
     out = []
-    for template in query.all():
+    for template in model.db.session.scalars(statement).all():
         archived = ""
         if template.hidden:
             archived = " [archived]"
@@ -199,11 +203,13 @@ def get_template_entries(
     device: model.Device, template: model.Template
 ) -> List[model.TemplateEntry]:
     entry_model = model.TemplateEntry
-    query = entry_model.query
-    query = query.filter(entry_model.device == device.id)
-    query = query.filter(entry_model.template == template.id)
-    query = query.order_by(entry_model.hour, entry_model.dow)
-    return query.all()
+    statement = (
+        select(entry_model)
+        .where(entry_model.device == device.id)
+        .where(entry_model.template == template.id)
+        .order_by(entry_model.hour, entry_model.dow)
+    )
+    return model.db.session.scalars(statement).all()
 
 
 def normalize_template_group(value: Optional[str]) -> Optional[str]:
@@ -232,10 +238,8 @@ def display_template_entries(
 
 def get_start_day_of(device: model.Device) -> Optional[datetime.date]:
     entry_model = model.ScheduleEntry
-    day = (
-        model.db.session.query(func.max(entry_model.date))
-        .filter(entry_model.device == device.id)
-        .scalar()
+    day = model.db.session.scalar(
+        select(func.max(entry_model.date)).where(entry_model.device == device.id)
     )
     if day is not None:
         day += datetime.timedelta(days=1)
@@ -284,8 +288,10 @@ def _template_validation_context(
     device: model.Device,
 ) -> Tuple[Set[Optional[str]], Dict[Optional[str], Set[Optional[str]]]]:
     inst_model = model.Inst
-    inst_query = inst_model.query.filter(inst_model.active)
-    inst: Set[Optional[str]] = set(inst_entry.id for inst_entry in inst_query.all())
+    inst_statement = select(inst_model).where(inst_model.active)
+    inst: Set[Optional[str]] = {
+        inst_entry.id for inst_entry in model.db.session.scalars(inst_statement).all()
+    }
     inst.add(None)
 
     groups: Dict[Optional[str], Set[Optional[str]]] = {None: {None}}
@@ -323,21 +329,27 @@ def inspect_template_compatibility(
 
     template_model = model.Template
     id_col = cast(Any, template_model.id)
-    template_query = template_model.query.filter(
-        template_model.device == device.id
-    ).filter(id_col.in_(ordered_templates))
-    template_by_id = {template.id: template for template in template_query.all()}
+    template_statement = (
+        select(template_model)
+        .where(template_model.device == device.id)
+        .where(id_col.in_(ordered_templates))
+    )
+    template_by_id = {
+        template.id: template
+        for template in model.db.session.scalars(template_statement).all()
+    }
 
     entry_map: DefaultDict[str, List[model.TemplateEntry]] = defaultdict(list)
     if entries is None:
         entry_model = model.TemplateEntry
         template_col = cast(Any, entry_model.template)
-        entry_query = entry_model.query.filter(entry_model.device == device.id).filter(
-            template_col.in_(ordered_templates)
+        entry_statement = (
+            select(entry_model)
+            .where(entry_model.device == device.id)
+            .where(template_col.in_(ordered_templates))
+            .order_by(entry_model.template, entry_model.dow, entry_model.hour)
         )
-        selected_entries = entry_query.order_by(
-            entry_model.template, entry_model.dow, entry_model.hour
-        ).all()
+        selected_entries = model.db.session.scalars(entry_statement).all()
     else:
         selected_entries = [entry for entry in entries if entry.template in seen]
 

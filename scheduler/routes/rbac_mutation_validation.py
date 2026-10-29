@@ -5,6 +5,8 @@ import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
+from sqlalchemy import select
+
 from scheduler import logic, model
 
 _RBAC_SCOPE_LABELS: Dict[str, str] = {
@@ -406,7 +408,9 @@ def _rbac_validate_batch_operation(
             required=True,
             max_length=20,
         )
-        existing_short = model.Group.query.filter(model.Group.label == label).first()
+        existing_short = model.db.session.scalars(
+            select(model.Group).where(model.Group.label == label)
+        ).first()
         if existing_short is not None:
             raise ValueError(f"group short label already in use: {label}")
 
@@ -416,8 +420,8 @@ def _rbac_validate_batch_operation(
             required=True,
             max_length=75,
         )
-        existing_long = model.Group.query.filter(
-            model.Group.description == description
+        existing_long = model.db.session.scalars(
+            select(model.Group).where(model.Group.description == description)
         ).first()
         if existing_long is not None:
             raise ValueError(f"group description already in use: {description}")
@@ -487,7 +491,9 @@ def _rbac_validate_batch_operation(
             required=True,
             max_length=25,
         )
-        existing_label = model.Device.query.filter(model.Device.label == label).first()
+        existing_label = model.db.session.scalars(
+            select(model.Device).where(model.Device.label == label)
+        ).first()
         if existing_label is not None:
             raise ValueError(f"device label already in use: {label}")
 

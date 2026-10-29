@@ -109,6 +109,7 @@ function shouldIgnoreHTTPSErrorsByDefault(urlString: string): boolean {
 }
 
 const baseURL = normalizeBaseURL(syncLocalBaseURLPort(configuredBaseURL));
+const externalServer = parseBooleanEnv('PLAYWRIGHT_EXTERNAL_SERVER', false);
 process.env.TEST_BASE_URL = baseURL;
 const proxyServer = normalizeProxyServer(
   process.env.PLAYWRIGHT_PROXY_SERVER ||
@@ -129,6 +130,10 @@ if (proxyServer) {
 }
 
 function buildWebServerConfig() {
+  if (externalServer) {
+    return undefined;
+  }
+
   try {
     const parsedBaseURL = new URL(baseURL);
     const isLocalTarget = parsedBaseURL.hostname === 'localhost' || parsedBaseURL.hostname === '127.0.0.1';

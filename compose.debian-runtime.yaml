@@ -1,0 +1,10 @@
+services:
+  postgres:
+    environment:
+      SQL_SEED_DUMP_FILE: /sql/generated-rooted-template-subset.sql
+
+  scheduler:
+    build:
+      dockerfile: Dockerfile.debian-runtime
+      args:
+        DEBIAN_VERSION: ${DEBIAN_VERSION:-12.13}

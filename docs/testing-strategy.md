@@ -45,6 +45,13 @@
 - Runtime: requires reachable Postgres and access to the old repo checkout used by `scripts/bootstrap-old-compat-db.sh`
 - CI: optional/manual by default
 
+7. Debian runtime verification (`Compose` + `Playwright`, packaging-focused)
+- Scope: validates the app against Debian-packaged runtime dependencies instead of the Pixi-managed environment
+- Targets: Debian `12.13` and `13.1`
+- CI: yes
+- Browser scope: Chromium for the Debian integration matrix; the main Pixi integration job remains the broader browser-coverage lane
+- Rationale: see [`docs/runtime-matrix.md`](./runtime-matrix.md)
+
 ## Shared Test Infrastructure
 
 - Authenticated Playwright integration tests share `tests/playwright/support/auth-fixture.ts`.
@@ -86,6 +93,14 @@ pixi run test-routes -- tests/unit/test_some_route_file.py -q
 Integration tests (CI mode, mock auth):
 ```bash
 pixi run test-integration
+```
+
+Debian runtime smoke/integration:
+```bash
+DEBIAN_VERSION=12.13 pixi run test-debian-smoke
+DEBIAN_VERSION=12.13 pixi run test-debian-integration
+DEBIAN_VERSION=13.1 pixi run test-debian-smoke
+DEBIAN_VERSION=13.1 pixi run test-debian-integration
 ```
 
 Heavy integration tests (manual/opt-in):

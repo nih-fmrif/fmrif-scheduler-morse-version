@@ -21,6 +21,7 @@ from flask import (
     request,
     url_for,
 )
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from scheduler import model
@@ -79,8 +80,11 @@ def login():
         return redirect(url_for("home"))
 
     next_url = _safe_next_url(request.args.get("next"))
+    start_login_url = url_for("auth.start_login")
+    if next_url:
+        start_login_url = f"{start_login_url}?{urlencode({'next': next_url})}"
 
-    return render_template("auth/login.html", next_url=next_url)
+    return render_template("auth/login.html", start_login_url=start_login_url)
 
 
 @auth.route("/callback")
@@ -381,7 +385,8 @@ def _create_oauth_state(
 def _consume_oauth_state(state: str) -> Optional[dict]:
     logger = current_app.logger if current_app else None
     try:
-        record = model.OAuthState.query.filter_by(state=state).one_or_none()
+        statement = select(model.OAuthState).where(model.OAuthState.state == state)
+        record = model.db.session.execute(statement).scalar_one_or_none()
         if not record:
             return None
 

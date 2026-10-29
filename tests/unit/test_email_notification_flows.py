@@ -12,6 +12,7 @@ from mailpit_api import (
     mailpit_config_from_env,
     wait_for_mailpit_message,
 )
+from sqlalchemy import select
 
 import scheduler.message as scheduler_message
 from scheduler import logic, model
@@ -26,6 +27,20 @@ def _require_mailpit():
     if not mailpit_available(cfg):
         pytest.skip(f"Mailpit API is not reachable at {cfg.api_base_url}.")
     return cfg
+
+
+def _email_audit_rows(*criteria):
+    statement = select(model.EmailAuditLog)
+    for criterion in criteria:
+        statement = statement.where(criterion)
+    return model.db.session.scalars(statement).all()
+
+
+def _latest_email_audit(*criteria):
+    statement = select(model.EmailAuditLog).order_by(model.EmailAuditLog.id.desc())
+    for criterion in criteria:
+        statement = statement.where(criterion)
+    return model.db.session.scalars(statement).first()
 
 
 @contextmanager
@@ -251,13 +266,9 @@ def test_notify_user_of_join_request_outcome_delivers_mail_and_audits(app_contex
             logic.notify_user_of_join_request_outcome(True, user, "DEV")
             model.db.session.flush()
 
-            audit_row = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.join.outcome"
-                )
-                .filter(model.EmailAuditLog.recipient == addr)
-                .order_by(model.EmailAuditLog.id.desc())
-                .first()
+            audit_row = _latest_email_audit(
+                model.EmailAuditLog.action == "email.join.outcome",
+                model.EmailAuditLog.recipient == addr,
             )
             assert audit_row is not None
             assert audit_row.status == logic.EMAIL_AUDIT_STATUS_SENT
@@ -296,13 +307,9 @@ def test_notify_user_of_tech_join_request_outcome_delivers_mail_and_audits(app_c
             logic.notify_user_of_tech_join_request_outcome(False, user)
             model.db.session.flush()
 
-            audit_row = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.join.tech.outcome"
-                )
-                .filter(model.EmailAuditLog.recipient == addr)
-                .order_by(model.EmailAuditLog.id.desc())
-                .first()
+            audit_row = _latest_email_audit(
+                model.EmailAuditLog.action == "email.join.tech.outcome",
+                model.EmailAuditLog.recipient == addr,
             )
             assert audit_row is not None
             assert audit_row.status == logic.EMAIL_AUDIT_STATUS_SENT
@@ -359,12 +366,9 @@ def test_send_scheduler_notifications_delivers_all_streams_and_audits(app_contex
             model.db.session.flush()
             _wait_for_mail_count(cfg, expected=4)
 
-            audit_rows = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.scheduler.notification"
-                )
-                .filter(model.EmailAuditLog.details.like(f"%device={device_id}%"))
-                .all()
+            audit_rows = _email_audit_rows(
+                model.EmailAuditLog.action == "email.scheduler.notification",
+                model.EmailAuditLog.details.like(f"%device={device_id}%"),
             )
             assert len(audit_rows) == 4
             assert all(
@@ -399,9 +403,9 @@ def test_send_scheduler_notifications_records_missing_address_notes(app_context)
     notes = logic.send_scheduler_notifications(device, messages)
     assert len(notes) == 4
     assert all(note["msg"] == "address" for note in notes)
-    audit_rows = model.EmailAuditLog.query.filter(
+    audit_rows = _email_audit_rows(
         model.EmailAuditLog.action == "email.scheduler.notification"
-    ).all()
+    )
     assert audit_rows == []
 
 
@@ -435,12 +439,9 @@ def test_send_scheduler_notifications_marks_suppressed_delivery_as_skipped(
         assert all(note["msg"] == "skipped" for note in notes)
         model.db.session.flush()
 
-        audit_rows = (
-            model.EmailAuditLog.query.filter(
-                model.EmailAuditLog.action == "email.scheduler.notification"
-            )
-            .filter(model.EmailAuditLog.details.like(f"%device={device_id}%"))
-            .all()
+        audit_rows = _email_audit_rows(
+            model.EmailAuditLog.action == "email.scheduler.notification",
+            model.EmailAuditLog.details.like(f"%device={device_id}%"),
         )
         assert len(audit_rows) == 4
         assert all(row.status == logic.EMAIL_AUDIT_STATUS_SKIPPED for row in audit_rows)

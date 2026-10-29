@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from flask import g, request
+from sqlalchemy import select
 from sqlalchemy.sql import func
 
 from scheduler import logic, model
@@ -936,11 +937,12 @@ def _rbac_apply_batch_operation(
     if kind == "group.pi.set":
         group = validated["group"]
         user = validated["user"]
-        current_pi = (
-            model.Membership.query.filter(model.Membership.group == group.id)
-            .filter(model.Membership.pi)
-            .first()
+        current_pi_statement = (
+            select(model.Membership)
+            .where(model.Membership.group == group.id)
+            .where(model.Membership.pi)
         )
+        current_pi = model.db.session.scalars(current_pi_statement).first()
         current_pi_user = current_pi.user if current_pi is not None else ""
         expected_current_pi = str(validated.get("expected_current_pi", "")).strip()
         if bool(validated.get("has_expected_current_pi")):
@@ -953,13 +955,13 @@ def _rbac_apply_batch_operation(
 
         approved_members = {
             row.user
-            for row in (
-                model.Membership.query.filter(model.Membership.group == group.id)
-                .filter(model.Membership.approved)
-                .filter(model.Membership.user_active)
-                .filter(model.Membership.group_active)
-                .all()
-            )
+            for row in model.db.session.scalars(
+                select(model.Membership)
+                .where(model.Membership.group == group.id)
+                .where(model.Membership.approved)
+                .where(model.Membership.user_active)
+                .where(model.Membership.group_active)
+            ).all()
         }
         if user.id not in approved_members:
             raise ValueError(

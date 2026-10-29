@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from route_seed import ensure_active_user, ensure_group
 from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import select
 
 from scheduler import model
 from scheduler.logic.schedule_editor import (
@@ -52,12 +53,24 @@ def _scheduler_perms(**overrides):
 
 def _seed_sched_entry(group_id: str, member_id: str) -> model.ScheduleEntry:
     entry = (
-        model.ScheduleEntry.query.filter(~model.ScheduleEntry.requests.any())
-        .order_by(model.ScheduleEntry.id)
+        model.db.session.execute(
+            select(model.ScheduleEntry)
+            .where(~model.ScheduleEntry.requests.any())
+            .order_by(model.ScheduleEntry.id)
+        )
+        .unique()
+        .scalars()
         .first()
     )
     if entry is None:
-        entry = model.ScheduleEntry.query.order_by(model.ScheduleEntry.id).first()
+        entry = (
+            model.db.session.execute(
+                select(model.ScheduleEntry).order_by(model.ScheduleEntry.id)
+            )
+            .unique()
+            .scalars()
+            .first()
+        )
         assert entry is not None
         for sr in list(entry.requests):
             model.db.session.delete(sr)
@@ -85,9 +98,9 @@ def _seed_support_users():
         active=True,
         has_membership=True,
     )
-    admin = model.User.query.get("sched-admin")
-    member = model.User.query.get("sched-member")
-    support = model.User.query.get("sched-support")
+    admin = model.get(model.User, "sched-admin")
+    member = model.get(model.User, "sched-member")
+    support = model.get(model.User, "sched-support")
     assert admin is not None
     assert member is not None
     assert support is not None

@@ -498,28 +498,22 @@ def test_home_exposes_filter_and_show_more_configuration(route_client):
 def test_group_pi_probe_is_request_cached(monkeypatch, route_app_context):
     import scheduler.app as scheduler_app_module
 
-    class DummyQuery:
-        def __init__(self):
-            self.first_calls = 0
-
-        def filter(self, *_args, **_kwargs):
-            return self
-
-        def first(self):
-            self.first_calls += 1
-            return object()
-
     class DummyUser:
         def __init__(self, user_id: str):
             self.id = user_id
             self.active = True
 
-    dummy_query = DummyQuery()
-    monkeypatch.setattr(model.Membership, "query", dummy_query, raising=False)
+    scalar_calls = {"count": 0}
+
+    def fake_scalar(_statement):
+        scalar_calls["count"] += 1
+        return "group-pi-cache"
+
+    monkeypatch.setattr(model.db.session, "scalar", fake_scalar)
 
     with route_app_context.test_request_context("/"):
         g.user = DummyUser("group-pi-cache")
         assert scheduler_app_module._rbac_user_is_group_pi(g.user) is True
         assert scheduler_app_module._rbac_user_is_group_pi(g.user) is True
 
-    assert dummy_query.first_calls == 1
+    assert scalar_calls["count"] == 1

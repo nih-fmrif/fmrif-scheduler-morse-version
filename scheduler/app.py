@@ -11,22 +11,23 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import click
 from flask import (
-    Blueprint,
     Flask,
+    Response,
     abort,
     current_app,
+    flash,
     g,
     got_request_exception,
+    jsonify,
     redirect,
+    render_template,
     request,
+    url_for,
 )
-from flask.helpers import flash, url_for
-from flask.json import jsonify
-from flask.templating import render_template
-from flask.wrappers import Response
 from flask_session import Session
 from itsdangerous.url_safe import URLSafeSerializer
 from markupsafe import Markup, escape
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 
@@ -61,7 +62,6 @@ def current_csp_nonce() -> str:
         return ""
 
 
-core = Blueprint("", __name__)
 _SHARED_SESSION_INTERFACE = None
 _APP_ERROR_REFERENCE_PREFIX = "APP-ERR"
 _APP_ERROR_BODY_PREVIEW_CHARS = 4096
@@ -126,7 +126,6 @@ def create_app() -> Flask:
     app.config["STATIC_ASSET_VERSION"] = _resolve_static_asset_version()
 
     if app_env == "development":
-        os.environ.setdefault("FLASK_ENV", "development")
         os.environ.setdefault("FLASK_DEBUG", "1")
         os.environ.setdefault("FLASK_RUN_RELOAD", "1")
         app.config["DEBUG"] = True
@@ -160,7 +159,8 @@ def create_app() -> Flask:
     app.config["URL_SIGNER"] = signer
 
     app.register_blueprint(auth, url_prefix="/auth")
-    app.register_blueprint(core)
+    register_core_app_features(app)
+    register_core_routes(app)
 
     register_rbac_blueprint(
         app,
@@ -195,7 +195,6 @@ def create_app() -> Flask:
 ## Authentication
 
 
-@core.before_app_request
 def setup_user():
     """Load user from session if available"""
     g.csp_nonce = secrets.token_urlsafe(16) if settings.security.enable_csp else ""
@@ -294,7 +293,6 @@ def _csp_report_actor() -> str:
     return user_id or "anonymous"
 
 
-@core.route("/csp-report", methods=["POST"])
 def csp_report():
     if not logic.csp_violation_event_table_available():
         return ("", 204)
@@ -461,16 +459,16 @@ def _home_device_permissions(
         is_dev_pi = has_auth_test_session_pi_group(user_id, "DEV")
         if not is_dev_pi:
             M = model.Membership
-            is_dev_pi = (
-                M.query.filter(M.user == user_id)
-                .filter(M.group == "DEV")
-                .filter(M.pi)
-                .filter(M.approved)
-                .filter(M.user_active)
-                .filter(M.group_active)
-                .first()
-                is not None
+            dev_pi_statement = (
+                select(M.user)
+                .where(M.user == user_id)
+                .where(M.group == "DEV")
+                .where(M.pi)
+                .where(M.approved)
+                .where(M.user_active)
+                .where(M.group_active)
             )
+            is_dev_pi = model.db.session.scalar(dev_pi_statement) is not None
 
     if is_admin or is_dev_pi:
         for device_id in device_id_set:
@@ -479,19 +477,22 @@ def _home_device_permissions(
 
     editable_device_ids = set()
     if memberships:
+        editable_device_statement = select(model.DeviceGroup.device).where(
+            model.DeviceGroup.group.in_(memberships)
+        )
         editable_device_ids = {
             device_id
-            for (device_id,) in model.db.session.query(model.DeviceGroup.device)
-            .filter(model.DeviceGroup.group.in_(memberships))
-            .all()
+            for device_id in model.db.session.scalars(editable_device_statement).all()
             if device_id in device_id_set
         }
 
+    user_device_statement = (
+        select(model.UserDevice)
+        .where(model.UserDevice.user == user_id)
+        .where(model.UserDevice.device.in_(device_id_set))
+    )
     user_devices = {
-        row.device: row
-        for row in model.UserDevice.query.filter_by(user=user_id)
-        .filter(model.UserDevice.device.in_(device_id_set))
-        .all()
+        row.device: row for row in model.db.session.scalars(user_device_statement).all()
     }
 
     for device_id in device_id_set:
@@ -537,13 +538,15 @@ def _rbac_user_is_group_pi(user: model.User) -> bool:
     value = len(get_auth_test_session_pi_groups(user_id)) > 0
     if not value:
         M = model.Membership
-        q = M.query
-        q = q.filter(M.user == user_id)
-        q = q.filter(M.user_active)
-        q = q.filter(M.approved)
-        q = q.filter(M.pi)
-        q = q.filter(M.group_active)
-        value = q.first() is not None
+        group_pi_statement = (
+            select(M.user)
+            .where(M.user == user_id)
+            .where(M.user_active)
+            .where(M.approved)
+            .where(M.pi)
+            .where(M.group_active)
+        )
+        value = model.db.session.scalar(group_pi_statement) is not None
     cache[user_id] = bool(value)
     return value
 
@@ -564,7 +567,6 @@ def _rbac_user_can_access(
     return _rbac_user_is_group_pi(user)
 
 
-@core.app_context_processor
 def inject_template_context():
     """Provide shared template context values."""
 
@@ -594,7 +596,6 @@ def inject_template_context():
     }
 
 
-@core.after_app_request
 def apply_security_headers(response: Response):
     """Apply baseline security headers without changing page behavior."""
     response.headers["X-Content-Type-Options"] = settings.security.content_type_options
@@ -635,19 +636,16 @@ def login_required(f):
     return require_jwt(f)
 
 
-@core.app_template_filter("css_token")
 def _css_token_filter(value: str) -> str:
     return css_token(value)
 
 
 # Keep nonce access import-mode agnostic: macros imported without context
 # can still read the request-scoped CSP nonce through this helper.
-@core.app_template_global("current_csp_nonce")
 def _current_csp_nonce_global() -> str:
     return current_csp_nonce()
 
 
-@core.app_template_global("static_asset_url")
 def _static_asset_url_global(filename: str) -> str:
     params: Dict[str, str] = {"filename": filename}
     version = str(current_app.config.get("STATIC_ASSET_VERSION", "") or "").strip()
@@ -874,7 +872,6 @@ def wants_html_response() -> bool:
     )
 
 
-@core.app_errorhandler(401)
 def unauthorized(e):
     # Redirect browser clients to login for unauthenticated requests
     if g.user is None and wants_html_response():
@@ -887,7 +884,6 @@ def unauthorized(e):
     )
 
 
-@core.app_errorhandler(403)
 def access_denied(e):
     # Redirect to login page if user is not authenticated
     if g.user is None:
@@ -905,7 +901,6 @@ def access_denied(e):
     )
 
 
-@core.app_errorhandler(404)
 def not_found(e):
     return render_error_page(
         404,
@@ -915,7 +910,6 @@ def not_found(e):
     )
 
 
-@core.app_errorhandler(500)
 def internal_server_error(e):
     _ = e
     reference_id = str(getattr(g, "_app_error_reference_id", "") or "")
@@ -940,7 +934,7 @@ def internal_server_error(e):
 ## CLI commands
 
 
-@core.cli.command("deactivate-user")
+@click.command("deactivate-user")
 @click.argument("user")
 def deactivate_user(user):
     """mark USER as no longer active"""
@@ -954,7 +948,7 @@ def deactivate_user(user):
     click.echo(f"{user} is now inactive")
 
 
-@core.cli.command("activate-user")
+@click.command("activate-user")
 @click.argument("user")
 def activate_user(user):
     """mark USER as active"""
@@ -968,7 +962,7 @@ def activate_user(user):
     click.echo(f"{user} is now active")
 
 
-@core.cli.command("add-admin")
+@click.command("add-admin")
 @click.argument("user")
 def add_admin(user):
     """add USER as an approved member of the admin group"""
@@ -1082,12 +1076,10 @@ def render_to(template):
 ## Routes
 
 
-@core.route("/robots.txt")
 def robots():
     return Response("User-agent: *\nDisallow: /", mimetype="text/plain")
 
 
-@core.route("/")
 @login_required
 @render_to("index")
 def home():
@@ -1112,7 +1104,6 @@ def home():
     }
 
 
-@core.route("/mailing-lists", methods=["GET", "POST"])
 @login_required
 @render_to("mailing-lists")
 def mailing_lists():
@@ -1153,7 +1144,6 @@ def join_form_breadcrumb() -> Breadcrumb_links:
     return breadcrumb(("join form", url_for("join_form")))
 
 
-@core.route("/join", methods=["GET", "POST"])
 @active_user_required
 @render_to("join")
 def join_form():
@@ -1187,7 +1177,6 @@ def join_form():
     }
 
 
-@core.route("/join/tech", methods=["GET", "POST"])
 @active_user_required
 @render_to("join_tech")
 def join_form_tech():
@@ -1229,10 +1218,6 @@ def join_form_tech():
     }
 
 
-@core.route(
-    "/join/approve/<token>", methods=["GET", "POST"], endpoint="join-group-approve"
-)
-@core.route("/join/deny/<token>", methods=["GET", "POST"], endpoint="join-group-deny")
 @active_user_required
 @render_to("join_group_decision")
 def handle_join_group(token):
@@ -1349,3 +1334,56 @@ def handle_join_group(token):
         "cancel_url": url_for("home"),
         **breadcrumb("join request review"),
     }
+
+
+def register_core_routes(app: Flask) -> None:
+    # Register these routes directly on the app so their historic endpoint names
+    # stay stable across Flask 2 and Flask 3.
+    app.add_url_rule(
+        "/csp-report", endpoint="csp_report", view_func=csp_report, methods=["POST"]
+    )
+    app.add_url_rule("/robots.txt", endpoint="robots", view_func=robots)
+    app.add_url_rule("/", endpoint="home", view_func=home)
+    app.add_url_rule(
+        "/mailing-lists",
+        endpoint="mailing_lists",
+        view_func=mailing_lists,
+        methods=["GET", "POST"],
+    )
+    app.add_url_rule(
+        "/join", endpoint="join_form", view_func=join_form, methods=["GET", "POST"]
+    )
+    app.add_url_rule(
+        "/join/tech",
+        endpoint="join_form_tech",
+        view_func=join_form_tech,
+        methods=["GET", "POST"],
+    )
+    app.add_url_rule(
+        "/join/approve/<token>",
+        endpoint="join-group-approve",
+        view_func=handle_join_group,
+        methods=["GET", "POST"],
+    )
+    app.add_url_rule(
+        "/join/deny/<token>",
+        endpoint="join-group-deny",
+        view_func=handle_join_group,
+        methods=["GET", "POST"],
+    )
+
+
+def register_core_app_features(app: Flask) -> None:
+    app.before_request(setup_user)
+    app.context_processor(inject_template_context)
+    app.after_request(apply_security_headers)
+    app.add_template_filter(_css_token_filter, "css_token")
+    app.add_template_global(_current_csp_nonce_global, "current_csp_nonce")
+    app.add_template_global(_static_asset_url_global, "static_asset_url")
+    app.register_error_handler(401, unauthorized)
+    app.register_error_handler(403, access_denied)
+    app.register_error_handler(404, not_found)
+    app.register_error_handler(500, internal_server_error)
+    app.cli.add_command(deactivate_user)
+    app.cli.add_command(activate_user)
+    app.cli.add_command(add_admin)

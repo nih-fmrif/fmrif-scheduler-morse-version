@@ -7,7 +7,7 @@ from functools import wraps
 from typing import Dict, List, Optional
 
 from flask import abort, current_app, g, request, session
-from sqlalchemy import func
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import model
@@ -58,9 +58,12 @@ def _find_existing_user_by_email(email: str):
     normalized_email = (email or "").strip().lower()
     if not normalized_email:
         return None
-    return model.User.query.filter(
-        func.lower(model.User.addr) == normalized_email
-    ).first()
+    statement = (
+        select(model.User)
+        .where(func.lower(model.User.addr) == normalized_email)
+        .limit(1)
+    )
+    return model.db.session.execute(statement).scalars().first()
 
 
 def _is_bearer_auto_provision_allowed(user: SessionUser) -> bool:
@@ -106,12 +109,30 @@ def _is_bearer_auto_provision_allowed(user: SessionUser) -> bool:
 def _rotate_session_identifier() -> None:
     """Best-effort session id rotation to reduce fixation risk after login."""
     interface = getattr(current_app, "session_interface", None)
-    generate_sid = getattr(interface, "_generate_sid", None)
     current_sid = getattr(session, "sid", None)
-    if current_sid is None or not callable(generate_sid):
+    if current_sid is None:
         return
+
+    regenerate = getattr(interface, "regenerate", None)
+    if callable(regenerate):
+        try:
+            regenerate(session)
+            return
+        except (AttributeError, RuntimeError, TypeError):
+            if current_app and current_app.logger:
+                current_app.logger.exception("Failed to rotate session identifier")
+            return
+
+    generate_sid = getattr(interface, "_generate_sid", None)
+    if not callable(generate_sid):
+        return
+
     try:
-        session.sid = generate_sid()
+        sid_length = getattr(interface, "sid_length", None)
+        if sid_length is None:
+            session.sid = generate_sid()
+        else:
+            session.sid = generate_sid(sid_length)
         session.modified = True
     except (AttributeError, RuntimeError, TypeError):
         if current_app and current_app.logger:
@@ -120,13 +141,13 @@ def _rotate_session_identifier() -> None:
 
 def _store_session(user: SessionUser) -> None:
     """Store the authenticated user in the Flask session."""
-    _rotate_session_identifier()
     session.clear()
     session.permanent = True
     session["user_name"] = user.username
     session["display_name"] = user.display_name
     session["email"] = user.email
     session["groups"] = user.groups
+    _rotate_session_identifier()
 
 
 def authenticate_bearer_token(
@@ -399,13 +420,17 @@ def _set_profile_group_membership(
             membership.approved = approved_at
             model.db.session.add(membership)
         if pi:
-            current_primary = model.PrimaryGroupMember.query.filter_by(
-                group=group_id
-            ).first()
+            statement = (
+                select(model.PrimaryGroupMember)
+                .where(model.PrimaryGroupMember.group == group_id)
+                .limit(1)
+            )
+            current_primary = model.db.session.execute(statement).scalars().first()
             if current_primary is not None and current_primary.user != user_id:
-                model.execute(
-                    "delete from primarygroupmember where deptcode = :group_id",
-                    {"group_id": group_id},
+                model.db.session.execute(
+                    delete(model.PrimaryGroupMember).where(
+                        model.PrimaryGroupMember.group == group_id
+                    )
                 )
                 model.db.session.flush()
             if primary is None:
@@ -578,25 +603,17 @@ def apply_test_group_pi_memberships(
 
 
 def reset_test_auth_profile_state(user_id: str) -> None:
-    (
-        model.PrimaryGroupMember.query.filter(
-            model.PrimaryGroupMember.user == user_id
-        ).delete(synchronize_session=False)
+    model.db.session.execute(
+        delete(model.PrimaryGroupMember).where(model.PrimaryGroupMember.user == user_id)
     )
-    (
-        model.GroupMember.query.filter(model.GroupMember.user == user_id).delete(
-            synchronize_session=False
-        )
+    model.db.session.execute(
+        delete(model.GroupMember).where(model.GroupMember.user == user_id)
     )
-    (
-        model.Technologist.query.filter(model.Technologist.user == user_id).delete(
-            synchronize_session=False
-        )
+    model.db.session.execute(
+        delete(model.Technologist).where(model.Technologist.user == user_id)
     )
-    (
-        model.UserDevice.query.filter(model.UserDevice.user == user_id).delete(
-            synchronize_session=False
-        )
+    model.db.session.execute(
+        delete(model.UserDevice).where(model.UserDevice.user == user_id)
     )
     model.db.session.commit()
     set_auth_test_session_pi_groups(user_id, [])

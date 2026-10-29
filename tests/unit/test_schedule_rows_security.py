@@ -8,6 +8,7 @@ from route_seed import (
     seeded_scanner_id,
     set_admin_session,
 )
+from sqlalchemy import select
 
 from scheduler import model
 
@@ -39,7 +40,7 @@ def test_schedule_rows_escapes_html_like_values(route_client, route_app_context)
             )
         )
 
-    inst = model.Inst.query.filter_by(active=True).first()
+    inst = model.db.session.scalars(select(model.Inst).where(model.Inst.active)).first()
     if inst is None:
         inst = model.Inst(
             id="I999",

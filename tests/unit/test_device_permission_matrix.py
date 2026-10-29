@@ -49,7 +49,7 @@ def _seed_matrix_device() -> model.Device:
 
 def _seed_matrix_user(user_id: str) -> model.User:
     ensure_active_user(user_id, f"{user_id}@example.com", user_id)
-    user = model.User.query.get(user_id)
+    user = model.get(model.User, user_id)
     assert user is not None
     return user
 

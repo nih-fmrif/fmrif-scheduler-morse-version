@@ -216,7 +216,7 @@ CREATE TABLE tblsched (
     scheddow integer NOT NULL,
     schedhour integer NOT NULL,
     deptcode character varying(10) NOT NULL,
-    researchercode character varying(15),
+    researchercode character varying(20),
     time_used boolean,
     chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone,
     chg_by character varying(30) DEFAULT "current_user"(),
@@ -242,14 +242,14 @@ COMMENT ON TABLE tblsched IS 'Schedule assignments';
 --
 
 CREATE TABLE tlkpresearcher (
-    researchercode character varying(15) NOT NULL,
+    researchercode character varying(20) NOT NULL,
     lname character varying(20) NOT NULL,
     fname character varying(20) NOT NULL,
     dept_code character varying(10),
     researchershort character varying(15) NOT NULL,
     chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone NOT NULL,
     chg_by character varying(30) DEFAULT "current_user"() NOT NULL,
-    lose_to character varying(15)
+    lose_to character varying(20)
 );
 
 
@@ -304,7 +304,7 @@ CREATE TABLE tbltemplate (
     dow integer NOT NULL,
     "hour" integer NOT NULL,
     deptcode character varying(10) NOT NULL,
-    researchercode character varying(15),
+    researchercode character varying(20),
     templatecode character varying(1) NOT NULL,
     instcode character varying(5),
     CONSTRAINT tbltemplate_dow CHECK (((dow >= 0) AND (dow <= 6))),
@@ -429,14 +429,14 @@ COMMENT ON TABLE tlkpscanner IS 'List of scanners';
 
 CREATE TABLE tlogresearcher (
     logid serial NOT NULL,
-    researchercode character varying(15),
+    researchercode character varying(20),
     lname character varying(20),
     fname character varying(20),
     researchershort character varying(15),
     dept_code character varying(10),
     chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone,
     chg_by character varying(30),
-    researchercode_old character varying(15),
+    researchercode_old character varying(20),
     lname_old character varying(20),
     fname_old character varying(20),
     researchershort_old character varying(15),
@@ -455,13 +455,13 @@ CREATE TABLE tlogsched (
     scheddate date,
     schedhour integer,
     deptcode character varying(10),
-    researchercode character varying(15),
+    researchercode character varying(20),
     time_used boolean,
     scannercode_old character varying(5),
     scheddate_old date,
     schedhour_old integer,
     deptcode_old character varying(10),
-    researchercode_old character varying(15),
+    researchercode_old character varying(20),
     time_used_old boolean,
     chg_at timestamp without time zone DEFAULT ('now'::text)::timestamp(6) with time zone,
     chg_by character varying(30)

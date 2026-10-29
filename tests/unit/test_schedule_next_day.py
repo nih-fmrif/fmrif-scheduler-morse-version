@@ -7,6 +7,7 @@ from route_seed import (
     ensure_admin_user,
     set_admin_session,
 )
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import logic, model
@@ -16,14 +17,16 @@ def _add_schedule_entry(
     device_id: str, date: datetime.date, template: str = "A"
 ) -> None:
     email = f"{template.lower()}@example.com"
-    inst = model.Inst.query.first()
+    inst = model.db.session.scalars(select(model.Inst)).first()
     if inst is None:
         inst = model.Inst(id="I001", label="Test Inst", active=True)
         model.db.session.add(inst)
         model.db.session.flush()
 
     ensure_active_user(template, email, template)
-    user = model.User.query.filter_by(addr=email).first()
+    user = model.db.session.scalars(
+        select(model.User).where(model.User.addr == email)
+    ).first()
     assert user is not None
     model.db.session.add(
         model.ScheduleEntry(

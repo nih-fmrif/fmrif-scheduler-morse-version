@@ -6,9 +6,16 @@ from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from flask import abort, current_app, g, jsonify, request, url_for
-from flask.helpers import flash
-from flask.templating import render_template
+from flask import (
+    abort,
+    current_app,
+    flash,
+    g,
+    jsonify,
+    render_template,
+    request,
+    url_for,
+)
 from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import logic, model

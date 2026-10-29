@@ -9,7 +9,7 @@ import json
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import inspect
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func
 from werkzeug.datastructures import FileStorage
@@ -528,13 +528,12 @@ def _group_institute_exception_matches(
 def _group_institute_scan_context(normalized_mapping: Dict[str, Any]) -> Dict[str, Any]:
     canonical = normalized_mapping["canonical_institutes"]
 
-    inst_rows = (
-        model.Inst.query.with_entities(
-            model.Inst.id, model.Inst.label, model.Inst.active
+    inst_rows = model.db.session.execute(
+        select(model.Inst.id, model.Inst.label, model.Inst.active).order_by(
+            model.Inst.id
         )
-        .order_by(model.Inst.id)
-        .all()
     )
+    inst_rows = inst_rows.all()
     inst_status = {
         str(inst_id): {
             "label": _normalize_text(inst_label) or str(inst_id),
@@ -543,16 +542,15 @@ def _group_institute_scan_context(normalized_mapping: Dict[str, Any]) -> Dict[st
         for inst_id, inst_label, active in inst_rows
     }
 
-    group_rows = (
-        model.Group.query.with_entities(
+    group_rows = model.db.session.execute(
+        select(
             model.Group.id,
             model.Group.label,
             model.Group.active,
             model.Group.inst,
-        )
-        .order_by(model.Group.id)
-        .all()
+        ).order_by(model.Group.id)
     )
+    group_rows = group_rows.all()
     known_groups = {str(group_id) for group_id, _, _, _ in group_rows}
     active_group_rows = [
         (
@@ -626,16 +624,15 @@ def scan_admin_group_institute_mapping(
     active_group_rows = context["active_group_rows"]
     group_expected_canonical = context["group_expected_canonical"]
 
-    template_rows = (
-        model.TemplateEntry.query.with_entities(
+    template_rows = model.db.session.execute(
+        select(
             model.TemplateEntry.device,
             model.TemplateEntry.template,
             model.TemplateEntry.group,
             model.TemplateEntry.inst,
-        )
-        .filter(model.TemplateEntry.group.isnot(None))
-        .all()
+        ).where(model.TemplateEntry.group.is_not(None))
     )
+    template_rows = template_rows.all()
 
     issue_buckets: Dict[str, List[Dict[str, str]]] = defaultdict(list)
 
@@ -850,8 +847,8 @@ def scan_admin_group_institute_schedule_history(
     window_end = today or datetime.date.today()
     window_start = window_end - datetime.timedelta(days=365 * resolved_window_years)
 
-    schedule_rows = (
-        model.db.session.query(
+    schedule_statement = (
+        select(
             model.ScheduleEntry.date,
             model.ScheduleEntry.hour,
             model.ScheduleEntry.device,
@@ -863,10 +860,10 @@ def scan_admin_group_institute_schedule_history(
             model.TemplateEntry,
             model.ScheduleEntry.template == model.TemplateEntry.id,
         )
-        .filter(model.ScheduleEntry.date >= window_start)
-        .filter(model.ScheduleEntry.date <= window_end)
-        .all()
+        .where(model.ScheduleEntry.date >= window_start)
+        .where(model.ScheduleEntry.date <= window_end)
     )
+    schedule_rows = model.db.session.execute(schedule_statement).all()
 
     aggregate_buckets: Dict[str, Dict[Tuple[str, ...], Dict[str, Any]]] = defaultdict(
         dict
@@ -1177,22 +1174,20 @@ def validate_user_dept_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
     user_ids = {row["usr"] for row in normalized}
     dept_ids = {row["dept"] for row in normalized}
     if user_ids:
-        users = {
-            row[0]
-            for row in model.User.query.with_entities(model.User.id).filter(
-                model.User.id.in_(list(user_ids))
-            )
-        }
+        users = set(
+            model.db.session.scalars(
+                select(model.User.id).where(model.User.id.in_(list(user_ids)))
+            ).all()
+        )
         missing_users = sorted(user_ids - set(users))
         if missing_users:
             errors.append("unknown users: " + ", ".join(missing_users))
     if dept_ids:
-        depts = {
-            row[0]
-            for row in model.Group.query.with_entities(model.Group.id).filter(
-                model.Group.id.in_(list(dept_ids))
-            )
-        }
+        depts = set(
+            model.db.session.scalars(
+                select(model.Group.id).where(model.Group.id.in_(list(dept_ids)))
+            ).all()
+        )
         missing_depts = sorted(dept_ids - set(depts))
         if missing_depts:
             errors.append("unknown departments: " + ", ".join(missing_depts))
@@ -1223,22 +1218,20 @@ def validate_dev_dept_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
     dev_ids = {row["dev"] for row in normalized}
     dept_ids = {row["dept"] for row in normalized}
     if dev_ids:
-        devices = {
-            row[0]
-            for row in model.Device.query.with_entities(model.Device.id).filter(
-                model.Device.id.in_(list(dev_ids))
-            )
-        }
+        devices = set(
+            model.db.session.scalars(
+                select(model.Device.id).where(model.Device.id.in_(list(dev_ids)))
+            ).all()
+        )
         missing_devs = sorted(dev_ids - set(devices))
         if missing_devs:
             errors.append("unknown devices: " + ", ".join(missing_devs))
     if dept_ids:
-        depts = {
-            row[0]
-            for row in model.Group.query.with_entities(model.Group.id).filter(
-                model.Group.id.in_(list(dept_ids))
-            )
-        }
+        depts = set(
+            model.db.session.scalars(
+                select(model.Group.id).where(model.Group.id.in_(list(dept_ids)))
+            ).all()
+        )
         missing_depts = sorted(dept_ids - set(depts))
         if missing_depts:
             errors.append("unknown departments: " + ", ".join(missing_depts))
@@ -1303,22 +1296,20 @@ def validate_devperm_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
     user_ids = {row["usr"] for row in normalized}
     dev_ids = {row["dev"] for row in normalized}
     if user_ids:
-        users = {
-            row[0]
-            for row in model.User.query.with_entities(model.User.id).filter(
-                model.User.id.in_(list(user_ids))
-            )
-        }
+        users = set(
+            model.db.session.scalars(
+                select(model.User.id).where(model.User.id.in_(list(user_ids)))
+            ).all()
+        )
         missing_users = sorted(user_ids - set(users))
         if missing_users:
             errors.append("unknown users: " + ", ".join(missing_users))
     if dev_ids:
-        devices = {
-            row[0]
-            for row in model.Device.query.with_entities(model.Device.id).filter(
-                model.Device.id.in_(list(dev_ids))
-            )
-        }
+        devices = set(
+            model.db.session.scalars(
+                select(model.Device.id).where(model.Device.id.in_(list(dev_ids)))
+            ).all()
+        )
         missing_devs = sorted(dev_ids - set(devices))
         if missing_devs:
             errors.append("unknown devices: " + ", ".join(missing_devs))
@@ -1338,8 +1329,8 @@ def validate_import_rows(kind: str, rows: List[Dict[str, str]]) -> List[Dict[str
 
 
 def apply_user_dept_rows(rows: List[Dict[str, str]]) -> int:
-    model.PrimaryGroupMember.query.delete()
-    model.GroupMember.query.delete()
+    model.db.session.execute(delete(model.PrimaryGroupMember))
+    model.db.session.execute(delete(model.GroupMember))
     for row in rows:
         model.db.session.add(
             model.GroupMember(user=row["usr"], group=row["dept"], approved=func.now())
@@ -1352,14 +1343,14 @@ def apply_user_dept_rows(rows: List[Dict[str, str]]) -> int:
 
 
 def apply_dev_dept_rows(rows: List[Dict[str, str]]) -> int:
-    model.DeviceGroup.query.delete()
+    model.db.session.execute(delete(model.DeviceGroup))
     for row in rows:
         model.db.session.add(model.DeviceGroup(device=row["dev"], group=row["dept"]))
     return len(rows)
 
 
 def apply_devperm_rows(rows: List[Dict[str, str]]) -> int:
-    model.UserDevice.query.delete()
+    model.db.session.execute(delete(model.UserDevice))
     for row in rows:
         model.db.session.add(
             model.UserDevice(
@@ -1408,11 +1399,14 @@ def export_mapping_rows(kind: str) -> Tuple[Tuple[str, ...], List[Tuple[str, ...
         return headers, rows
     if kind == DEV_DEPT_IMPORT_KIND:
         headers = ("dev", "dept")
-        query = model.DeviceGroup.query.with_entities(
-            model.DeviceGroup.device,
-            model.DeviceGroup.group,
-        ).order_by(model.DeviceGroup.group, model.DeviceGroup.device)
-        rows = [(str(device_id), str(group_id)) for device_id, group_id in query.all()]
+        rows = [
+            (str(device_id), str(group_id))
+            for device_id, group_id in model.db.session.execute(
+                select(model.DeviceGroup.device, model.DeviceGroup.group).order_by(
+                    model.DeviceGroup.group, model.DeviceGroup.device
+                )
+            ).all()
+        ]
         return headers, rows
     if kind == DEVPERM_IMPORT_KIND:
         headers = (
@@ -1424,15 +1418,6 @@ def export_mapping_rows(kind: str) -> Tuple[Tuple[str, ...], List[Tuple[str, ...
             "medical",
             "training",
         )
-        query = model.UserDevice.query.with_entities(
-            model.UserDevice.user,
-            model.UserDevice.device,
-            model.UserDevice.templates,
-            model.UserDevice.slot,
-            model.UserDevice.tech,
-            model.UserDevice.medical,
-            model.UserDevice.training,
-        ).order_by(model.UserDevice.user, model.UserDevice.device)
         rows = [
             (
                 str(usr),
@@ -1443,7 +1428,17 @@ def export_mapping_rows(kind: str) -> Tuple[Tuple[str, ...], List[Tuple[str, ...
                 "y" if bool(medical) else "n",
                 "y" if bool(training) else "n",
             )
-            for usr, device, templates, slot, tech, medical, training in query.all()
+            for usr, device, templates, slot, tech, medical, training in model.db.session.execute(
+                select(
+                    model.UserDevice.user,
+                    model.UserDevice.device,
+                    model.UserDevice.templates,
+                    model.UserDevice.slot,
+                    model.UserDevice.tech,
+                    model.UserDevice.medical,
+                    model.UserDevice.training,
+                ).order_by(model.UserDevice.user, model.UserDevice.device)
+            ).all()
         ]
         return headers, rows
     raise ValueError(f"invalid mapping kind: {kind}")

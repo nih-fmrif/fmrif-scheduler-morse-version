@@ -18,6 +18,7 @@ from route_seed import (
     set_group_membership,
     set_session_user,
 )
+from sqlalchemy import select
 
 import scheduler.message as scheduler_message
 from scheduler import logic, model
@@ -31,6 +32,13 @@ def _capture_rbac_events(monkeypatch) -> list[tuple[str, str, str, str, str]]:
 
     monkeypatch.setattr(logic, "log_rbac_audit_event", capture)
     return events
+
+
+def _latest_email_audit(*criteria):
+    statement = select(model.EmailAuditLog).order_by(model.EmailAuditLog.id.desc())
+    for criterion in criteria:
+        statement = statement.where(criterion)
+    return model.db.session.scalars(statement).first()
 
 
 def _unused_local_port() -> int:
@@ -113,12 +121,8 @@ def test_mailing_lists_post_delivers_to_mailpit_api(route_app, route_client):
 
             assert post_response.status_code == 302
             assert post_response.headers["Location"].endswith("/")
-            persisted = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.mailing-list.change"
-                )
-                .order_by(model.EmailAuditLog.id.desc())
-                .first()
+            persisted = _latest_email_audit(
+                model.EmailAuditLog.action == "email.mailing-list.change"
             )
             assert persisted is not None
             assert persisted.requester == email
@@ -219,13 +223,9 @@ def test_join_post_creates_pending_membership_request(
             assert how == "email"
             assert f"group={group_id}" in what
 
-            audit_row = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.join.notify-group-pi"
-                )
-                .filter(model.EmailAuditLog.requester == requester_id)
-                .order_by(model.EmailAuditLog.id.desc())
-                .first()
+            audit_row = _latest_email_audit(
+                model.EmailAuditLog.action == "email.join.notify-group-pi",
+                model.EmailAuditLog.requester == requester_id,
             )
             assert audit_row is not None
             assert audit_row.status == logic.EMAIL_AUDIT_STATUS_SENT
@@ -317,13 +317,9 @@ def test_join_post_survives_mail_transport_failure(
         assert how == "email"
         assert f"group={group_id}" in what
 
-        audit_row = (
-            model.EmailAuditLog.query.filter(
-                model.EmailAuditLog.action == "email.join.notify-group-pi"
-            )
-            .filter(model.EmailAuditLog.requester == requester_id)
-            .order_by(model.EmailAuditLog.id.desc())
-            .first()
+        audit_row = _latest_email_audit(
+            model.EmailAuditLog.action == "email.join.notify-group-pi",
+            model.EmailAuditLog.requester == requester_id,
         )
         assert audit_row is not None
         assert audit_row.status == logic.EMAIL_AUDIT_STATUS_FAILED
@@ -382,12 +378,9 @@ def test_join_post_without_group_pi_does_not_crash(
     assert where == f"/join/{group_id}"
     assert how == "email"
     assert f"group={group_id}" in what
-    audit_row = (
-        model.EmailAuditLog.query.filter(
-            model.EmailAuditLog.action == "email.join.notify-group-pi"
-        )
-        .filter(model.EmailAuditLog.requester == requester_id)
-        .first()
+    audit_row = _latest_email_audit(
+        model.EmailAuditLog.action == "email.join.notify-group-pi",
+        model.EmailAuditLog.requester == requester_id,
     )
     assert audit_row is None
 
@@ -454,13 +447,9 @@ def test_join_tech_post_autoapproves_technologist_request(
             assert f"user={user_id}" in what
             assert "approved=true" in what
 
-            audit_row = (
-                model.EmailAuditLog.query.filter(
-                    model.EmailAuditLog.action == "email.join.tech.outcome"
-                )
-                .filter(model.EmailAuditLog.actor == user_id)
-                .order_by(model.EmailAuditLog.id.desc())
-                .first()
+            audit_row = _latest_email_audit(
+                model.EmailAuditLog.action == "email.join.tech.outcome",
+                model.EmailAuditLog.actor == user_id,
             )
             assert audit_row is not None
             assert audit_row.status == logic.EMAIL_AUDIT_STATUS_SENT
@@ -544,13 +533,9 @@ def test_join_tech_post_without_dev_pi_still_autoapproves(
     assert f"user={user_id}" in what
     assert "approved=true" in what
 
-    requester_outcome = (
-        model.EmailAuditLog.query.filter(
-            model.EmailAuditLog.action == "email.join.tech.outcome"
-        )
-        .filter(model.EmailAuditLog.actor == user_id)
-        .order_by(model.EmailAuditLog.id.desc())
-        .first()
+    requester_outcome = _latest_email_audit(
+        model.EmailAuditLog.action == "email.join.tech.outcome",
+        model.EmailAuditLog.actor == user_id,
     )
     assert requester_outcome is not None
     assert requester_outcome.status in {
@@ -558,11 +543,8 @@ def test_join_tech_post_without_dev_pi_still_autoapproves(
         logic.EMAIL_AUDIT_STATUS_FAILED,
     }
 
-    stale_dev_pi_notify = (
-        model.EmailAuditLog.query.filter(
-            model.EmailAuditLog.action == "email.join.tech.notify-dev-pi"
-        )
-        .filter(model.EmailAuditLog.requester == user_id)
-        .first()
+    stale_dev_pi_notify = _latest_email_audit(
+        model.EmailAuditLog.action == "email.join.tech.notify-dev-pi",
+        model.EmailAuditLog.requester == user_id,
     )
     assert stale_dev_pi_notify is None

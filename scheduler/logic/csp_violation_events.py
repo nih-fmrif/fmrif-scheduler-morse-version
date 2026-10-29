@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -121,14 +121,15 @@ def csp_violation_event_rows(*, limit: int) -> List[model.CspViolationEvent]:
     if not csp_violation_event_table_available():
         return []
 
-    return (
-        model.CspViolationEvent.query.order_by(
+    statement = (
+        select(model.CspViolationEvent)
+        .order_by(
             model.CspViolationEvent.occurred_at.desc(),
             model.CspViolationEvent.id.desc(),
         )
         .limit(max(1, int(limit)))
-        .all()
     )
+    return model.db.session.execute(statement).scalars().all()
 
 
 def csp_violation_event_payload(row: model.CspViolationEvent) -> Dict[str, Any]:

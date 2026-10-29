@@ -67,6 +67,7 @@ services:
       PGHOST: postgres
       PGPORT: 5432
       APP_SERVER: gunicorn
+      CONTAINER_APP_PORT: 5051
       SERVER__SERVER_NAME: ${SERVER__SERVER_NAME:-}
       MAIL__SERVER: mailpit_app
       MAIL__PORT: 1025
@@ -74,27 +75,28 @@ services:
       MMSCHED_X_FORWARDED_FOR: 1
       MMSCHED_X_FORWARDED_PROTO: 1
       MMSCHED_X_FORWARDED_HOST: 1
-    labels:
-      - "com.fmrif.compose_wrapper=${FMRIF_COMPOSE_WRAPPER:?Set FMRIF_COMPOSE_WRAPPER=run-compose.sh and launch with ./run-compose.sh}"
     expose:
       - "5051"
-
     volumes:
-      - ./scheduler:/app/scheduler
-      - ./sql:/sql:ro
       - ${SCHEDULER_RUNTIME_ENV_FILE:-./.env}:/app/.env:ro
     depends_on:
       postgres:
         condition: service_healthy
       mailpit_app:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5051/auth/login >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
   nginx:
     platform: *service-platform
     image: nginx:1.27-alpine
     depends_on:
       scheduler:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${APP_PORT:-5051}:80"
     volumes:
