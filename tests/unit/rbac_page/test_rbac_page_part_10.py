@@ -27,8 +27,9 @@ from route_seed import (
     set_session_user,
 )
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route

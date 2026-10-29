@@ -2,7 +2,8 @@ import datetime
 
 from sqlalchemy import select
 
-from scheduler import logic, model
+import scheduler.logic.csp_violation_events as logic
+from scheduler import model
 
 
 def test_record_csp_violation_event_persists_payload(app_context):

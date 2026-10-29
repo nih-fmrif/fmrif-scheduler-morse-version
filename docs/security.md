@@ -169,7 +169,6 @@ Configuration:
 - `SESSION__COOKIE_SAMESITE` (default `Strict`)
 - `SESSION__PERMANENT_LIFETIME` (default 8h)
 - `SESSION__TYPE` (default `sqlalchemy`)
-- `SESSION__USE_SIGNER` (default `true`)
 - `SESSION__SQLALCHEMY_TABLE` (default `site_sessions`)
 
 Attack classes mitigated:

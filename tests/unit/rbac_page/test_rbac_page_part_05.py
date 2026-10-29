@@ -27,8 +27,9 @@ from route_seed import (
     set_session_user,
 )
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
@@ -146,7 +147,7 @@ def test_rbac_mutate_batch_is_atomic_on_validation_failure(
     assert payload["ok"] is False
     assert payload["atomic"] is True
     assert payload["applied"] == 0
-    assert model.get(model.DeviceGroup, (device_id, group_id)) is None
+    assert model.db.session.get(model.DeviceGroup, (device_id, group_id)) is None
     invalid = [row for row in payload["results"] if row["status"] == "invalid"]
     assert len(invalid) == 1
     assert "must target selected group" in invalid[0]["message"]
@@ -204,7 +205,7 @@ def test_rbac_mutate_api_updates_user_device_permissions_and_audit_feed(
     assert payload["atomic"] is True
     assert payload["applied"] == 1
 
-    row = model.get(model.UserDevice, (user_id, device_id))
+    row = model.db.session.get(model.UserDevice, (user_id, device_id))
     assert row is not None
     assert row.templates is True
     assert row.training is True
@@ -257,7 +258,7 @@ def test_rbac_mutate_batch_updates_entity_active_state(route_client, route_app_c
     assert payload_group is not None
     assert payload_group["ok"] is True
     assert payload_group["applied"] == 1
-    group = model.get(model.Group, group_id)
+    group = model.db.session.get(model.Group, group_id)
     assert group is not None
     assert group.active is False
 
@@ -278,7 +279,7 @@ def test_rbac_mutate_batch_updates_entity_active_state(route_client, route_app_c
     assert payload_device is not None
     assert payload_device["ok"] is True
     assert payload_device["applied"] == 1
-    device = model.get(model.Device, device_id)
+    device = model.db.session.get(model.Device, device_id)
     assert device is not None
     assert device.active is False
 
@@ -299,7 +300,7 @@ def test_rbac_mutate_batch_updates_entity_active_state(route_client, route_app_c
     assert payload_user is not None
     assert payload_user["ok"] is True
     assert payload_user["applied"] == 1
-    user = model.get(model.User, user_id)
+    user = model.db.session.get(model.User, user_id)
     assert user is not None
     assert user.active is False
 

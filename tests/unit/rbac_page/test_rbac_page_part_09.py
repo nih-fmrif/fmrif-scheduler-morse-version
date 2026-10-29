@@ -27,8 +27,9 @@ from route_seed import (
     set_session_user,
 )
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
@@ -134,7 +135,7 @@ def test_app_issues_scan_expires_old_resolved_notification_incidents(route_clien
 
     _run_notification_scan(route_client)
 
-    expired = model.get(model.NotificationIncident, issue_key)
+    expired = model.db.session.get(model.NotificationIncident, issue_key)
     assert expired is None
 
 
@@ -209,7 +210,7 @@ def test_app_issues_notification_state_sets_ignored_and_respects_expiry(route_cl
     )
     assert response.status_code == 302
 
-    ignored = model.get(model.NotificationIncident, issue_key)
+    ignored = model.db.session.get(model.NotificationIncident, issue_key)
     assert ignored is not None
     assert ignored.state == "ignored"
     assert ignored.active is True
@@ -217,7 +218,7 @@ def test_app_issues_notification_state_sets_ignored_and_respects_expiry(route_cl
 
     _run_notification_scan(route_client)
 
-    reopened = model.get(model.NotificationIncident, issue_key)
+    reopened = model.db.session.get(model.NotificationIncident, issue_key)
     assert reopened is not None
     assert reopened.state == "open"
     assert reopened.active is True
@@ -241,7 +242,7 @@ def test_app_issues_scan_auto_resolves_and_reopens_new_occurrence(route_client):
 
     _run_notification_scan(route_client)
     issue_key = f"join-group:{group_id}:{requester_id}"
-    first = model.get(model.NotificationIncident, issue_key)
+    first = model.db.session.get(model.NotificationIncident, issue_key)
     assert first is not None
     first_occurrence = int(first.occurrence_count)
     assert first.state == "open"
@@ -252,7 +253,7 @@ def test_app_issues_scan_auto_resolves_and_reopens_new_occurrence(route_client):
     model.db.session.commit()
     _run_notification_scan(route_client)
 
-    resolved = model.get(model.NotificationIncident, issue_key)
+    resolved = model.db.session.get(model.NotificationIncident, issue_key)
     assert resolved is not None
     assert resolved.state == "resolved"
     assert resolved.active is False
@@ -262,7 +263,7 @@ def test_app_issues_scan_auto_resolves_and_reopens_new_occurrence(route_client):
     model.db.session.commit()
     _run_notification_scan(route_client)
 
-    reopened = model.get(model.NotificationIncident, issue_key)
+    reopened = model.db.session.get(model.NotificationIncident, issue_key)
     assert reopened is not None
     assert reopened.state == "open"
     assert reopened.active is True

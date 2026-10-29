@@ -1,4 +1,5 @@
 # tests/unit/conftest.py
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -13,8 +14,32 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 project_root = Path(__file__).parent.parent.parent
 load_dotenv(project_root / ".env")
 
+
+def _normalize_pg_identifier(raw: str) -> str:
+    max_len = 63
+    if len(raw) <= max_len:
+        return raw
+
+    suffix = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
+    prefix_len = max_len - 1 - len(suffix)
+    if prefix_len < 1:
+        return suffix[:max_len]
+    return f"{raw[:prefix_len]}-{suffix}"
+
+
+def _derive_test_db_name() -> str:
+    base_name = os.getenv("SCHEDULER_TEST_DB_NAME", "fmrif_scheduler_test")
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    if not worker_id:
+        return base_name
+
+    # xdist workers each need their own bootstrap target DB.
+    return _normalize_pg_identifier(f"{base_name}_{worker_id}")
+
+
 # Safety guard: all unit/route tests must use a dedicated test database.
-TEST_DB_NAME = os.getenv("SCHEDULER_TEST_DB_NAME", "fmrif_scheduler_test")
+TEST_DB_NAME = _derive_test_db_name()
+os.environ["SCHEDULER_TEST_DB_NAME"] = TEST_DB_NAME
 os.environ["PGDATABASE"] = TEST_DB_NAME
 os.environ.setdefault("AUTH_TEST__ENABLED", "true")
 os.environ.setdefault("AUTH_TEST__SHARED_SECRET", "unit-test-secret")
@@ -208,25 +233,29 @@ def db_test_isolation(request):
     connection = model.db.engine.connect()
     transaction = connection.begin()
 
-    previous_session = model.db.session
     previous_default_engine = model.db.engines[None]
-    scoped_session = model.db._make_scoped_session(
-        {
-            "bind": connection,
-            "binds": {},
-            "join_transaction_mode": "create_savepoint",
-        }
-    )
 
+    # Rebind the existing Flask-SQLAlchemy scoped session with public
+    # SQLAlchemy APIs rather than relying on Flask-SQLAlchemy's private
+    # _make_scoped_session() helper.
+    model.db.session.remove()
+    model.db.session.configure(
+        bind=connection,
+        binds={},
+        join_transaction_mode="create_savepoint",
+    )
     model.db.engines[None] = connection
-    model.db.session = scoped_session
 
     try:
         yield
     finally:
-        scoped_session.remove()
-        model.db.session = previous_session
+        model.db.session.remove()
         model.db.engines[None] = previous_default_engine
+        model.db.session.configure(
+            bind=previous_default_engine,
+            binds={},
+            join_transaction_mode="conditional_savepoint",
+        )
         transaction.rollback()
         connection.close()
         app_ctx.pop()

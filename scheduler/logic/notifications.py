@@ -4,7 +4,7 @@ from typing import Any, Generator, List, Optional, Tuple
 
 from flask import current_app, url_for
 from flask_wtf import FlaskForm
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from wtforms import Form, fields, validators
 
 from scheduler import message, model
@@ -23,7 +23,7 @@ def _normalize_name(name: str) -> str:
 
 
 def _get_user(user_id: str) -> Optional[model.User]:
-    return model.get(model.User, user_id)
+    return model.db.session.get(model.User, user_id)
 
 
 def _get_dev_pi_recipient() -> Optional[model.User]:
@@ -107,14 +107,15 @@ go to {page} to review this user in RBAC explorer.
 
 
 def get_departments_for_join_form(user: model.User) -> Datalist:
-    query = model.execute(
-        """
-        select D.deptcode, D.dept from tlkpdept D
-        where D.iscurrent and (D.department or D.deptcode = 'DEV') and deptcode not in (
-            select M."group" from membership M where M."user" = :user
-        ) order by 2;
-    """,
-        {"user": user.id},
+    membership_groups = select(model.Membership.group).where(
+        model.Membership.user == user.id
+    )
+    query = model.db.session.execute(
+        select(model.Group.id, model.Group.description)
+        .where(model.Group.active.is_(True))
+        .where(or_(model.Group.department.is_(True), model.Group.id == "DEV"))
+        .where(~model.Group.id.in_(membership_groups))
+        .order_by(model.Group.description)
     )
     out = []
     for group_id, label in query.fetchall():
@@ -140,9 +141,9 @@ def get_mailing_list_form(**kwargs):
                 return False
             return True
 
-    from scheduler import logic
+    from ._admin_config_settings import get_admin_mailing_lists
 
-    lists = logic.get_admin_mailing_lists().items()
+    lists = get_admin_mailing_lists().items()
     for idx, (name, description) in enumerate(lists):
         setattr(
             MailingListsSubform,
@@ -185,13 +186,13 @@ def get_mailing_list_form(**kwargs):
 
 
 def process_mailing_list_form_submissions(form):
-    from scheduler import logic
+    from ._admin_config_settings import get_admin_listserv
 
     selected_lists = [item[0] for item in form.lists.all_checkboxes() if item[1]]
     addr = form.addr.data
     name = _normalize_name(form.name.data)
     sub = form.action.data == "sub"
-    listserv = logic.get_admin_listserv()
+    listserv = get_admin_listserv()
     for list_name in selected_lists:
         msg = format_mailing_list_message(sub, list_name, name)
         message.send(
@@ -217,7 +218,7 @@ def format_mailing_list_message(sub: bool, which_list: str, name: str) -> str:
 
 
 def notify_group_pi_of_join_form(user: model.User, group: str) -> str:
-    grp = model.get(model.Group, group)
+    grp = model.db.session.get(model.Group, group)
     if grp is None:
         raise RuntimeError(
             f"{user.id} attempted to join group that does not exist: {group}"

@@ -16,7 +16,8 @@ from route_seed import (
 )
 from sqlalchemy import select
 
-from scheduler import logic, model
+import scheduler.logic.admin_config as logic
+from scheduler import model
 
 pytestmark = pytest.mark.route
 
@@ -25,7 +26,7 @@ def _seed_admin_config(
     overrides: dict[str, str], *, updated_by: str = "test-admin"
 ) -> None:
     for key, value in sorted(overrides.items()):
-        row = model.get(model.AppSetting, key)
+        row = model.db.session.get(model.AppSetting, key)
         if row is None:
             row = model.AppSetting(key=key)
         row.value = value
@@ -172,8 +173,10 @@ def test_app_issues_mapping_import_and_export_user_dept(route_client):
         follow_redirects=False,
     )
     assert import_response.status_code == 302
-    assert model.get(model.GroupMember, (group_id, user_id)) is not None
-    assert model.get(model.PrimaryGroupMember, (group_id, user_id)) is not None
+    assert model.db.session.get(model.GroupMember, (group_id, user_id)) is not None
+    assert (
+        model.db.session.get(model.PrimaryGroupMember, (group_id, user_id)) is not None
+    )
 
     export_response = route_client.get("/app/issues/mapping/export/user-dept")
     assert export_response.status_code == 200
@@ -216,7 +219,7 @@ def test_app_issues_mapping_import_rejects_invalid_csv(route_client):
     )
 
     assert invalid_response.status_code == 302
-    assert model.get(model.GroupMember, (group_id, user_id)) is None
+    assert model.db.session.get(model.GroupMember, (group_id, user_id)) is None
 
 
 @pytest.mark.covers_route("/app/issues/organization/history-scan", "POST")
@@ -263,7 +266,7 @@ def test_app_issues_page_and_export_show_recent_history_issues(route_client):
     user_id = f"u{uuid.uuid4().hex[:6]}"
 
     for inst_id in (inst_primary, inst_secondary):
-        row = model.get(model.Inst, inst_id)
+        row = model.db.session.get(model.Inst, inst_id)
         if row is None:
             row = model.Inst(id=inst_id, label=inst_id, active=True)
         else:

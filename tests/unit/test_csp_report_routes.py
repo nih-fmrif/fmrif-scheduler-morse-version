@@ -4,7 +4,8 @@ import pytest
 from route_seed import ensure_admin_user, set_admin_session
 from sqlalchemy import func, select
 
-from scheduler import logic, model
+import scheduler.logic.csp_violation_events as logic
+from scheduler import model
 
 pytestmark = pytest.mark.route
 

@@ -25,8 +25,9 @@ from route_seed import (
 )
 from sqlalchemy import func, select
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 
 pytestmark = pytest.mark.route
 
@@ -128,7 +129,7 @@ def _active_inst_id() -> str:
 
 def _notification_fixture(*, medical_addr: str) -> tuple[str, str, str, int]:
     device_id, device_label = create_device()
-    device = model.get(model.Device, device_id)
+    device = model.db.session.get(model.Device, device_id)
     assert device is not None
     device.label = device_label
     device.addr = f"{device_id.lower()}-schedule@example.com"
@@ -141,7 +142,7 @@ def _notification_fixture(*, medical_addr: str) -> tuple[str, str, str, int]:
     member_id = f"route-member-{uuid.uuid4().hex[:6]}"
     ensure_active_user(member_id, f"{member_id}@example.com", member_id)
     set_group_membership(group_id, member_id, approved=True, pi=False)
-    if model.get(model.DeviceGroup, (device_id, group_id)) is None:
+    if model.db.session.get(model.DeviceGroup, (device_id, group_id)) is None:
         model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
 
     slot_date = datetime.date(2035, 2, 24)
@@ -165,7 +166,7 @@ def _notification_fixture(*, medical_addr: str) -> tuple[str, str, str, int]:
 
 def _grant_medical_support(device_id: str, user_id: str) -> None:
     ensure_active_user(user_id, f"{user_id}@example.com", user_id)
-    row = model.get(model.UserDevice, (user_id, device_id))
+    row = model.db.session.get(model.UserDevice, (user_id, device_id))
     if row is None:
         row = model.UserDevice(user=user_id, device=device_id)
     row.templates = False

@@ -29,8 +29,9 @@ from route_seed import (
 )
 from sqlalchemy import select
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
@@ -140,7 +141,7 @@ def test_rbac_mutate_batch_updates_user_profile_email(route_client, route_app_co
     assert payload is not None
     assert payload["ok"] is True
     assert payload["applied"] == 1
-    row = model.get(model.User, user_id)
+    row = model.db.session.get(model.User, user_id)
     assert row is not None
     assert row.addr == f"{user_id}@new.example.com"
 
@@ -209,7 +210,7 @@ def test_rbac_mutate_batch_group_membership_sent_resends_notification(
             assert payload is not None
             assert payload["ok"] is True
             assert payload["applied"] == 1
-            row = model.get(model.GroupMember, (group_id, user_id))
+            row = model.db.session.get(model.GroupMember, (group_id, user_id))
             assert row is not None
             assert row.email_status == "sent"
             resolution = _latest_email_audit(
@@ -313,14 +314,14 @@ def test_rbac_mutate_batch_group_membership_outcome_notifies_requester(
             assert payload is not None
             assert payload["ok"] is True
             assert payload["applied"] == 1
-            row = model.get(model.GroupMember, (group_id, requester_id))
+            row = model.db.session.get(model.GroupMember, (group_id, requester_id))
             if approved:
                 assert row is not None
                 assert row.approved is not None
             else:
                 assert row is None
 
-            group = model.get(model.Group, group_id)
+            group = model.db.session.get(model.Group, group_id)
             group_name = group.label if group and group.label else group_id
             subject = f"your request to join {group_name} was {outcome}"
             summary = wait_for_mailpit_message(
@@ -408,7 +409,7 @@ def test_rbac_mutate_batch_technologist_sent_resends_notification(
             assert payload is not None
             assert payload["ok"] is True
             assert payload["applied"] == 1
-            row = model.get(model.Technologist, user_id)
+            row = model.db.session.get(model.Technologist, user_id)
             assert row is not None
             assert row.approved_on is None
             assert row.email_status == "sent"

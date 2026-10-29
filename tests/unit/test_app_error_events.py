@@ -2,7 +2,8 @@ import datetime
 
 from sqlalchemy import select
 
-from scheduler import logic, model
+import scheduler.logic.app_error_events as logic
+from scheduler import model
 
 
 def test_record_app_error_event_persists_payload(app_context):

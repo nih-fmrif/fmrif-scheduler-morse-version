@@ -13,7 +13,7 @@ from route_seed import (
     set_session_user,
 )
 
-from scheduler import logic, model
+from scheduler import model
 
 pytestmark = pytest.mark.route
 
@@ -92,7 +92,7 @@ def test_home_hides_groups_link_for_inactive_user(route_client, route_app_contex
     user_id = f"home-inactive-{uuid.uuid4().hex[:6]}"
     email = f"{user_id}@example.com"
     ensure_active_user(user_id, email, "Home Inactive User")
-    user = model.get(model.User, user_id)
+    user = model.db.session.get(model.User, user_id)
     assert user is not None
     user.active = False
     model.db.session.add(user)
@@ -247,7 +247,7 @@ def test_device_subpage_nav_escapes_device_label_html(route_client):
     email = f"{user_id}@example.com"
     device_id, _ = create_device()
     evil_label = "<svg/onload=1>"
-    device = model.get(model.Device, device_id)
+    device = model.db.session.get(model.Device, device_id)
     assert device is not None
     device.label = evil_label
     model.db.session.add(device)
@@ -285,13 +285,45 @@ def test_show_tech_join_form_probe_is_request_cached(monkeypatch, route_app_cont
         call_count += 1
         return candidate.id == user_id
 
-    monkeypatch.setattr(logic, "show_tech_join_form", fake_show_tech_join_form)
+    monkeypatch.setattr(
+        scheduler_app_module.logic, "show_tech_join_form", fake_show_tech_join_form
+    )
 
     with route_app_context.test_request_context("/join"):
         assert scheduler_app_module._cached_show_tech_join_form(user) is True
         assert scheduler_app_module._cached_show_tech_join_form(user) is True
 
     assert call_count == 1
+
+
+def test_home_device_permissions_respects_auth_test_session_dev_pi(
+    monkeypatch, route_app_context
+):
+    import scheduler.routes.core_routes as core_routes
+
+    class DummyUser:
+        def __init__(self, user_id: str):
+            self.id = user_id
+            self.active = True
+
+    class DummyDevice:
+        def __init__(self, device_id: str):
+            self.id = device_id
+
+    def unexpected_scalar(_statement):
+        raise AssertionError("database DEV PI probe should not run")
+
+    monkeypatch.setattr(core_routes.logic, "get_memberships", lambda _user: ["DEV"])
+    monkeypatch.setattr(
+        core_routes, "has_auth_test_session_pi_group", lambda _user, _group: True
+    )
+    monkeypatch.setattr(model.db.session, "scalar", unexpected_scalar)
+
+    with route_app_context.test_request_context("/"):
+        g.user = DummyUser("home-auth-test-dev-pi")
+        permissions = core_routes._home_device_permissions([DummyDevice("scanner-a")])
+
+    assert permissions == {"scanner-a": {"can_edit": True, "extra_privileges": []}}
 
 
 def test_home_shows_read_only_indicator_for_devices_for_active_non_privileged_user(
@@ -517,3 +549,28 @@ def test_group_pi_probe_is_request_cached(monkeypatch, route_app_context):
         assert scheduler_app_module._rbac_user_is_group_pi(g.user) is True
 
     assert scalar_calls["count"] == 1
+
+
+def test_group_pi_probe_uses_auth_test_session_before_db(
+    monkeypatch, route_app_context
+):
+    import scheduler.routes.core_routes as core_routes
+
+    class DummyUser:
+        def __init__(self, user_id: str):
+            self.id = user_id
+            self.active = True
+
+    def unexpected_scalar(_statement):
+        raise AssertionError("database group PI probe should not run")
+
+    monkeypatch.setattr(
+        core_routes,
+        "get_auth_test_session_pi_groups",
+        lambda _user: {"DEV"},
+    )
+    monkeypatch.setattr(model.db.session, "scalar", unexpected_scalar)
+
+    with route_app_context.test_request_context("/"):
+        g.user = DummyUser("group-pi-auth-test")
+        assert core_routes._rbac_user_is_group_pi(g.user) is True

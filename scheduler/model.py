@@ -1,25 +1,14 @@
 from typing import Any, Optional
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text as sql_text
 from sqlalchemy.orm import DeclarativeMeta, Mapped
 from sqlalchemy.sql import func
 
 db = SQLAlchemy()
 
 # Explicit Mapped[...] annotations satisfy SQLAlchemy 2.x declarative checks
-# while keeping the existing db.Column/db.relationship style compatible with 1.4.
+# while keeping the existing db.Column/db.relationship style.
 Model: DeclarativeMeta = db.Model
-
-
-def get(entity: Any, ident: Any) -> Any:
-    return db.session.get(entity, ident)
-
-
-def execute(statement: Any, *args: Any, **kwargs: Any) -> Any:
-    if isinstance(statement, str):
-        statement = sql_text(statement)
-    return db.session.execute(statement, *args, **kwargs)
 
 
 # This file contains the reflection of the schema into sqlalchemy

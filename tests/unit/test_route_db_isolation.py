@@ -17,8 +17,8 @@ def test_route_db_isolation_allows_commit_within_test(route_app_context):
     model.db.session.add(group)
     model.db.session.commit()
 
-    assert model.get(model.Group, "ISOG") is not None
+    assert model.db.session.get(model.Group, "ISOG") is not None
 
 
 def test_route_db_isolation_rolls_back_previous_test_state(route_app_context):
-    assert model.get(model.Group, "ISOG") is None
+    assert model.db.session.get(model.Group, "ISOG") is None

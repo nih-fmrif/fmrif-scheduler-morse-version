@@ -27,8 +27,9 @@ from route_seed import (
     set_session_user,
 )
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
@@ -139,8 +140,10 @@ def test_rbac_mutate_batch_updates_group_pi_with_explicit_operation(
     assert payload is not None
     assert payload["ok"] is True
     assert payload["applied"] == 1
-    assert model.get(model.PrimaryGroupMember, (group_id, old_pi)) is None
-    assert model.get(model.PrimaryGroupMember, (group_id, new_pi)) is not None
+    assert model.db.session.get(model.PrimaryGroupMember, (group_id, old_pi)) is None
+    assert (
+        model.db.session.get(model.PrimaryGroupMember, (group_id, new_pi)) is not None
+    )
 
 
 @pytest.mark.covers_route("/json/v1/rbac/mutate", "POST")
@@ -185,8 +188,10 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_group_pi_expected_state(
     assert payload["ok"] is False
     conflict_rows = [row for row in payload["results"] if row["status"] == "conflict"]
     assert len(conflict_rows) == 1
-    assert model.get(model.PrimaryGroupMember, (group_id, old_pi)) is not None
-    assert model.get(model.PrimaryGroupMember, (group_id, new_pi)) is None
+    assert (
+        model.db.session.get(model.PrimaryGroupMember, (group_id, old_pi)) is not None
+    )
+    assert model.db.session.get(model.PrimaryGroupMember, (group_id, new_pi)) is None
 
 
 @pytest.mark.covers_route("/json/v1/rbac/mutate", "POST")
@@ -232,7 +237,7 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_membership_expected_state(
     assert payload["applied"] == 0
     conflict_rows = [row for row in payload["results"] if row["status"] == "conflict"]
     assert len(conflict_rows) == 1
-    row = model.get(model.GroupMember, (group_id, user_id))
+    row = model.db.session.get(model.GroupMember, (group_id, user_id))
     assert row is not None
     assert row.approved is not None
 
@@ -292,7 +297,7 @@ def test_rbac_mutate_batch_rolls_back_all_changes_on_conflict(
         row for row in payload["results"] if row["status"] == "rolled_back"
     ]
     assert len(rolled_back_rows) == 1
-    assert model.get(model.GroupMember, (group_id, target_member)) is None
+    assert model.db.session.get(model.GroupMember, (group_id, target_member)) is None
 
 
 @pytest.mark.covers_route("/json/v1/rbac/mutate", "POST")
@@ -303,7 +308,7 @@ def test_rbac_mutate_batch_applies_group_meta_rows_without_cross_row_overwrite(
     set_admin_session(route_client)
 
     group_id = create_group()
-    group_row = model.get(model.Group, group_id)
+    group_row = model.db.session.get(model.Group, group_id)
     assert group_row is not None
     original_label = group_row.label
     original_description = group_row.description
@@ -339,7 +344,7 @@ def test_rbac_mutate_batch_applies_group_meta_rows_without_cross_row_overwrite(
     assert payload is not None
     assert payload["ok"] is True
     assert payload["applied"] == 2
-    updated_group = model.get(model.Group, group_id)
+    updated_group = model.db.session.get(model.Group, group_id)
     assert updated_group is not None
     assert updated_group.label == "Meta Group One"
     assert updated_group.description == "Updated metadata description"
@@ -353,7 +358,7 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_group_meta_expected_state(
     set_admin_session(route_client)
 
     group_id = create_group()
-    group_row = model.get(model.Group, group_id)
+    group_row = model.db.session.get(model.Group, group_id)
     assert group_row is not None
     original_label = group_row.label
     csrf_token = extract_csrf_token(route_client.get("/rbac").get_data(as_text=True))
@@ -383,6 +388,6 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_group_meta_expected_state(
     assert payload["ok"] is False
     conflict_rows = [row for row in payload["results"] if row["status"] == "conflict"]
     assert len(conflict_rows) == 1
-    fresh_group = model.get(model.Group, group_id)
+    fresh_group = model.db.session.get(model.Group, group_id)
     assert fresh_group is not None
     assert fresh_group.label == original_label

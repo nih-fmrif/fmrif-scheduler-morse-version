@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import DefaultDict, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple
 
 from flask_wtf import FlaskForm
-from sqlalchemy import select
+from sqlalchemy import or_, select, text, union
 from sqlalchemy.sql.functions import func
 from wtforms import fields, validators
 
@@ -217,14 +217,14 @@ def user_datalist_entry(user_id: str, name: str) -> str:
 
 def get_device_from_schedid(entry_id) -> Optional[model.Device]:
     schedule_entry_model = model.ScheduleEntry
-    entry = model.get(schedule_entry_model, entry_id)
+    entry = model.db.session.get(schedule_entry_model, entry_id)
     if entry is None:
         return None
-    return model.get(model.Device, entry.device)
+    return model.db.session.get(model.Device, entry.device)
 
 
 def get_sched_log_entry(entry_id: int):
-    log_entry = model.get(model.SchedLogEntry, entry_id)
+    log_entry = model.db.session.get(model.SchedLogEntry, entry_id)
 
     if log_entry is None:
         return None
@@ -239,23 +239,31 @@ class SupportRequestDatalists(NamedTuple):
 
 
 def support_request_datalists(device: model.Device) -> SupportRequestDatalists:
-    query = model.execute(
-        """
-            select r.researchercode, r.name, ud.tech, ud.medical, ud.training
-            from userdevice ud
-            inner join tlkpresearcher r using(researchercode)
-            where r.active
-            and ud.scannercode=:device
-            and (ud.tech or ud.medical or ud.training)
-            order by 2
-        """,
-        {
-            "device": device.id,
-        },
+    statement = (
+        select(
+            model.User.id,
+            model.User.label,
+            model.UserDevice.tech,
+            model.UserDevice.medical,
+            model.UserDevice.training,
+        )
+        .join(model.User, model.User.id == model.UserDevice.user)
+        .where(model.User.active.is_(True))
+        .where(model.UserDevice.device == device.id)
+        .where(
+            or_(
+                model.UserDevice.tech.is_(True),
+                model.UserDevice.medical.is_(True),
+                model.UserDevice.training.is_(True),
+            )
+        )
+        .order_by(model.User.label)
     )
 
     tech, med, train = [], [], []
-    for user_id, name, is_tech, is_med, is_train in query.fetchall():
+    for user_id, name, is_tech, is_med, is_train in model.db.session.execute(
+        statement
+    ).all():
         pair = (user_id, user_datalist_entry(user_id, name))
         if is_tech:
             tech.append(pair)
@@ -269,24 +277,19 @@ def support_request_datalists(device: model.Device) -> SupportRequestDatalists:
 
 def all_member_datalists_by_group(device: model.Device) -> Dict[str, Datalist]:
     """For each department of device get a datalist of its members."""
-    query = model.execute(
-        """
-            select dg.deptcode, gm.researchercode, r.name
-            from devicegroup dg
-            inner join tlkpdept dept on dept.deptcode = dg.deptcode
-            inner join groupmembers gm on gm.deptcode = dg.deptcode
-            inner join tlkpresearcher r on gm.researchercode = r.researchercode
-            where dg.scannercode = :device
-            and gm.approved is not null
-            and dept.department and dept.iscurrent
-            order by 1, 3
-        """,
-        {
-            "device": device.id,
-        },
+    statement = (
+        select(model.DeviceGroup.group, model.GroupMember.user, model.User.label)
+        .join(model.Group, model.Group.id == model.DeviceGroup.group)
+        .join(model.GroupMember, model.GroupMember.group == model.DeviceGroup.group)
+        .join(model.User, model.User.id == model.GroupMember.user)
+        .where(model.DeviceGroup.device == device.id)
+        .where(model.GroupMember.approved.is_not(None))
+        .where(model.Group.department.is_(True))
+        .where(model.Group.active.is_(True))
+        .order_by(model.DeviceGroup.group, model.User.label)
     )
     datalists = defaultdict(list)
-    for dept, user_id, name in query.fetchall():
+    for dept, user_id, name in model.db.session.execute(statement).all():
         pair = (user_id, user_datalist_entry(user_id, name))
         datalists[dept].append(pair)
     return datalists
@@ -296,32 +299,28 @@ def member_datalists_by_group_for(
     device: model.Device, user: model.User
 ) -> Dict[str, Datalist]:
     """For each device group a user belongs to, get a member datalist."""
-    query = model.execute(
-        """
-            with users_departments as (
-                    select d.deptcode
-                    from tlkpdept d
-                    inner join groupmembers gm using(deptcode)
-                    where d.department and d.iscurrent
-                    and gm.approved is not null
-                    and gm.researchercode = :user
-                )
-            select dg.deptcode, gm.researchercode, r.name
-            from devicegroup dg
-            inner join users_departments dept on dept.deptcode = dg.deptcode
-            inner join groupmembers gm on gm.deptcode = dg.deptcode
-            inner join tlkpresearcher r on gm.researchercode = r.researchercode
-            where dg.scannercode = :device
-            and gm.approved is not null
-            order by 1, 3
-        """,
-        {
-            "device": device.id,
-            "user": user.id,
-        },
+    users_departments = (
+        select(model.Group.id.label("group_id"))
+        .join(model.GroupMember, model.GroupMember.group == model.Group.id)
+        .where(model.Group.department.is_(True))
+        .where(model.Group.active.is_(True))
+        .where(model.GroupMember.approved.is_not(None))
+        .where(model.GroupMember.user == user.id)
+        .subquery()
+    )
+    statement = (
+        select(model.DeviceGroup.group, model.GroupMember.user, model.User.label)
+        .join(
+            users_departments, users_departments.c.group_id == model.DeviceGroup.group
+        )
+        .join(model.GroupMember, model.GroupMember.group == model.DeviceGroup.group)
+        .join(model.User, model.User.id == model.GroupMember.user)
+        .where(model.DeviceGroup.device == device.id)
+        .where(model.GroupMember.approved.is_not(None))
+        .order_by(model.DeviceGroup.group, model.User.label)
     )
     datalists = defaultdict(list)
-    for dept, user_id, name in query.fetchall():
+    for dept, user_id, name in model.db.session.execute(statement).all():
         pair = (user_id, user_datalist_entry(user_id, name))
         datalists[dept].append(pair)
     return datalists
@@ -334,75 +333,76 @@ def all_group_colors() -> Dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _cached_group_colors() -> Tuple[Tuple[str, str], ...]:
-    query = model.execute(
-        """
-            select d.deptcode, d.color
-            from tlkpdept d
-        """,
-    )
-    return tuple((key, value) for key, value in query.fetchall())
+    statement = select(model.Group.id, model.Group.color)
+    return tuple(model.db.session.execute(statement).all())
 
 
 def _clear_reference_data_cache() -> None:
     _cached_group_colors.cache_clear()
 
 
+def _format_group_datalist_entry(group_id: str, label: str) -> Tuple[str, str]:
+    if label != group_id:
+        label = f"{label} ({group_id})"
+    return group_id, label
+
+
+def _default_scheduler_groups_statement():
+    return select(
+        model.Group.id.label("group_id"),
+        model.Group.label.label("group_label"),
+    ).where(model.Group.id.in_(("training", "maint")))
+
+
 def all_groups_of_device(device: model.Device) -> Datalist:
-    query = model.execute(
-        """
-            select g.deptcode, g.dept_short
-            from devicegroup dg
-            inner join tlkpdept g using(deptcode)
-            where dg.scannercode = :device
-            and g.department and g.iscurrent
-            union
-            select deptcode, dept_short
-            from tlkpdept
-            where deptcode in ('training', 'maint')
-        """,
-        {
-            "device": device.id,
-        },
+    device_groups = (
+        select(
+            model.Group.id.label("group_id"),
+            model.Group.label.label("group_label"),
+        )
+        .join(model.DeviceGroup, model.DeviceGroup.group == model.Group.id)
+        .where(model.DeviceGroup.device == device.id)
+        .where(model.Group.department.is_(True))
+        .where(model.Group.active.is_(True))
     )
-    out = []
-    for group_id, name in query.fetchall():
-        if name != group_id:
-            name = f"{name} ({group_id})"
-        out.append((group_id, name))
-    return out
+    group_rows = union(device_groups, _default_scheduler_groups_statement()).subquery()
+    statement = select(group_rows.c.group_id, group_rows.c.group_label).order_by(
+        group_rows.c.group_label, group_rows.c.group_id
+    )
+    return [
+        _format_group_datalist_entry(group_id, label)
+        for group_id, label in model.db.session.execute(statement).all()
+    ]
 
 
 def groups_of_device_for(device: model.Device, user: model.User) -> Datalist:
-    query = model.execute(
-        """
-            with users_departments as (
-                select d.deptcode, d.dept_short
-                from tlkpdept d
-                inner join groupmembers gm using(deptcode)
-                where d.department and d.iscurrent
-                and gm.approved is not null
-                and gm.researchercode = :user
-            )
-            select g.deptcode, g.dept_short
-            from devicegroup dg
-            inner join users_departments g using(deptcode)
-            where dg.scannercode = :device
-            union
-            select deptcode, dept_short
-            from tlkpdept
-            where deptcode in ('training', 'maint')
-        """,
-        {
-            "device": device.id,
-            "user": user.id,
-        },
+    users_departments = (
+        select(
+            model.Group.id.label("group_id"),
+            model.Group.label.label("group_label"),
+        )
+        .join(model.GroupMember, model.GroupMember.group == model.Group.id)
+        .where(model.Group.department.is_(True))
+        .where(model.Group.active.is_(True))
+        .where(model.GroupMember.approved.is_not(None))
+        .where(model.GroupMember.user == user.id)
+        .subquery()
     )
-    out = []
-    for group_id, name in query.fetchall():
-        if name != group_id:
-            name = f"{name} ({group_id})"
-        out.append((group_id, name))
-    return out
+    visible_groups = (
+        select(users_departments.c.group_id, users_departments.c.group_label)
+        .join(
+            model.DeviceGroup, model.DeviceGroup.group == users_departments.c.group_id
+        )
+        .where(model.DeviceGroup.device == device.id)
+    )
+    group_rows = union(visible_groups, _default_scheduler_groups_statement()).subquery()
+    statement = select(group_rows.c.group_id, group_rows.c.group_label).order_by(
+        group_rows.c.group_label, group_rows.c.group_id
+    )
+    return [
+        _format_group_datalist_entry(group_id, label)
+        for group_id, label in model.db.session.execute(statement).all()
+    ]
 
 
 def off_hours() -> Set[int]:
@@ -462,8 +462,9 @@ def fmt_hours() -> Dict[int, str]:
 
 def db_now() -> Tuple[datetime.date, int, int]:
     """Get current day, hour, and minute from the DB transaction."""
-    query = model.execute(
-        """
+    query = model.db.session.execute(
+        text(
+            """
         select
             (current_timestamp AT TIME ZONE 'America/New_York')::date,
             extract(
@@ -473,6 +474,7 @@ def db_now() -> Tuple[datetime.date, int, int]:
                 minute from (current_timestamp AT TIME ZONE 'America/New_York')
             )::integer as minute
         """
+        )
     )
     return query.first()
 

@@ -11,7 +11,8 @@ from route_seed import (
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
-from scheduler import logic, model
+import scheduler.logic.app_error_events as logic
+from scheduler import model
 from scheduler.routes import rbac_mutations, rbac_routes
 
 pytestmark = pytest.mark.route

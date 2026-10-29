@@ -14,8 +14,11 @@ from mailpit_api import (
 )
 from sqlalchemy import select
 
+import scheduler.logic.notifications as logic
+import scheduler.logic.rbac_audit_support as audit_logic
+import scheduler.logic.schedule_editor as schedule_logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 
 
 def _require_mailpit():
@@ -183,7 +186,7 @@ def test_prepare_notifications_suppresses_all_scheduler_messages_when_notify_dis
 def test_fmt_support_notifications_covers_scheduler_support_states(
     state, handler, subkind, expected_lines
 ):
-    hours = logic.fmt_hours()
+    hours = schedule_logic.fmt_hours()
     note = {
         "id": 103,
         "kind": "medical",
@@ -271,7 +274,7 @@ def test_notify_user_of_join_request_outcome_delivers_mail_and_audits(app_contex
                 model.EmailAuditLog.recipient == addr,
             )
             assert audit_row is not None
-            assert audit_row.status == logic.EMAIL_AUDIT_STATUS_SENT
+            assert audit_row.status == audit_logic.EMAIL_AUDIT_STATUS_SENT
             assert "approved" in audit_row.subject
 
             summary = wait_for_mailpit_message(
@@ -312,7 +315,7 @@ def test_notify_user_of_tech_join_request_outcome_delivers_mail_and_audits(app_c
                 model.EmailAuditLog.recipient == addr,
             )
             assert audit_row is not None
-            assert audit_row.status == logic.EMAIL_AUDIT_STATUS_SENT
+            assert audit_row.status == audit_logic.EMAIL_AUDIT_STATUS_SENT
             assert "denied" in audit_row.subject
 
             summary = wait_for_mailpit_message(
@@ -372,7 +375,7 @@ def test_send_scheduler_notifications_delivers_all_streams_and_audits(app_contex
             )
             assert len(audit_rows) == 4
             assert all(
-                row.status == logic.EMAIL_AUDIT_STATUS_SENT for row in audit_rows
+                row.status == audit_logic.EMAIL_AUDIT_STATUS_SENT for row in audit_rows
             )
         finally:
             clear_mailpit_messages(cfg)
@@ -444,7 +447,9 @@ def test_send_scheduler_notifications_marks_suppressed_delivery_as_skipped(
             model.EmailAuditLog.details.like(f"%device={device_id}%"),
         )
         assert len(audit_rows) == 4
-        assert all(row.status == logic.EMAIL_AUDIT_STATUS_SKIPPED for row in audit_rows)
+        assert all(
+            row.status == audit_logic.EMAIL_AUDIT_STATUS_SKIPPED for row in audit_rows
+        )
 
 
 def test_prepare_notifications_returns_empty_when_notifications_are_disabled():

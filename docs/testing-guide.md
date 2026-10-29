@@ -5,6 +5,7 @@ Use Pixi tasks for all local test runs:
 ```bash
 pixi run test-unit
 pixi run test-unit -- tests/unit/test_some_file.py -q
+pixi run test-unit-xdist
 pixi run test-routes
 pixi run test-routes -- tests/unit/test_some_route_file.py -q
 pixi run test-integration-ci
@@ -21,9 +22,11 @@ pixi run test-load-moderate-notify
 
 ## Notes
 - `test-unit` and `test-routes` use `scripts/run-target-aware-pytest-suite.py`, which forwards into `scripts/run-isolated-test-suite.sh`.
+- `test-unit-xdist` is an opt-in unit-only variant that adds `-n auto` on top of the same wrapper.
 - `test-integration*` runs directly through `scripts/run-isolated-test-suite.sh`.
 - The wrapper applies per-suite isolation for DB/Mailpit/runtime settings.
 - Interface policy: when explicit test selectors are supplied, they replace the default collection root for that task. Tasks must not silently widen a narrowed request.
+- Keep `test-routes` on the default serial task unless worker-specific route isolation is added deliberately.
 - Integration tasks start their own app server; no separate `pixi run serve` is required.
 - The default integration tasks exclude Playwright tests tagged `@heavy`; run those explicitly with `pixi run test-integration-heavy`.
 - When a browser smoke pass is sufficient, skip the full browser matrix and target Chromium directly:

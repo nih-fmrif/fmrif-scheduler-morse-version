@@ -468,7 +468,6 @@ class SessionConfig:
     cookie_samesite: str = "Strict"
     permanent_lifetime: int = 8 * 60 * 60
     type: str = "sqlalchemy"
-    use_signer: bool = True
     sqlalchemy_table: str = "site_sessions"
 
     def __post_init__(self) -> None:
@@ -480,7 +479,6 @@ class SessionConfig:
             self.permanent_lifetime, "SESSION__PERMANENT_LIFETIME"
         )
         self.type = _coerce_str(self.type)
-        self.use_signer = _coerce_bool(self.use_signer)
         self.sqlalchemy_table = _coerce_str(self.sqlalchemy_table)
 
     @staticmethod
@@ -893,7 +891,6 @@ class AppConfig(dict):
             "SESSION_COOKIE_SAMESITE": settings.session.cookie_samesite,
             "PERMANENT_SESSION_LIFETIME": settings.session.permanent_lifetime,
             "SESSION_TYPE": settings.session.type,
-            "SESSION_USE_SIGNER": settings.session.use_signer,
             "SESSION_SQLALCHEMY_TABLE": settings.session.sqlalchemy_table,
             "ENTRA_CLIENT_ID": settings.entra.client_id,
             "ENTRA_TENANT_ID": settings.entra.tenant_id,

@@ -98,9 +98,9 @@ def _seed_support_users():
         active=True,
         has_membership=True,
     )
-    admin = model.get(model.User, "sched-admin")
-    member = model.get(model.User, "sched-member")
-    support = model.get(model.User, "sched-support")
+    admin = model.db.session.get(model.User, "sched-admin")
+    member = model.db.session.get(model.User, "sched-member")
+    support = model.db.session.get(model.User, "sched-support")
     assert admin is not None
     assert member is not None
     assert support is not None

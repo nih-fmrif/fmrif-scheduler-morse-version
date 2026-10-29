@@ -29,8 +29,9 @@ from route_seed import (
     set_session_user,
 )
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
@@ -254,7 +255,7 @@ def test_rbac_explorer_includes_all_active_devices_for_dev_pi(route_client):
     active_device_a, _ = create_device()
     active_device_b, _ = create_device()
     inactive_device_id, _ = create_device()
-    inactive_device = model.get(model.Device, inactive_device_id)
+    inactive_device = model.db.session.get(model.Device, inactive_device_id)
     assert inactive_device is not None
     inactive_device.active = False
     model.db.session.add(inactive_device)
@@ -376,7 +377,7 @@ def test_rbac_mutate_batch_for_group_pi_of_non_dev_group_can_approve_managed_gro
         },
     )
     assert pending_response.status_code == 200
-    member_row = model.get(model.GroupMember, (group_id, member_id))
+    member_row = model.db.session.get(model.GroupMember, (group_id, member_id))
     assert member_row is not None
     assert member_row.approved is None
 
@@ -405,7 +406,7 @@ def test_rbac_mutate_batch_for_group_pi_of_non_dev_group_can_approve_managed_gro
     assert approval_payload is not None
     assert approval_payload["ok"] is True
     assert approval_payload["applied"] == 1
-    member_row = model.get(model.GroupMember, (group_id, member_id))
+    member_row = model.db.session.get(model.GroupMember, (group_id, member_id))
     assert member_row is not None
     assert member_row.approved is not None
 
@@ -493,6 +494,11 @@ def test_rbac_mutate_batch_rejects_membership_pi_field(route_client, route_app_c
     assert len(invalid_messages) >= 1
     assert any("no longer accepts pi" in msg for msg in invalid_messages)
 
-    assert model.get(model.GroupMember, (group_id, unrelated_member)) is None
-    assert model.get(model.PrimaryGroupMember, (group_id, pi_owner)) is not None
-    assert model.get(model.PrimaryGroupMember, (group_id, stable_member)) is None
+    assert model.db.session.get(model.GroupMember, (group_id, unrelated_member)) is None
+    assert (
+        model.db.session.get(model.PrimaryGroupMember, (group_id, pi_owner)) is not None
+    )
+    assert (
+        model.db.session.get(model.PrimaryGroupMember, (group_id, stable_member))
+        is None
+    )

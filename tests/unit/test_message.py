@@ -68,7 +68,8 @@ def test_send_marks_suppressed_delivery_as_skipped(monkeypatch):
         captured.update(kwargs)
 
     monkeypatch.setattr(
-        "scheduler.logic.log_email_audit_event", fake_log_email_audit_event
+        "scheduler.logic.rbac_audit_support.log_email_audit_event",
+        fake_log_email_audit_event,
     )
 
     with app.app_context():

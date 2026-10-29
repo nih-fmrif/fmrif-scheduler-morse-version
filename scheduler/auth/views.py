@@ -26,7 +26,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from scheduler import model
 from scheduler.config import settings
-from scheduler.logic import CsrfOnlyForm
+from scheduler.logic.schedule_editor import CsrfOnlyForm
 
 from .jwt_utils import extract_bearer_token, verify_jwt
 from .oidc import get_authorization_endpoint, get_token_endpoint

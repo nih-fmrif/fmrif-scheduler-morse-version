@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler import model
 from scheduler.config import settings
-from scheduler.logic import upsert_user
+from scheduler.logic._core_users import upsert_user
 
 from .jwt_utils import extract_bearer_token, user_from_claims, verify_jwt
 from .models import SessionUser
@@ -114,26 +114,11 @@ def _rotate_session_identifier() -> None:
         return
 
     regenerate = getattr(interface, "regenerate", None)
-    if callable(regenerate):
-        try:
-            regenerate(session)
-            return
-        except (AttributeError, RuntimeError, TypeError):
-            if current_app and current_app.logger:
-                current_app.logger.exception("Failed to rotate session identifier")
-            return
-
-    generate_sid = getattr(interface, "_generate_sid", None)
-    if not callable(generate_sid):
+    if not callable(regenerate):
         return
 
     try:
-        sid_length = getattr(interface, "sid_length", None)
-        if sid_length is None:
-            session.sid = generate_sid()
-        else:
-            session.sid = generate_sid(sid_length)
-        session.modified = True
+        regenerate(session)
     except (AttributeError, RuntimeError, TypeError):
         if current_app and current_app.logger:
             current_app.logger.exception("Failed to rotate session identifier")
@@ -245,7 +230,7 @@ def get_user_from_session() -> Optional[SessionUser]:
 
     active = True
     try:
-        db_user = model.get(model.User, username)
+        db_user = model.db.session.get(model.User, username)
         if db_user is not None:
             active = bool(db_user.active)
     except (SQLAlchemyError, RuntimeError):
@@ -267,7 +252,7 @@ def get_user_from_session() -> Optional[SessionUser]:
 
 def _set_admin_membership(user_id: str, enabled: bool) -> None:
     """Set or remove admin membership for a user."""
-    admin_group = model.get(model.Group, "admin")
+    admin_group = model.db.session.get(model.Group, "admin")
     if enabled and admin_group is None:
         admin_group = model.Group(
             id="admin",
@@ -280,7 +265,7 @@ def _set_admin_membership(user_id: str, enabled: bool) -> None:
     if admin_group is None:
         return
 
-    membership = model.get(model.GroupMember, ("admin", user_id))
+    membership = model.db.session.get(model.GroupMember, ("admin", user_id))
 
     if enabled:
         approved_at = datetime.now(timezone.utc)
@@ -382,7 +367,7 @@ def _parse_auth_test_seed_groups(raw: str) -> List[str]:
 
 
 def _ensure_auth_test_group(group_id: str) -> None:
-    group = model.get(model.Group, group_id)
+    group = model.db.session.get(model.Group, group_id)
     if group is None:
         group = model.Group(id=group_id)
 
@@ -404,8 +389,8 @@ def _set_profile_group_membership(
     if enabled:
         _ensure_auth_test_group(group_id)
 
-    membership = model.get(model.GroupMember, (group_id, user_id))
-    primary = model.get(model.PrimaryGroupMember, (group_id, user_id))
+    membership = model.db.session.get(model.GroupMember, (group_id, user_id))
+    primary = model.db.session.get(model.PrimaryGroupMember, (group_id, user_id))
 
     if enabled:
         approved_at = datetime.now(timezone.utc)
@@ -448,7 +433,7 @@ def _set_profile_group_membership(
 
 
 def _set_technologist_status(user_id: str, enabled: bool) -> None:
-    record = model.get(model.Technologist, user_id)
+    record = model.db.session.get(model.Technologist, user_id)
     if enabled:
         if record is None:
             model.db.session.add(
@@ -473,7 +458,7 @@ def _set_technologist_status(user_id: str, enabled: bool) -> None:
 
 
 def _ensure_auth_test_device(device_id: str) -> None:
-    device = model.get(model.Device, device_id)
+    device = model.db.session.get(model.Device, device_id)
     if device is None:
         device = model.Device(id=device_id)
 
@@ -490,7 +475,7 @@ def _ensure_auth_test_device(device_id: str) -> None:
 
 def _set_test_scanner_tech_permission(user_id: str, enabled: bool) -> None:
     scanner_id = "TEST"
-    permission = model.get(model.UserDevice, (user_id, scanner_id))
+    permission = model.db.session.get(model.UserDevice, (user_id, scanner_id))
 
     if enabled:
         _ensure_auth_test_device(scanner_id)

@@ -22,11 +22,15 @@ Targeted pytest runs still go through Pixi tasks:
 
 ```bash
 pixi run test-unit -- tests/unit/test_some_file.py -q
+pixi run test-unit-xdist -- tests/unit/test_some_file.py -q
 pixi run test-routes -- tests/unit/test_some_route_file.py -q
 ```
 
 When explicit test selectors are supplied, the task drops its default collection
 root instead of widening scope.
+`test-unit-xdist` is opt-in for unit tests only; keep route tests on the default
+serial task unless worker-specific route isolation is being designed and
+validated.
 
 Reuse existing services/data when iterating:
 

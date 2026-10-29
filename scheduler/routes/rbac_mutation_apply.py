@@ -6,7 +6,10 @@ from flask import g, request
 from sqlalchemy import select
 from sqlalchemy.sql import func
 
-from scheduler import logic, model
+import scheduler.logic.core as core_logic
+import scheduler.logic.notifications as notification_logic
+import scheduler.logic.rbac_audit_support as logic
+from scheduler import model
 
 from .rbac_mutation_validation import (
     _rbac_audit_preview,
@@ -261,7 +264,7 @@ def _rbac_apply_batch_operation(
             str(validated.get("email_status", logic.EMAIL_STATUS_NONE))
         )
         set_email_status = bool(validated.get("set_email_status"))
-        existing = model.get(model.Technologist, user.id)
+        existing = model.db.session.get(model.Technologist, user.id)
         before_applied = existing is not None
         before_approved = (
             bool(existing.approved_on is not None) if existing is not None else False
@@ -313,7 +316,9 @@ def _rbac_apply_batch_operation(
                     and requested_email_status == logic.EMAIL_STATUS_SENT
                 ):
                     resend_attempted = True
-                    resend_result = logic.notify_dev_pi_of_tech_join_form(user)
+                    resend_result = notification_logic.notify_dev_pi_of_tech_join_form(
+                        user
+                    )
                     row.email_status = resend_result
                 else:
                     row.email_status = requested_email_status
@@ -672,7 +677,7 @@ def _rbac_apply_batch_operation(
         group = validated["group"]
         device = validated["device"]
         linked = bool(validated["linked"])
-        existing = model.get(model.DeviceGroup, (device.id, group.id))
+        existing = model.db.session.get(model.DeviceGroup, (device.id, group.id))
         before_linked = existing is not None
         if bool(validated.get("has_expected_linked")):
             expected_linked = bool(validated.get("expected_linked"))
@@ -717,7 +722,7 @@ def _rbac_apply_batch_operation(
         medical = bool(validated["medical"])
         training = bool(validated["training"])
         has_any_permission = bool(validated["has_any_permission"])
-        existing = model.get(model.UserDevice, (user.id, device.id))
+        existing = model.db.session.get(model.UserDevice, (user.id, device.id))
         before = (
             (
                 bool(existing.templates),
@@ -812,7 +817,7 @@ def _rbac_apply_batch_operation(
             str(validated.get("email_status", logic.EMAIL_STATUS_NONE))
         )
         set_email_status = bool(validated.get("set_email_status"))
-        existing = model.get(model.GroupMember, (group.id, user.id))
+        existing = model.db.session.get(model.GroupMember, (group.id, user.id))
         was_member = existing is not None
         was_approved = (
             bool(existing.approved is not None) if existing is not None else False
@@ -867,7 +872,9 @@ def _rbac_apply_batch_operation(
                     and requested_email_status == logic.EMAIL_STATUS_SENT
                 ):
                     resend_attempted = True
-                    resend_result = logic.notify_group_pi_of_join_form(user, group.id)
+                    resend_result = notification_logic.notify_group_pi_of_join_form(
+                        user, group.id
+                    )
                     row.email_status = resend_result
                 else:
                     row.email_status = requested_email_status
@@ -917,7 +924,7 @@ def _rbac_apply_batch_operation(
         approved_after = bool(after[0] and after[1])
         denied_after = bool(not after[0])
         if pending_before and (approved_after or denied_after):
-            logic.notify_user_of_join_request_outcome(
+            notification_logic.notify_user_of_join_request_outcome(
                 approved_after,
                 user,
                 group.label or group.id,
@@ -968,7 +975,7 @@ def _rbac_apply_batch_operation(
                 f"PI must be an approved active member of {group.id}: {user.id}"
             )
         if user.id != current_pi_user:
-            logic.change_pi_of_group(group, user)
+            core_logic.change_pi_of_group(group, user)
             _record_rbac_action(
                 action="group.pi.update",
                 where=f"/rbac?scope=group&entity={group.id}",

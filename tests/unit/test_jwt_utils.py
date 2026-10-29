@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from scheduler.auth import jwt_utils
 from scheduler.config import EntraConfig, settings
-from scheduler.logic import scoped_user_id_from_identifier
+from scheduler.logic.core import scoped_user_id_from_identifier
 
 
 @pytest.fixture(autouse=True)

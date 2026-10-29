@@ -7,7 +7,9 @@ from flask import abort, url_for
 from sqlalchemy import select
 from sqlalchemy.orm import Load, load_only
 
-from scheduler import logic, model
+import scheduler.logic.core as logic
+import scheduler.logic.rbac_audit_support as audit_logic
+from scheduler import model
 from scheduler.auth.test_session_state import get_auth_test_session_pi_groups
 
 _RBAC_SCOPE_LABELS: Dict[str, str] = {
@@ -20,9 +22,12 @@ _RBAC_AUDIT_SCOPE_LABELS: Dict[str, str] = {
     **_RBAC_SCOPE_LABELS,
 }
 _RBAC_EMAIL_STATUS_OPTIONS: List[Dict[str, str]] = [
-    {"value": logic.EMAIL_STATUS_NONE, "label": logic.EMAIL_STATUS_NONE},
-    {"value": logic.EMAIL_STATUS_SENT, "label": logic.EMAIL_STATUS_SENT},
-    {"value": logic.EMAIL_STATUS_FAILED, "label": logic.EMAIL_STATUS_FAILED},
+    {"value": audit_logic.EMAIL_STATUS_NONE, "label": audit_logic.EMAIL_STATUS_NONE},
+    {"value": audit_logic.EMAIL_STATUS_SENT, "label": audit_logic.EMAIL_STATUS_SENT},
+    {
+        "value": audit_logic.EMAIL_STATUS_FAILED,
+        "label": audit_logic.EMAIL_STATUS_FAILED,
+    },
 ]
 _RBAC_GRAPH_NODE_LIMIT = 12
 _RBAC_TABLE_ROW_LIMIT = 250
@@ -140,9 +145,9 @@ def _rbac_state(value: bool) -> str:
 
 def _rbac_email_status(value: str) -> str:
     token = (value or "").strip().lower()
-    if token in logic.EMAIL_STATUS_VALUES:
+    if token in audit_logic.EMAIL_STATUS_VALUES:
         return token
-    return logic.EMAIL_STATUS_NONE
+    return audit_logic.EMAIL_STATUS_NONE
 
 
 def _rbac_device_label(device: model.Device) -> str:
@@ -570,7 +575,7 @@ def _rbac_group_detail(
         email_status = (
             _rbac_email_status(membership.email_status)
             if membership is not None
-            else logic.EMAIL_STATUS_NONE
+            else audit_logic.EMAIL_STATUS_NONE
         )
         status = "not member"
         if is_member:
@@ -1409,13 +1414,13 @@ def _rbac_user_detail(
     memberships_by_group = {row.group: row for row in memberships}
 
     is_admin = logic.is_admin(user)
-    tech_request = model.get(model.Technologist, user.id)
+    tech_request = model.db.session.get(model.Technologist, user.id)
     is_technologist = logic.is_technologist(user.id)
     tech_applied = tech_request is not None
     tech_email_status = _rbac_email_status(
         tech_request.email_status
         if tech_request is not None
-        else logic.EMAIL_STATUS_NONE
+        else audit_logic.EMAIL_STATUS_NONE
     )
     is_dev_member, _ = logic.get_dev_tech_status(user)
     show_device_permissions = bool(is_dev_member)
@@ -1512,7 +1517,7 @@ def _rbac_user_detail(
         email_status = (
             _rbac_email_status(membership.email_status)
             if membership is not None
-            else logic.EMAIL_STATUS_NONE
+            else audit_logic.EMAIL_STATUS_NONE
         )
         membership_enabled = bool(group.has_membership)
         can_edit_membership = bool(group.active and (membership_enabled or is_member))
@@ -1937,15 +1942,3 @@ def _rbac_detail(
         return _rbac_user_detail(user, include_inactive=include_inactive)
 
     abort(400, f"invalid scope: {scope}")
-
-
-def _rbac_restrict_detail_for_actor(
-    scope: str,
-    detail: Dict[str, Any],
-    actor: Dict[str, Any],
-) -> Dict[str, Any]:
-    from .rbac_explorer_serialization import (
-        _rbac_restrict_detail_for_actor as _rbac_restrict_detail_for_actor_impl,
-    )
-
-    return _rbac_restrict_detail_for_actor_impl(scope, detail, actor)

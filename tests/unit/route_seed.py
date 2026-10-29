@@ -14,9 +14,12 @@ from datetime import datetime, timezone
 from typing import Sequence
 
 from flask import has_app_context
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
-from scheduler import logic, model
+import scheduler.logic.core as logic
+import scheduler.logic.rbac_audit_support as audit_logic
+import scheduler.logic.templates as template_logic
+from scheduler import model
 from scheduler.app import create_app
 
 _ROUTE_SEED_APP = None
@@ -102,7 +105,7 @@ def ensure_group(
     has_membership: bool = True,
 ) -> None:
     with _route_app_context() as created_context:
-        group = model.get(model.Group, group_id)
+        group = model.db.session.get(model.Group, group_id)
         if group is None:
             group = model.Group(id=group_id)
 
@@ -155,7 +158,7 @@ def seeded_scanner_id() -> str:
     """Return a scanner id guaranteed to exist in SQL-seeded route-test data."""
     with _route_app_context():
         for scanner_id in ("TEST", "test"):
-            scanner = model.get(model.Device, scanner_id)
+            scanner = model.db.session.get(model.Device, scanner_id)
             if scanner is not None and scanner.active:
                 return scanner_id
 
@@ -173,7 +176,7 @@ def seeded_scanner_id() -> str:
             return active.id
 
         for scanner_id in ("TEST", "test"):
-            scanner = model.get(model.Device, scanner_id)
+            scanner = model.db.session.get(model.Device, scanner_id)
             if scanner is not None:
                 return scanner_id
 
@@ -195,17 +198,19 @@ def _iter_seeded_template_keys() -> list[tuple[str, str]]:
     seen: set[tuple[str, str]] = set()
 
     for device_id, template_id in _ROOTED_TEMPLATE_PREFERENCES:
-        if model.get(model.Template, (template_id, device_id)) is None:
+        if model.db.session.get(model.Template, (template_id, device_id)) is None:
             continue
         keys.append((device_id, template_id))
         seen.add((device_id, template_id))
 
-    for device_id, template_id in model.execute(
-        """
+    for device_id, template_id in model.db.session.execute(
+        text(
+            """
         select scannercode, templatecode
         from tbltemplates
         order by scannercode, templatecode
         """
+        )
     ):
         key = (str(device_id), str(template_id))
         if key in seen:
@@ -226,19 +231,19 @@ def seeded_template_compatibility(
 
     with _route_app_context():
         for device_id, template_id in _iter_seeded_template_keys():
-            template = model.get(model.Template, (template_id, device_id))
+            template = model.db.session.get(model.Template, (template_id, device_id))
             if template is None:
                 continue
             if archived is not None and template.hidden != archived:
                 continue
 
-            device = model.get(model.Device, device_id)
+            device = model.db.session.get(model.Device, device_id)
             if device is None:
                 continue
 
-            report = logic.inspect_template_compatibility(device, [template_id]).get(
-                template_id
-            )
+            report = template_logic.inspect_template_compatibility(
+                device, [template_id]
+            ).get(template_id)
             if report is None:
                 continue
             if (
@@ -268,8 +273,9 @@ def seeded_template_compatibility(
 def seeded_dev_user_id() -> str:
     """Return an existing approved DEV member id from seeded route-test data."""
     with _route_app_context():
-        row = model.execute(
-            """
+        row = model.db.session.execute(
+            text(
+                """
             select m."user"
             from membership m
             where m."group" = 'DEV'
@@ -278,6 +284,7 @@ def seeded_dev_user_id() -> str:
             order by m."user"
             limit 1
             """
+            )
         ).first()
         if row is not None:
             return row[0]
@@ -318,8 +325,9 @@ def seeded_group_scanner_id(group_id: str) -> str:
 def seeded_sched_log_id() -> str:
     """Return an existing schedule id for /json/v1/log/<id> contract checks."""
     with _route_app_context():
-        row = model.execute(
-            """
+        row = model.db.session.execute(
+            text(
+                """
             select s.schedid
             from tblsched s
             inner join tlkpscanner d on d.scannercode = s.scannercode
@@ -327,12 +335,13 @@ def seeded_sched_log_id() -> str:
             order by s.schedid
             limit 1
             """
+            )
         ).first()
         if row is not None:
             return str(row[0])
 
-        row = model.execute(
-            "select s.schedid from tblsched s order by s.schedid limit 1"
+        row = model.db.session.execute(
+            text("select s.schedid from tblsched s order by s.schedid limit 1")
         ).first()
         if row is not None:
             return str(row[0])
@@ -348,22 +357,22 @@ def set_group_membership(
     pi: bool = False,
 ) -> None:
     with _route_app_context() as created_context:
-        membership = model.get(model.GroupMember, (group_id, user_id))
+        membership = model.db.session.get(model.GroupMember, (group_id, user_id))
         approved_at = datetime.now(timezone.utc) if approved else None
         if membership is None:
             membership = model.GroupMember(
                 group=group_id,
                 user=user_id,
                 approved=approved_at,
-                email_status=logic.EMAIL_STATUS_NONE,
+                email_status=audit_logic.EMAIL_STATUS_NONE,
             )
         else:
             membership.approved = approved_at
             if approved:
-                membership.email_status = logic.EMAIL_STATUS_NONE
+                membership.email_status = audit_logic.EMAIL_STATUS_NONE
         model.db.session.add(membership)
 
-        pi_entry = model.get(model.PrimaryGroupMember, (group_id, user_id))
+        pi_entry = model.db.session.get(model.PrimaryGroupMember, (group_id, user_id))
         if pi:
             current_pi = (
                 model.db.session.execute(

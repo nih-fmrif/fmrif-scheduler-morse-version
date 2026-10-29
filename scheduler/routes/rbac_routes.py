@@ -1,30 +1,50 @@
 from __future__ import annotations
 
-import csv
-import datetime
-import io
-from time import perf_counter
-from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import parse_qsl, urlencode
+from typing import Any, Callable, List, Tuple
 
-from flask import (
-    Response,
-    abort,
-    current_app,
-    flash,
-    g,
-    has_request_context,
-    jsonify,
-    redirect,
-    request,
-    url_for,
+from flask import abort, current_app, g, jsonify, request, url_for
+from sqlalchemy.exc import SQLAlchemyError
+
+import scheduler.logic.admin_config as logic
+import scheduler.logic.app_error_events as app_error_logic
+import scheduler.logic.core as core_logic
+import scheduler.logic.csp_violation_events as csp_logic
+import scheduler.logic.rbac_audit_support as audit_logic
+import scheduler.logic.schedule_editor as schedule_logic
+from scheduler import model
+
+from ._rbac_admin_actions import (
+    app_issues_config,
+    app_issues_export_mapping,
+    app_issues_import_mapping,
+    app_issues_notification_state,
+    app_issues_organization_history_scan,
+    app_issues_scan,
 )
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import InvalidRequestError, SQLAlchemyError
-
-from scheduler import logic, model
-
+from ._rbac_explorer_core import (
+    _RBAC_AUDIT_SCOPE_LABELS,
+    _RBAC_SCOPE_LABELS,
+    _rbac_actor,
+    _rbac_actor_allows_scope,
+    _rbac_actor_scope_labels,
+    _rbac_detail,
+    _rbac_empty_detail,
+    _rbac_entities_for_actor,
+    _rbac_entity_visible_for_actor,
+    _rbac_scopes,
+)
+from ._rbac_profile import register_rbac_profile_hooks
+from ._rbac_route_support import (
+    Breadcrumb_links,
+    Subpage_links,
+    _admin_mapping_kinds,
+    _app_error_limit_from_raw,
+    _normalized_return_query,
+    _request_truthy,
+    audit_rbac_action,
+    breadcrumb,
+    configure_rbac_route_helpers,
+)
 from .email_audit import (
     _EMAIL_AUDIT_ISSUE_STATE_LABELS,
     _EMAIL_AUDIT_SEARCH_FIELD_LABELS,
@@ -49,19 +69,7 @@ from .rbac_audit import (
     _rbac_audit_search_field,
     _rbac_include_inactive_from_request,
 )
-from .rbac_explorer import (
-    _RBAC_AUDIT_SCOPE_LABELS,
-    _RBAC_SCOPE_LABELS,
-    _rbac_actor,
-    _rbac_actor_allows_scope,
-    _rbac_actor_scope_labels,
-    _rbac_detail,
-    _rbac_empty_detail,
-    _rbac_entities_for_actor,
-    _rbac_entity_visible_for_actor,
-    _rbac_restrict_detail_for_actor,
-    _rbac_scopes,
-)
+from .rbac_explorer_serialization import _rbac_restrict_detail_for_actor
 from .rbac_issues import (
     NOTIFICATION_INCIDENT_SEARCH_FIELD_LABELS,
     _build_potential_issue_sections,
@@ -70,293 +78,10 @@ from .rbac_issues import (
     notification_incident_category_values,
     notification_incident_rows,
     notification_scan_last_updated_at,
-    run_notification_detection_scan,
-    set_notification_incident_state,
 )
 from .rbac_mutations import _rbac_mutate_batch, _rbac_required_form_value
 
-Breadcrumb_links = Dict[str, List[Tuple[str, str]]]
-Subpage_links = Dict[str, Dict[str, Any]]
-
-_breadcrumb_fn: Optional[Callable[..., Breadcrumb_links]] = None
-_subpage_nav_fn: Optional[
-    Callable[[str, List[Tuple[bool, str, str]]], Subpage_links]
-] = None
-_RBAC_PROFILE_PATHS = frozenset(
-    {
-        "/rbac",
-        "/json/v1/rbac/explorer",
-        "/json/v1/rbac/audit",
-        "/json/v1/email/audit",
-    }
-)
-
-
-def _require_helper(
-    helper: Optional[Callable[..., Any]], name: str
-) -> Callable[..., Any]:
-    if helper is None:
-        raise RuntimeError(f"Route helper not configured: {name}")
-    return helper
-
-
-def breadcrumb(*routes):
-    return _require_helper(_breadcrumb_fn, "breadcrumb")(*routes)
-
-
-def subpage_nav(title: str, links: List[Tuple[bool, str, str]]) -> Subpage_links:
-    return _require_helper(_subpage_nav_fn, "subpage_nav")(title, links)
-
-
-def _rbac_profile_requested() -> bool:
-    token = request.args.get("profile", "").strip().lower()
-    if token in {"1", "true", "yes", "on"}:
-        return True
-    header = request.headers.get("X-RBAC-Profile", "").strip().lower()
-    return header in {"1", "true", "yes", "on"}
-
-
-def _rbac_profile_should_trace_request() -> bool:
-    return request.path in _RBAC_PROFILE_PATHS and _rbac_profile_requested()
-
-
-def _rbac_profile_payload_bytes(response) -> int:
-    payload_size = response.calculate_content_length()
-    if payload_size is not None:
-        return int(payload_size)
-    return len(response.get_data(cache=True))
-
-
-def _rbac_profile_start_request() -> None:
-    if not _rbac_profile_should_trace_request():
-        return
-
-    state: Dict[str, Any] = {
-        "started_at": perf_counter(),
-        "query_count": 0,
-    }
-
-    def _before_cursor_execute(
-        _conn,
-        _cursor,
-        _statement,
-        _parameters,
-        _context,
-        _executemany,
-    ) -> None:
-        if not has_request_context():
-            return
-        current_state = getattr(g, "_rbac_profile_state", None)
-        if current_state is not state:
-            return
-        state["query_count"] = int(state["query_count"]) + 1
-
-    event.listen(Engine, "before_cursor_execute", _before_cursor_execute)
-    state["listener"] = _before_cursor_execute
-    g._rbac_profile_state = state
-
-
-def _rbac_profile_cleanup_state() -> Optional[Dict[str, Any]]:
-    state = getattr(g, "_rbac_profile_state", None)
-    if not isinstance(state, dict):
-        return None
-
-    listener = state.get("listener")
-    if listener is not None:
-        try:
-            event.remove(Engine, "before_cursor_execute", listener)
-        except (InvalidRequestError, ValueError, TypeError):
-            pass
-
-    g._rbac_profile_state = None
-    return state
-
-
-def _rbac_profile_finish_request(response):
-    state = _rbac_profile_cleanup_state()
-    if state is None:
-        return response
-
-    duration_ms = max(0.0, (perf_counter() - float(state["started_at"])) * 1000.0)
-    query_count = int(state.get("query_count", 0))
-    payload_bytes = _rbac_profile_payload_bytes(response)
-
-    response.headers["X-RBAC-Profile-Duration-Ms"] = f"{duration_ms:.2f}"
-    response.headers["X-RBAC-Profile-SQL-Queries"] = str(query_count)
-    response.headers["X-RBAC-Profile-Payload-Bytes"] = str(payload_bytes)
-
-    current_app.logger.info(
-        "RBAC profile path=%s endpoint=%s status=%s duration_ms=%.2f sql_queries=%d payload_bytes=%d",
-        request.path,
-        request.endpoint,
-        response.status_code,
-        duration_ms,
-        query_count,
-        payload_bytes,
-    )
-    return response
-
-
-def _request_client_ip() -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "").strip()
-    if forwarded:
-        first = forwarded.split(",", 1)[0].strip()
-        if first:
-            return first
-    real_ip = request.headers.get("X-Real-IP", "").strip()
-    if real_ip:
-        return real_ip
-    remote = (request.remote_addr or "").strip()
-    return remote or "unknown"
-
-
-def _request_truthy(value: str, *, default: bool = False) -> bool:
-    token = (value or "").strip().lower()
-    if token == "":
-        return default
-    return token in {"1", "true", "yes", "on"}
-
-
-def _normalized_return_query(raw_query: str) -> str:
-    token = (raw_query or "").strip()
-    if token.startswith("?"):
-        return token[1:]
-    return token
-
-
-def _app_issues_redirect(raw_query: str):
-    query = _normalized_return_query(raw_query)
-    target = url_for("app_issues")
-    if query != "":
-        target = f"{target}?{query}"
-    return redirect(target)
-
-
-def _app_issues_query_with_updates(
-    raw_query: str, updates: Dict[str, Optional[str]]
-) -> str:
-    query = _normalized_return_query(raw_query)
-    pairs = [(name, value) for name, value in parse_qsl(query, keep_blank_values=True)]
-    filtered_pairs = [
-        (name, value) for name, value in pairs if name not in set(updates.keys())
-    ]
-    for key, value in updates.items():
-        normalized = "" if value is None else str(value).strip()
-        if normalized != "":
-            filtered_pairs.append((key, normalized))
-    return urlencode(filtered_pairs)
-
-
-def _app_issues_query_with_flag(raw_query: str, key: str, enabled: bool) -> str:
-    return _app_issues_query_with_updates(raw_query, {key: "1" if enabled else None})
-
-
-def _app_error_limit_from_raw(
-    raw_limit: str,
-    *,
-    default: int,
-    max_limit: int,
-    strict: bool = False,
-) -> int:
-    token = (raw_limit or "").strip()
-    if token == "":
-        return default
-    if not token.isdigit():
-        if strict:
-            abort(400, f"invalid limit: {token}")
-        return default
-    limit = int(token)
-    if limit < 1 or limit > max_limit:
-        if strict:
-            abort(400, f"limit must be between 1 and {max_limit}")
-        return max(1, min(limit, max_limit))
-    return limit
-
-
-def _admin_mapping_kinds() -> List[Dict[str, str]]:
-    return [
-        {
-            "id": "user-dept",
-            "label": "user-dept.csv",
-            "description": (
-                "user to group membership and PI assignment. Use the RBAC explorer "
-                "for day-to-day production edits; use this CSV for bulk review, "
-                "import/export, and reconciliation."
-            ),
-            "legacy_tooltip": (
-                "Legacy CSV import/export still uses the column name dept because "
-                "older schema and bootstrap scripts stored group ids in "
-                "deptcode/tlkpdept. In the current app these values are validated "
-                "against Group.id, so dept in these files means group id."
-            ),
-            "current_value": logic.format_admin_mapping_rows_for_form("user-dept"),
-        },
-        {
-            "id": "dev-dept",
-            "label": "dev-dept.csv",
-            "description": (
-                "device to group mapping. Use the RBAC explorer for day-to-day "
-                "production edits; use this CSV for bulk review, import/export, "
-                "and reconciliation."
-            ),
-            "legacy_tooltip": (
-                "Legacy CSV import/export still uses the column name dept because "
-                "older schema and bootstrap scripts stored group ids in "
-                "deptcode/tlkpdept. In the current app these values are validated "
-                "against Group.id, so dept in these files means group id."
-            ),
-            "current_value": logic.format_admin_mapping_rows_for_form("dev-dept"),
-        },
-        {
-            "id": "devperm",
-            "label": "devperm.csv",
-            "description": "device permissions per user (templates,slot,technologist,medical,training)",
-            "current_value": logic.format_admin_mapping_rows_for_form("devperm"),
-        },
-    ]
-
-
-def _record_rbac_action(
-    action: str,
-    where: str,
-    how: str,
-    what: str,
-    *,
-    source_ip: Optional[str] = None,
-) -> None:
-    actor = g.user.id if g.user is not None else "unknown"
-    client_ip = source_ip or _request_client_ip()
-    try:
-        logic.log_rbac_audit_event(
-            action=action,
-            actor=actor,
-            where=where,
-            how=how,
-            what=what,
-            source_ip=client_ip,
-        )
-    except TypeError:
-        logic.log_rbac_audit_event(
-            action=action,
-            actor=actor,
-            where=where,
-            how=how,
-            what=what,
-        )
-
-
-def audit_rbac_action(
-    action: str,
-    where: str,
-    how: str,
-    what: str,
-) -> None:
-    _record_rbac_action(action=action, where=where, how=how, what=what)
-    try:
-        model.db.session.commit()
-    except SQLAlchemyError:
-        model.db.session.rollback()
-        current_app.logger.exception("Failed to commit RBAC audit record")
+__all__ = ["audit_rbac_action", "register_rbac_blueprint"]
 
 
 def rbac_explorer_data():
@@ -435,7 +160,7 @@ def rbac_explorer_audit():
         default="all",
     )
     limit = _rbac_audit_limit()
-    if not logic.rbac_audit_table_available():
+    if not audit_logic.rbac_audit_table_available():
         return jsonify(
             {
                 "scope": scope,
@@ -491,7 +216,7 @@ def email_audit_feed():
     search_field = _email_audit_search_field(search_field, default="all")
     limit = _email_audit_limit(default=40, max_limit=200)
 
-    if not logic.email_audit_table_available():
+    if not audit_logic.email_audit_table_available():
         return jsonify(
             {
                 "scope": scope,
@@ -544,13 +269,13 @@ def app_error_feed():
     where_path = request.args.get("where_path", "").strip()
     search = request.args.get("search", "").strip()
     limit = _app_error_limit_from_raw(
-        request.args.get("limit", str(logic.APP_ERROR_EVENT_DEFAULT_LIMIT)),
-        default=logic.APP_ERROR_EVENT_DEFAULT_LIMIT,
-        max_limit=logic.APP_ERROR_EVENT_MAX_LIMIT,
+        request.args.get("limit", str(app_error_logic.APP_ERROR_EVENT_DEFAULT_LIMIT)),
+        default=app_error_logic.APP_ERROR_EVENT_DEFAULT_LIMIT,
+        max_limit=app_error_logic.APP_ERROR_EVENT_MAX_LIMIT,
         strict=True,
     )
 
-    if not logic.app_error_event_table_available():
+    if not app_error_logic.app_error_event_table_available():
         return jsonify(
             {
                 "actor": actor,
@@ -565,7 +290,7 @@ def app_error_feed():
         )
 
     try:
-        rows = logic.app_error_event_rows(
+        rows = app_error_logic.app_error_event_rows(
             limit=limit,
             actor=actor,
             reference_id=reference_id,
@@ -577,7 +302,7 @@ def app_error_feed():
         model.db.session.rollback()
         current_app.logger.exception("Failed to query app error feed")
         rows = []
-    events = [logic.app_error_event_payload(row) for row in rows]
+    events = [app_error_logic.app_error_event_payload(row) for row in rows]
 
     return jsonify(
         {
@@ -598,7 +323,7 @@ def rbac_explorer_mutate():
     if not bool(actor.get("can_access")):
         abort(403, "access denied")
 
-    form = logic.CsrfOnlyForm()
+    form = schedule_logic.CsrfOnlyForm()
     if not form.validate_on_submit():
         abort(400, "invalid form submission")
 
@@ -647,7 +372,7 @@ def rbac():
         strict=False,
     )
     audit_events = []
-    if logic.rbac_audit_table_available():
+    if audit_logic.rbac_audit_table_available():
         try:
             rows = _rbac_audit_rows(
                 audit_scope,
@@ -660,7 +385,7 @@ def rbac():
         except SQLAlchemyError:
             model.db.session.rollback()
             current_app.logger.exception("Failed to query RBAC audit page")
-    institutes = logic.get_institutes_datalist()
+    institutes = core_logic.get_institutes_datalist()
 
     return {
         "title": "RBAC",
@@ -698,7 +423,7 @@ def rbac():
         ],
         "audit_show_more_increment": RBAC_AUDIT_SHOW_MORE_INCREMENT,
         "audit_max_limit": RBAC_AUDIT_MAX_LIMIT,
-        "csrf_form": logic.CsrfOnlyForm(),
+        "csrf_form": schedule_logic.CsrfOnlyForm(),
         **breadcrumb("RBAC"),
     }
 
@@ -710,9 +435,11 @@ def app_issues():
     app_error_where_path = request.args.get("app_error_where_path", "").strip()
     app_error_search = request.args.get("app_error_search", "").strip()
     app_error_limit = _app_error_limit_from_raw(
-        request.args.get("app_error_limit", str(logic.APP_ERROR_EVENT_DEFAULT_LIMIT)),
-        default=logic.APP_ERROR_EVENT_DEFAULT_LIMIT,
-        max_limit=logic.APP_ERROR_EVENT_MAX_LIMIT,
+        request.args.get(
+            "app_error_limit", str(app_error_logic.APP_ERROR_EVENT_DEFAULT_LIMIT)
+        ),
+        default=app_error_logic.APP_ERROR_EVENT_DEFAULT_LIMIT,
+        max_limit=app_error_logic.APP_ERROR_EVENT_MAX_LIMIT,
         strict=False,
     )
     email_scope = request.args.get("email_scope", "all").strip().lower()
@@ -772,11 +499,11 @@ def app_issues():
     ):
         notification_category = "all"
 
-    app_error_events: List[Dict[str, Any]] = []
-    app_error_events_available = logic.app_error_event_table_available()
+    app_error_events: List[dict[str, Any]] = []
+    app_error_events_available = app_error_logic.app_error_event_table_available()
     if app_error_events_available:
         try:
-            rows = logic.app_error_event_rows(
+            rows = app_error_logic.app_error_event_rows(
                 limit=app_error_limit,
                 actor=app_error_actor,
                 reference_id=app_error_reference_id,
@@ -784,27 +511,29 @@ def app_issues():
                 where_path=app_error_where_path,
                 search=app_error_search,
             )
-            app_error_events = [logic.app_error_event_payload(row) for row in rows]
+            app_error_events = [
+                app_error_logic.app_error_event_payload(row) for row in rows
+            ]
         except SQLAlchemyError:
             model.db.session.rollback()
             current_app.logger.exception("Failed to query app error page")
 
-    csp_violation_events: List[Dict[str, Any]] = []
-    csp_violation_events_available = logic.csp_violation_event_table_available()
+    csp_violation_events: List[dict[str, Any]] = []
+    csp_violation_events_available = csp_logic.csp_violation_event_table_available()
     if csp_violation_events_available:
         try:
-            rows = logic.csp_violation_event_rows(
-                limit=logic.CSP_VIOLATION_EVENT_DEFAULT_LIMIT
+            rows = csp_logic.csp_violation_event_rows(
+                limit=csp_logic.CSP_VIOLATION_EVENT_DEFAULT_LIMIT
             )
             csp_violation_events = [
-                logic.csp_violation_event_payload(row) for row in rows
+                csp_logic.csp_violation_event_payload(row) for row in rows
             ]
         except SQLAlchemyError:
             model.db.session.rollback()
             current_app.logger.exception("Failed to query CSP violation page")
 
-    email_events: List[Dict[str, Any]] = []
-    if logic.email_audit_table_available():
+    email_events: List[dict[str, Any]] = []
+    if audit_logic.email_audit_table_available():
         try:
             rows = _email_audit_rows(
                 email_scope,
@@ -820,7 +549,9 @@ def app_issues():
             model.db.session.rollback()
             current_app.logger.exception("Failed to query email audit page")
 
-    notification_incidents_available = logic.notification_incident_table_available()
+    notification_incidents_available = (
+        audit_logic.notification_incident_table_available()
+    )
     if notification_incidents_available:
         potential_issues = notification_incident_rows(
             include_open=notification_include_open,
@@ -892,8 +623,8 @@ def app_issues():
         "notification_category": notification_category,
         "notification_scan_last_updated": notification_scan_last_updated,
         "notification_return_query": notification_return_query,
-        "notification_scan_form": logic.CsrfOnlyForm(),
-        "notification_state_form": logic.CsrfOnlyForm(),
+        "notification_scan_form": schedule_logic.CsrfOnlyForm(),
+        "notification_state_form": schedule_logic.CsrfOnlyForm(),
         "potential_issue_sections": potential_issue_sections,
         "notification_category_options": [
             {
@@ -950,9 +681,9 @@ def app_issues():
             }
             for option_id, option_label in _EMAIL_AUDIT_SEARCH_FIELD_LABELS.items()
         ],
-        "admin_config_form": logic.CsrfOnlyForm(),
-        "admin_mapping_form": logic.CsrfOnlyForm(),
-        "organization_history_scan_form": logic.CsrfOnlyForm(),
+        "admin_config_form": schedule_logic.CsrfOnlyForm(),
+        "admin_mapping_form": schedule_logic.CsrfOnlyForm(),
+        "organization_history_scan_form": schedule_logic.CsrfOnlyForm(),
         "admin_listserv": logic.get_admin_listserv(),
         "admin_default_sender": logic.get_admin_default_sender(),
         "admin_mailing_lists": logic.format_admin_mailing_lists_for_form(),
@@ -978,259 +709,6 @@ def app_issues():
     }
 
 
-def app_issues_config():
-    form = logic.CsrfOnlyForm()
-    if not form.validate_on_submit():
-        abort(400, "invalid form submission")
-
-    if not logic.admin_settings_available():
-        flash(
-            "Admin configuration storage is unavailable. Run database migrations.",
-            "error",
-        )
-        return _app_issues_redirect(request.form.get("return_query", ""))
-
-    listserv = (request.form.get("admin_listserv", "") or "").strip()
-    default_sender = (request.form.get("admin_default_sender", "") or "").strip()
-    mailing_lists_raw = request.form.get("admin_mailing_lists", "")
-    group_institute_mapping_raw = request.form.get("admin_group_institute_mapping", "")
-
-    try:
-        mailing_lists = logic.parse_admin_mailing_lists(mailing_lists_raw)
-        group_institute_mapping = logic.parse_admin_group_institute_mapping(
-            group_institute_mapping_raw
-        )
-    except ValueError as ex:
-        flash(str(ex), "error")
-        return _app_issues_redirect(request.form.get("return_query", ""))
-
-    if listserv == "":
-        flash("listserv is required", "error")
-        return _app_issues_redirect(request.form.get("return_query", ""))
-    if default_sender != "" and "@" not in default_sender:
-        flash("default sender must be an email address", "error")
-        return _app_issues_redirect(request.form.get("return_query", ""))
-
-    actor_id = g.user.id if g.user is not None else "unknown"
-    try:
-        logic.set_admin_listserv(listserv, updated_by=actor_id)
-        logic.set_admin_default_sender(default_sender, updated_by=actor_id)
-        logic.set_admin_mailing_lists(mailing_lists, updated_by=actor_id)
-        logic.set_admin_group_institute_mapping(
-            group_institute_mapping, updated_by=actor_id
-        )
-        model.db.session.commit()
-        flash("admin configuration updated", "message")
-    except SQLAlchemyError:
-        model.db.session.rollback()
-        current_app.logger.exception("Failed to persist admin config update")
-        flash("failed to save admin configuration", "error")
-    return _app_issues_redirect(request.form.get("return_query", ""))
-
-
-def app_issues_import_mapping():
-    form = logic.CsrfOnlyForm()
-    if not form.validate_on_submit():
-        abort(400, "invalid form submission")
-
-    mapping_kind = (request.form.get("mapping_kind", "") or "").strip()
-    if mapping_kind not in {"user-dept", "dev-dept", "devperm"}:
-        flash("invalid mapping kind", "error")
-        return _app_issues_redirect(request.form.get("return_query", ""))
-
-    mapping_text = request.form.get("mapping_text", "")
-    file = request.files.get("mapping_file")
-    if (mapping_text or "").strip() == "" and file is None:
-        flash("mapping CSV text or file is required", "error")
-        return _app_issues_redirect(request.form.get("return_query", ""))
-
-    try:
-        if (mapping_text or "").strip() != "":
-            raw_rows = logic.parse_admin_mapping_text(mapping_kind, mapping_text)
-        else:
-            raw_rows = logic.parse_admin_mapping_file(mapping_kind, file)
-        rows = logic.validate_import_rows(mapping_kind, raw_rows)
-        applied_count = logic.apply_import_rows(mapping_kind, rows)
-        model.db.session.commit()
-    except ValueError as ex:
-        model.db.session.rollback()
-        flash(str(ex), "error")
-        return _app_issues_redirect(request.form.get("return_query", ""))
-    except SQLAlchemyError:
-        model.db.session.rollback()
-        current_app.logger.exception("Failed to persist admin mapping import")
-        flash("failed to import mapping data", "error")
-        return _app_issues_redirect(request.form.get("return_query", ""))
-
-    _record_rbac_action(
-        action="admin.mapping.import",
-        where="/app/issues",
-        how="admin-panel",
-        what=f"kind={mapping_kind}, rows={applied_count}",
-    )
-    flash(f"imported {applied_count} rows into {mapping_kind}", "message")
-    return _app_issues_redirect(request.form.get("return_query", ""))
-
-
-def app_issues_export_mapping(mapping_kind):
-    if mapping_kind == "organization-issues":
-        include_recent_history = _request_truthy(
-            request.args.get("organization_history_scan", ""),
-            default=False,
-        )
-        organization_history_window_years = (
-            logic.normalize_group_institute_history_window_years(
-                request.args.get("organization_history_years", "")
-            )
-        )
-        headers, rows = logic.export_group_institute_issue_rows(
-            include_recent_history=include_recent_history,
-            window_years=organization_history_window_years,
-        )
-        filename = (
-            "organization-issues-recent-history.csv"
-            if include_recent_history
-            else "organization-issues.csv"
-        )
-    elif mapping_kind in {"user-dept", "dev-dept", "devperm"}:
-        try:
-            headers, rows = logic.export_mapping_rows(mapping_kind)
-        except ValueError as ex:
-            abort(400, str(ex))
-        filename = f"{mapping_kind}.csv"
-    else:
-        abort(400, "invalid mapping kind")
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(list(headers))
-    writer.writerows(rows)
-    response = Response(output.getvalue(), mimetype="text/csv")
-    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
-def app_issues_organization_history_scan():
-    form = logic.CsrfOnlyForm()
-    if not form.validate_on_submit():
-        abort(400, "invalid form submission")
-
-    return_query = request.form.get("return_query", "")
-    enabled = _request_truthy(request.form.get("enabled", ""), default=True)
-    organization_history_window_years = (
-        logic.normalize_group_institute_history_window_years(
-            request.form.get("organization_history_years", "")
-        )
-    )
-    _record_rbac_action(
-        action="organization.history.scan.toggle",
-        where="/app/issues",
-        how="admin-panel",
-        what=(f"enabled={enabled}, window_years={organization_history_window_years}"),
-    )
-    try:
-        model.db.session.commit()
-    except SQLAlchemyError:
-        model.db.session.rollback()
-        current_app.logger.exception(
-            "Failed to persist organization history scan audit"
-        )
-    return _app_issues_redirect(
-        _app_issues_query_with_updates(
-            return_query,
-            {
-                "organization_history_scan": "1" if enabled else None,
-                "organization_history_years": str(organization_history_window_years),
-            },
-        )
-    )
-
-
-def app_issues_scan():
-    form = logic.CsrfOnlyForm()
-    if not form.validate_on_submit():
-        abort(400, "invalid form submission")
-
-    return_query = request.form.get("return_query", "")
-    if not logic.notification_incident_table_available():
-        return _app_issues_redirect(return_query)
-
-    stats = run_notification_detection_scan()
-    _record_rbac_action(
-        action="notifications.scan.run",
-        where="/app/issues",
-        how="admin-panel",
-        what=(
-            f"detected={stats['detected']}, created={stats['created']}, "
-            f"reopened={stats['reopened']}, ignore_expired={stats['ignore_expired']}, "
-            f"auto_resolved={stats['auto_resolved']}, expired={stats['expired']}"
-        ),
-    )
-    try:
-        model.db.session.commit()
-    except SQLAlchemyError:
-        model.db.session.rollback()
-        current_app.logger.exception("Failed to persist notification detection scan")
-    return _app_issues_redirect(return_query)
-
-
-def app_issues_notification_state():
-    form = logic.CsrfOnlyForm()
-    if not form.validate_on_submit():
-        abort(400, "invalid form submission")
-
-    return_query = request.form.get("return_query", "")
-    issue_key = request.form.get("issue_key", "").strip()
-    target_state = request.form.get("target_state", "").strip().lower()
-    note = request.form.get("note", "").strip()
-    ignored_until_raw = request.form.get("ignored_until", "").strip()
-    ignored_until = None
-
-    if target_state == "ignored" and ignored_until_raw != "":
-        try:
-            ignored_until_date = datetime.date.fromisoformat(ignored_until_raw)
-        except ValueError:
-            abort(400, "ignored_until must be a valid date")
-        ignored_until = datetime.datetime.combine(
-            ignored_until_date,
-            datetime.time(23, 59, 59),
-            tzinfo=datetime.timezone.utc,
-        )
-
-    actor_id = g.user.id if g.user is not None else "unknown"
-    try:
-        updated = set_notification_incident_state(
-            issue_key=issue_key,
-            target_state=target_state,
-            note=note,
-            actor=actor_id,
-            ignored_until=ignored_until,
-        )
-    except ValueError as ex:
-        abort(400, str(ex))
-
-    if not updated:
-        abort(404, "incident not found")
-
-    ignored_until_label = ignored_until_raw if ignored_until_raw != "" else "-"
-    _record_rbac_action(
-        action="notifications.incident.state.update",
-        where="/app/issues",
-        how="admin-panel",
-        what=(
-            f"issue_key={issue_key}, target_state={target_state}, "
-            f"ignored_until={ignored_until_label}, note={note}"
-        ),
-    )
-    try:
-        model.db.session.commit()
-    except SQLAlchemyError:
-        model.db.session.rollback()
-        current_app.logger.exception("Failed to persist notification incident state")
-    return _app_issues_redirect(return_query)
-
-
 def register_rbac_blueprint(
     app,
     *,
@@ -1240,21 +718,11 @@ def register_rbac_blueprint(
     breadcrumb_fn: Callable[..., Breadcrumb_links],
     subpage_nav_fn: Callable[[str, List[Tuple[bool, str, str]]], Subpage_links],
 ) -> None:
-    global _breadcrumb_fn, _subpage_nav_fn
-    _breadcrumb_fn = breadcrumb_fn
-    _subpage_nav_fn = subpage_nav_fn
-
-    @app.before_request
-    def _rbac_profile_before_request() -> None:
-        _rbac_profile_start_request()
-
-    @app.after_request
-    def _rbac_profile_after_request(response):
-        return _rbac_profile_finish_request(response)
-
-    @app.teardown_request
-    def _rbac_profile_teardown_request(_exc: Optional[BaseException]) -> None:
-        _rbac_profile_cleanup_state()
+    configure_rbac_route_helpers(
+        breadcrumb_fn=breadcrumb_fn,
+        subpage_nav_fn=subpage_nav_fn,
+    )
+    register_rbac_profile_hooks(app)
 
     app.add_url_rule(
         "/json/v1/rbac/explorer",

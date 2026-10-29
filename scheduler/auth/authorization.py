@@ -6,7 +6,8 @@ from typing import Optional
 from flask import abort, g
 from sqlalchemy import select
 
-from scheduler import logic, model
+import scheduler.logic.core as logic
+from scheduler import model
 
 
 def get_user_by_email(email: str) -> Optional[model.User]:

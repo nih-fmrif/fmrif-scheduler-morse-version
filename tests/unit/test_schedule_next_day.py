@@ -10,7 +10,8 @@ from route_seed import (
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from scheduler import logic, model
+import scheduler.logic.schedule_editor as logic
+from scheduler import model
 
 
 def _add_schedule_entry(
@@ -52,7 +53,7 @@ def test_next_schedule_day_logic(route_app_context):
     _add_schedule_entry(device_id, datetime.date(2026, 1, 10), template="A3")
     model.db.session.flush()
 
-    device = model.get(model.Device, device_id)
+    device = model.db.session.get(model.Device, device_id)
     assert device is not None
 
     assert logic.next_schedule_day(

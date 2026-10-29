@@ -82,6 +82,7 @@ Unit tests:
 ```bash
 pixi run test-unit
 pixi run test-unit -- tests/unit/test_some_file.py -q
+pixi run test-unit-xdist
 ```
 
 Route tests:
@@ -119,6 +120,9 @@ The `test-unit` and `test-routes` tasks use
 `scripts/run-target-aware-pytest-suite.py`, which forwards into
 `scripts/run-isolated-test-suite.sh`. When explicit test selectors are passed,
 the task drops its default collection root instead of silently widening scope.
+`test-unit-xdist` is an opt-in unit-only variant layered on the same wrapper
+with `-n auto`; keep route tests on the default serial task unless worker-aware
+route isolation is introduced explicitly.
 `test-integration*` tasks are wrapped directly by
 `scripts/run-isolated-test-suite.sh`, which assigns suite-scoped test DB names
 and Mailpit ports so those suites can run in parallel without sharing test mail

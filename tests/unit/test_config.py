@@ -235,6 +235,12 @@ def test_app_config_maps_mail_default_sender():
     assert "nih_mailing_lists" not in app_config
 
 
+def test_app_config_does_not_emit_deprecated_session_use_signer():
+    settings = make_settings()
+    app_config = AppConfig(settings)
+    assert "SESSION_USE_SIGNER" not in app_config
+
+
 def test_proxy_count_validation(clean_env):
     """Test proxy count configuration"""
     # Test with no proxy settings
@@ -430,7 +436,6 @@ def test_session_config_validation():
     assert config.cookie_samesite == "Strict"
     assert config.permanent_lifetime == 8 * 60 * 60
     assert config.type == "sqlalchemy"
-    assert config.use_signer is True
 
     config = SessionConfig(
         cookie_name="test_session", permanent_lifetime=3600, type="redis"

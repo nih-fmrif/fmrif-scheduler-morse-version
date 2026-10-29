@@ -187,8 +187,8 @@ def user_from_claims(claims: Dict) -> SessionUser:
         )
         raise ValueError("JWT claims preferred_username is not a valid email address")
 
-    # Import here to avoid importing scheduler.logic during module load.
-    from scheduler.logic import scoped_user_id_from_identifier
+    # Import here to avoid pulling scheduler auth dependencies into module load.
+    from scheduler.logic._core_users import scoped_user_id_from_identifier
 
     username = scoped_user_id_from_identifier(preferred_username)
     display_name = claims.get("name") or preferred_username

@@ -98,7 +98,7 @@ def _rbac_mutating_route_cases() -> list[tuple[str, str, str]]:
 def _seed_rbac_contract_data() -> None:
     scanner_id = seeded_group_scanner_id("DEV")
     # RBAC contract paths for template edit routes depend on a concrete template id.
-    existing = model.get(model.Template, ("A", scanner_id))
+    existing = model.db.session.get(model.Template, ("A", scanner_id))
     if existing is not None:
         return
     model.db.session.add(

@@ -11,16 +11,19 @@ If this fails after seed edits, either:
 from collections import defaultdict
 
 import pytest
+from sqlalchemy import text
 
-from scheduler import logic, model
+import scheduler.logic.templates as logic
+from scheduler import model
 
 pytestmark = pytest.mark.route
 
 
 def _seed_metrics() -> dict[str, int]:
     row = (
-        model.execute(
-            """
+        model.db.session.execute(
+            text(
+                """
             select
                 (select count(*) from tblsched) as sched_rows,
                 (select count(distinct scannercode) from tblsched) as sched_devices,
@@ -68,6 +71,7 @@ def _seed_metrics() -> dict[str, int]:
                 (select count(*) from membership where pi) as membership_pi,
                 (select count(*) from membership where "group" = 'DEV' and pi) as dev_pi
             """
+            )
         )
         .mappings()
         .one()
@@ -77,12 +81,14 @@ def _seed_metrics() -> dict[str, int]:
 
 def _template_compatibility_metrics() -> dict[str, int]:
     template_ids_by_device: dict[str, list[str]] = defaultdict(list)
-    for device_id, template_id in model.execute(
-        """
+    for device_id, template_id in model.db.session.execute(
+        text(
+            """
         select scannercode, templatecode
         from tbltemplates
         order by scannercode, templatecode
         """
+        )
     ):
         template_ids_by_device[str(device_id)].append(str(template_id))
 
@@ -94,7 +100,7 @@ def _template_compatibility_metrics() -> dict[str, int]:
     }
 
     for device_id, template_ids in template_ids_by_device.items():
-        device = model.get(model.Device, device_id)
+        device = model.db.session.get(model.Device, device_id)
         assert device is not None
 
         reports = logic.inspect_template_compatibility(device, template_ids)

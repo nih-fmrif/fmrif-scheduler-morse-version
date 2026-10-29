@@ -17,10 +17,12 @@ from route_seed import (
     set_group_membership,
     set_session_user,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from scheduler import logic, model
+import scheduler.logic.schedule_editor as logic
+import scheduler.logic.templates as template_logic
+from scheduler import model
 from scheduler.logic.schedule_editor import _clear_reference_data_cache
 
 pytestmark = pytest.mark.route
@@ -167,7 +169,7 @@ def test_device_get_filters_selection_groups_for_regular_editor(route_client):
     ensure_active_user("slot-editor", "slot-editor@example.com", "Slot Editor")
     set_group_membership(group_id, "slot-editor", approved=True, pi=False)
 
-    if model.get(model.DeviceGroup, (device_id, group_id)) is None:
+    if model.db.session.get(model.DeviceGroup, (device_id, group_id)) is None:
         model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
         model.db.session.commit()
     _clear_reference_data_cache()
@@ -222,7 +224,7 @@ def test_device_get_renders_hour_aligned_duration_presets(route_client):
 
 
 def _create_template(device_id: str, template_id: str = "A", label: str = "Template A"):
-    device = model.get(model.Device, device_id)
+    device = model.db.session.get(model.Device, device_id)
     assert device is not None
     fake_form = SimpleNamespace(
         id=SimpleNamespace(data=template_id),
@@ -239,7 +241,7 @@ def _create_template(device_id: str, template_id: str = "A", label: str = "Templ
         obj.hidden = False
 
     fake_form.populate_obj = populate
-    created, _ = logic.create_template(fake_form, device)
+    created, _ = template_logic.create_template(fake_form, device)
     assert created is True
 
 
@@ -260,15 +262,17 @@ def _prepare_template_apply_data(
         model.db.session.add(inst)
         model.db.session.flush()
     model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
-    model.execute(
-        """
+    model.db.session.execute(
+        text(
+            """
             update tbltemplate
             set deptcode = :group_id,
                 researchercode = :member_id,
                 instcode = :inst_id
             where scannercode = :device_id
               and templatecode = :template_id
-        """,
+        """
+        ),
         {
             "group_id": group_id,
             "member_id": member_id,
@@ -331,7 +335,7 @@ def test_device_templates_add_post_creates_template(route_client, route_app_cont
     assert post_response.headers["Location"].endswith(
         f"/device/{device_id}/templates/edit/A"
     )
-    tmpl = model.get(model.Template, ("A", device_id))
+    tmpl = model.db.session.get(model.Template, ("A", device_id))
     assert tmpl is not None
 
 
@@ -364,7 +368,7 @@ def test_device_templates_edit_metadata_post_updates_template(
     assert post_response.headers["Location"].endswith(
         f"/device/{device_id}/templates/edit/A"
     )
-    tmpl = model.get(model.Template, ("A", device_id))
+    tmpl = model.db.session.get(model.Template, ("A", device_id))
     assert tmpl is not None
     assert tmpl.label == "Updated Template"
     assert tmpl.hidden is True
@@ -445,7 +449,7 @@ def test_device_templates_apply_post_applies_valid_template(
 
     assert post_response.status_code == 302
     assert post_response.headers["Location"].endswith(
-        f"/device/{device_id}?start={logic.next_sunday().isoformat()}"
+        f"/device/{device_id}?start={template_logic.next_sunday().isoformat()}"
     )
     assert _schedule_entry_count(device_id) == 168
 
@@ -694,7 +698,7 @@ def test_seeded_template_edit_post_blocks_save_until_legacy_member_is_resolved(
         for issue in report["issues"]
         if issue["code"] == "legacy-member" and issue["entry_id"] is not None
     )
-    entry = model.get(model.TemplateEntry, entry_id)
+    entry = model.db.session.get(model.TemplateEntry, entry_id)
     assert entry is not None
     replacement_inst = _active_inst(exclude_id=(entry.inst or ""))
     if replacement_inst is None:
@@ -796,7 +800,7 @@ def test_device_schedule_post_creates_synthetic_slot_and_returns_id_map(
     set_group_membership(group_id, member_id, approved=True, pi=False)
     slot_date = datetime.date(2035, 2, 1)
     slot_id = f"new-{slot_date.isoformat()}-08"
-    if model.get(model.DeviceGroup, (device_id, group_id)) is None:
+    if model.db.session.get(model.DeviceGroup, (device_id, group_id)) is None:
         model.db.session.add(model.DeviceGroup(device=device_id, group=group_id))
         model.db.session.commit()
     _clear_reference_data_cache()
@@ -834,7 +838,7 @@ def test_device_schedule_post_creates_synthetic_slot_and_returns_id_map(
     assert slot_id in payload.get("id_map", {}), payload
 
     entry_id = int(payload["id_map"][slot_id])
-    entry = model.get(model.ScheduleEntry, entry_id)
+    entry = model.db.session.get(model.ScheduleEntry, entry_id)
     assert entry is not None
     assert entry.device == device_id
     assert entry.date == slot_date

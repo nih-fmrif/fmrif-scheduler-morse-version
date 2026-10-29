@@ -18,6 +18,7 @@
 4. Run tests:
    - full unit suite: `pixi run test-unit`
    - targeted unit run: `pixi run test-unit -- tests/unit/test_some_file.py -q`
+   - optional parallel unit run: `pixi run test-unit-xdist`
    - full route suite: `pixi run test-routes`
    - targeted route run: `pixi run test-routes -- tests/unit/test_some_route_file.py -q`
    - `pixi run test-integration-ci`
@@ -35,4 +36,5 @@
 - Higher-level browser tooling now uses `TEST_BASE_URL`; root-only `/auth/callback` deployment is the supported model.
 - App/bootstrap DB settings come from `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`.
 - Interface policy: if a task accepts explicit selectors, explicit selectors win over default roots; task interfaces must not silently widen a narrowed request.
+- `pixi run test-unit-xdist` is an opt-in unit-only variant; keep `test-routes` on the default serial task unless route-worker isolation is designed explicitly.
 - For setup details, see [docs/containerized-postgres.md](docs/containerized-postgres.md) and [docs/testing-guide.md](docs/testing-guide.md).

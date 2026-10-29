@@ -1,6 +1,6 @@
 """Compatibility exports for decomposed RBAC explorer helpers."""
 
-from .rbac_explorer_query import (
+from ._rbac_explorer_core import (
     _RBAC_AUDIT_SCOPE_LABELS,
     _RBAC_SCOPE_LABELS,
     _rbac_actor,

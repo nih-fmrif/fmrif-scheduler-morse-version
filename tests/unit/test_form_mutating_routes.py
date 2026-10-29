@@ -18,10 +18,12 @@ from route_seed import (
     set_group_membership,
     set_session_user,
 )
-from sqlalchemy import select
+from sqlalchemy import select, text
 
+import scheduler.logic.admin_config as admin_logic
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 
 
 def _capture_rbac_events(monkeypatch) -> list[tuple[str, str, str, str, str]]:
@@ -141,7 +143,7 @@ def test_mailing_lists_post_delivers_to_mailpit_api(route_app, route_client):
             assert isinstance(recipients, list)
             assert any(
                 str(recipient.get("Address", "")).lower()
-                == logic.get_admin_listserv().lower()
+                == admin_logic.get_admin_listserv().lower()
                 for recipient in recipients
                 if isinstance(recipient, dict)
             )
@@ -211,7 +213,7 @@ def test_join_post_creates_pending_membership_request(
 
             assert post_response.status_code == 302
             assert post_response.headers["Location"].endswith("/")
-            req = model.get(model.GroupMember, (group_id, requester_id))
+            req = model.db.session.get(model.GroupMember, (group_id, requester_id))
             assert req is not None
             assert req.approved is None
             assert req.email_status == "sent"
@@ -305,7 +307,7 @@ def test_join_post_survives_mail_transport_failure(
 
         assert post_response.status_code == 302
         assert post_response.headers["Location"].endswith("/")
-        req = model.get(model.GroupMember, (group_id, requester_id))
+        req = model.db.session.get(model.GroupMember, (group_id, requester_id))
         assert req is not None
         assert req.approved is None
         assert req.email_status == "failed"
@@ -367,7 +369,7 @@ def test_join_post_without_group_pi_does_not_crash(
 
     assert post_response.status_code == 302
     assert post_response.headers["Location"].endswith("/")
-    req = model.get(model.GroupMember, (group_id, requester_id))
+    req = model.db.session.get(model.GroupMember, (group_id, requester_id))
     assert req is not None
     assert req.approved is None
     assert req.email_status == "failed"
@@ -434,7 +436,7 @@ def test_join_tech_post_autoapproves_technologist_request(
 
             assert post_response.status_code == 302
             assert post_response.headers["Location"].endswith("/")
-            req = model.get(model.Technologist, user_id)
+            req = model.db.session.get(model.Technologist, user_id)
             assert req is not None
             assert req.approved_on is not None
             assert req.email_status == logic.EMAIL_STATUS_NONE
@@ -495,8 +497,8 @@ def test_join_tech_post_without_dev_pi_still_autoapproves(
     )
     set_group_membership("DEV", user_id, approved=True, pi=False)
 
-    model.execute(
-        "delete from primarygroupmember where deptcode = :group_id",
+    model.db.session.execute(
+        text("delete from primarygroupmember where deptcode = :group_id"),
         {"group_id": "DEV"},
     )
     model.db.session.flush()
@@ -520,7 +522,7 @@ def test_join_tech_post_without_dev_pi_still_autoapproves(
 
     assert post_response.status_code == 302
     assert post_response.headers["Location"].endswith("/")
-    req = model.get(model.Technologist, user_id)
+    req = model.db.session.get(model.Technologist, user_id)
     assert req is not None
     assert req.approved_on is not None
     assert req.email_status == logic.EMAIL_STATUS_NONE

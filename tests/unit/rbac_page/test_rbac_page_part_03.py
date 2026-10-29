@@ -27,8 +27,9 @@ from route_seed import (
     set_session_user,
 )
 
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
@@ -135,7 +136,7 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_device_group_expected_stat
     assert payload["ok"] is False
     conflict_rows = [row for row in payload["results"] if row["status"] == "conflict"]
     assert len(conflict_rows) == 1
-    assert model.get(model.DeviceGroup, (device_id, group_id)) is None
+    assert model.db.session.get(model.DeviceGroup, (device_id, group_id)) is None
 
 
 @pytest.mark.covers_route("/json/v1/rbac/mutate", "POST")
@@ -205,7 +206,7 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_user_device_expected_state
     assert payload["ok"] is False
     conflict_rows = [row for row in payload["results"] if row["status"] == "conflict"]
     assert len(conflict_rows) == 1
-    row = model.get(model.UserDevice, (user_id, device_id))
+    row = model.db.session.get(model.UserDevice, (user_id, device_id))
     assert row is not None
     assert row.templates is True
 
@@ -246,7 +247,7 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_user_active_expected_state
     assert payload["ok"] is False
     conflict_rows = [row for row in payload["results"] if row["status"] == "conflict"]
     assert len(conflict_rows) == 1
-    user_row = model.get(model.User, user_id)
+    user_row = model.db.session.get(model.User, user_id)
     assert user_row is not None
     assert user_row.active is True
 
@@ -259,7 +260,7 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_device_meta_expected_state
     set_admin_session(route_client)
 
     device_id, _ = create_device()
-    device_row = model.get(model.Device, device_id)
+    device_row = model.db.session.get(model.Device, device_id)
     assert device_row is not None
     original_label = device_row.label
     csrf_token = extract_csrf_token(route_client.get("/rbac").get_data(as_text=True))
@@ -289,7 +290,7 @@ def test_rbac_mutate_batch_returns_conflict_for_stale_device_meta_expected_state
     assert payload["ok"] is False
     conflict_rows = [row for row in payload["results"] if row["status"] == "conflict"]
     assert len(conflict_rows) == 1
-    fresh_device = model.get(model.Device, device_id)
+    fresh_device = model.db.session.get(model.Device, device_id)
     assert fresh_device is not None
     assert fresh_device.label == original_label
 

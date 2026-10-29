@@ -82,7 +82,7 @@ These items look good or at least acceptable:
 - Mapped model attributes are now explicit in `scheduler/model.py`
 - there are no remaining `Query.get(...)` call sites in the repo
 - Flask-SQLAlchemy 3.1 still documents the legacy `Model.query` interface as supported, even though it is legacy
-- string SQL already goes through `scheduler.model.execute()`, which wraps raw strings in `sql_text(...)`
+- the remaining raw-SQL paths are mechanically convertible to explicit `session.execute(text(...))` calls
 - the existing unit and route suites passed after the model annotation change
 
 This means the repo is not starting from a bad place. The likely migration is real work, but not a rewrite.

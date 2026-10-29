@@ -4,7 +4,9 @@ import pytest
 from jinja2 import meta
 from route_seed import seeded_template_compatibility
 
-from scheduler import logic, model
+import scheduler.logic.schedule_editor as schedule_logic
+import scheduler.logic.templates as logic
+from scheduler import model
 
 
 class _TemplateFallbackValue(str):
@@ -130,7 +132,7 @@ def test_verify_template_diffs():
     diffs = [{"id": 1, "inst": ["old", "new"]}]
     entries = [model.TemplateEntry(id=1)]
 
-    errors, staged = logic.verify_and_prep_template_diffs(
+    errors, staged = schedule_logic.verify_and_prep_template_diffs(
         diffs, entries, institutes, groups, members
     )
     assert len(errors) > 0

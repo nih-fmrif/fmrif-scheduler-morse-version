@@ -121,6 +121,35 @@ Align local development with Debian 13 package expectations directly, modernize 
   - `scheduler/auth/session.py` now follows Flask-Session `0.8.0`'s modern regeneration contract instead of calling the old private `_generate_sid()` shape directly
   - `_store_session()` now writes the authenticated session payload before rotating the server-side session identifier, which lets `session_interface.regenerate(session)` work cleanly on the modern stack
   - the remaining request-cache test that still patched ORM `.query` now patches `db.session.scalar(...)`, keeping the final route assertions aligned with the SQLAlchemy 2 codepath
+- Removed a remaining older-stack config relic:
+  - `SESSION__USE_SIGNER` / `SESSION_USE_SIGNER` was dropped from settings, app config, tests, and docs because Flask-Session `0.8.0` treats it as deprecated and the SQLAlchemy-backed server-side sessions do not need the legacy signer flag
+- Removed the remaining repo-local `model.get(...)` wrapper usage from application code:
+  - `scheduler/auth/session.py`, `scheduler/app.py`, `scheduler/logic/core.py`, `scheduler/logic/schedule_editor.py`, `scheduler/logic/templates.py`, `scheduler/logic/notifications.py`, `scheduler/logic/admin_config.py`, `scheduler/routes/_rbac_explorer_core.py`, `scheduler/routes/rbac_issues.py`, `scheduler/routes/rbac_mutation_apply.py`, and `scheduler/routes/rbac_mutation_validation.py` now call `model.db.session.get(...)` directly
+  - application code no longer depends on the local identity-load helper, which makes the SQLAlchemy 2 session surface more explicit and reduces one more legacy abstraction layer
+- Finished the `model.get(...)` purge across the repository:
+  - unit and route tests now use `model.db.session.get(...)` directly as well
+  - the `model.get(...)` helper itself was removed from `scheduler/model.py`
+  - repository-wide search for `model.get(` is now clean outside this progress log
+  - one stale session-hardening test monkeypatch was updated to patch `model.db.session.get(...)` directly, matching the modern codepath
+- Removed the remaining repo-local `model.execute(...)` wrapper across app code and tests:
+  - raw SQL call sites now use explicit `model.db.session.execute(...)`
+  - truly SQL-shaped statements now declare `text(...)` directly instead of relying on hidden string coercion
+  - `scheduler/model.py` no longer exposes a local execute shim
+  - `scheduler/logic/core.py` and `scheduler/logic/notifications.py` also picked up a few direct SQLAlchemy 2 statement rewrites while touching the same surface
+- Tightened the session-rotation helper to the modern Flask-Session contract only:
+  - `scheduler/auth/session.py` no longer falls back to the private `_generate_sid()` path
+  - session fixation hardening now depends on `session_interface.regenerate(session)` as the Debian 13 baseline API
+- Validation for the execute-wrapper purge and modern-session cleanup:
+  - `pixi run test-unit -- tests/unit/test_session_hardening.py -q tests/unit/test_admin_config.py -q tests/unit/test_template_validation.py -q`
+  - `pixi run test-routes -- tests/unit/test_seed_shape_contract.py -q tests/unit/test_schedule_editor.py -q tests/unit/test_device_mutating_routes.py -q tests/unit/test_device_notification_routes.py -q tests/unit/test_form_mutating_routes.py -q tests/unit/test_auth_test_session_endpoint.py -q tests/unit/test_home_navigation.py -q tests/unit/rbac_page/test_rbac_page_part_09.py -q tests/unit/rbac_page/test_rbac_page_part_10.py -q`
+  - `pixi run test-unit`
+  - `pixi run test-routes`
+  - `pixi run test-integration-ci`
+  - `pixi run pre-commit`
+- Validation for the repository-wide `model.get(...)` purge:
+  - `pixi run test-unit`
+  - `pixi run test-routes`
+  - `pixi run test-integration-ci`
 - Validation for the final stabilization pass:
   - `pixi run test-unit -- tests/unit/test_session_hardening.py -q tests/unit/test_auth.py -q`
   - `pixi run test-routes -- tests/unit/test_auth_login_route.py -q tests/unit/test_auth_session_endpoint.py -q tests/unit/test_auth_test_session_endpoint.py -q`
@@ -139,7 +168,6 @@ Align local development with Debian 13 package expectations directly, modernize 
 
 ### Next
 
-- Decide whether the `Flask-Session` `use_signer` deprecation warning should be cleaned up immediately or deferred to a later config pass.
 - If more modernization is desired, treat it as follow-on cleanup rather than stack-enablement work:
   - optional refactors to shrink remaining ORM helper complexity
   - optional Playwright test-splitting for the slowest `device-ui-interactions` / schedule-contract files

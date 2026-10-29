@@ -9,7 +9,8 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql import func
 
-from scheduler import logic, model
+import scheduler.logic.rbac_audit_support as logic
+from scheduler import model
 
 NOTIFICATION_INCIDENT_STATE_OPEN = "open"
 NOTIFICATION_INCIDENT_STATE_IGNORED = "ignored"
@@ -533,7 +534,7 @@ def set_notification_incident_state(
     }:
         raise ValueError(f"invalid state target: {target_state}")
 
-    row = model.get(model.NotificationIncident, issue_token)
+    row = model.db.session.get(model.NotificationIncident, issue_token)
     if row is None:
         return False
 

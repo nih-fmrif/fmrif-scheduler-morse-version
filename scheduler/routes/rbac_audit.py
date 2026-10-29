@@ -6,7 +6,8 @@ from typing import Any, Dict, List
 from flask import abort, request
 from sqlalchemy import text as sql_text
 
-from scheduler import logic, model
+import scheduler.logic.rbac_audit_support as logic
+from scheduler import model
 
 RBAC_AUDIT_DEFAULT_LIMIT = 10
 RBAC_AUDIT_SHOW_MORE_INCREMENT = 20
@@ -147,7 +148,7 @@ def _rbac_audit_rows(
         if logic.rbac_audit_ip_column_available()
         else "null as ip_addr"
     )
-    rows = model.execute(
+    rows = model.db.session.execute(
         sql_text(
             f"""
             select

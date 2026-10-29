@@ -4,7 +4,8 @@ import io
 import json
 import uuid
 
-from scheduler import logic, model
+import scheduler.logic.admin_config as logic
+from scheduler import model
 
 
 def test_admin_mapping_text_round_trips_user_group_rows(app_context):
@@ -39,8 +40,10 @@ def test_admin_mapping_text_round_trips_user_group_rows(app_context):
     model.db.session.commit()
 
     assert applied_count == 1
-    assert model.get(model.GroupMember, (group_id, user_id)) is not None
-    assert model.get(model.PrimaryGroupMember, (group_id, user_id)) is not None
+    assert model.db.session.get(model.GroupMember, (group_id, user_id)) is not None
+    assert (
+        model.db.session.get(model.PrimaryGroupMember, (group_id, user_id)) is not None
+    )
 
     rendered = logic.format_admin_mapping_rows_for_form("user-dept")
     parsed_rows = list(csv.reader(io.StringIO(rendered)))

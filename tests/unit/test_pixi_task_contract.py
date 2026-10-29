@@ -30,6 +30,10 @@ def test_fast_pytest_tasks_use_target_aware_wrapper():
         == 'python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route"'
     )
     assert (
+        tasks["test-unit-xdist"]
+        == 'python3 scripts/run-target-aware-pytest-suite.py unit tests/unit "not route" -- -n auto'
+    )
+    assert (
         tasks["test-routes"]
         == "python3 scripts/run-target-aware-pytest-suite.py routes tests/unit route"
     )

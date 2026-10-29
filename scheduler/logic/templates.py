@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, cast
 
 from flask_wtf import FlaskForm
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.functions import func
 from wtforms import fields, validators
@@ -30,16 +30,16 @@ TEMPLATE_DAY_LABELS = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 def get_template(
     for_device: model.Device, template_id: str
 ) -> Optional[model.Template]:
-    return model.get(model.Template, (template_id, for_device.id))
+    return model.db.session.get(model.Template, (template_id, for_device.id))
 
 
 def get_template_from_templateid(templateid: str) -> Optional[model.Template]:
     if templateid == "":
         return None
-    entry = model.get(model.TemplateEntry, templateid)
+    entry = model.db.session.get(model.TemplateEntry, templateid)
     if entry is None:
         return None
-    return model.get(model.Template, (entry.template, entry.device))
+    return model.db.session.get(model.Template, (entry.template, entry.device))
 
 
 def templates_of_device(
@@ -155,8 +155,9 @@ def create_template(
         return (False, "")
 
     if form.clone_from.data:
-        model.execute(
-            """
+        model.db.session.execute(
+            text(
+                """
             insert into tbltemplate(scannercode, templatecode, dow, hour, deptcode, researchercode, instcode)
                 select :scannercode,
                        :templatecode,
@@ -166,7 +167,8 @@ def create_template(
                        researchercode,
                        instcode
                     from tbltemplate where (scannercode, templatecode) = (:scannercode, :orig_templatecode)
-            """,
+            """
+            ),
             {
                 "scannercode": tmpl.device,
                 "templatecode": tmpl.id,
@@ -175,15 +177,17 @@ def create_template(
             },
         )
     else:
-        model.execute(
-            """
+        model.db.session.execute(
+            text(
+                """
             insert into tbltemplate(scannercode, templatecode, dow, hour)
                 select :scannercode, :templatecode, dow, hour
                     from
                         generate_series(0, 6) as dow
                     cross join
                         generate_series(0, 23) as hour;
-            """,
+            """
+            ),
             {
                 "scannercode": tmpl.device,
                 "templatecode": tmpl.id,
@@ -566,8 +570,9 @@ def validate_templates_before_application(device: model.Device, templates: str):
 def process_template_apply(
     form: TemplateApplyForm, device: model.Device, start: datetime.date, chg_by: str
 ):
-    model.execute(
-        """
+    model.db.session.execute(
+        text(
+            """
         insert into tblsched(
             scannercode,
             templateid,
@@ -599,7 +604,8 @@ def process_template_apply(
             ) vars
         inner join
             tbltemplate tmpl on (scannercode, templatecode) = (:device, tc)
-        """,
+        """
+        ),
         {
             "templates": list(form.templates.data),
             "device": device.id,

@@ -7,7 +7,9 @@ from urllib.parse import urlparse
 
 from sqlalchemy import select
 
-from scheduler import logic, model
+import scheduler.logic.core as logic
+import scheduler.logic.rbac_audit_support as audit_logic
+from scheduler import model
 
 _RBAC_SCOPE_LABELS: Dict[str, str] = {
     "group": "groups",
@@ -15,9 +17,12 @@ _RBAC_SCOPE_LABELS: Dict[str, str] = {
     "user": "users",
 }
 _RBAC_EMAIL_STATUS_OPTIONS: List[Dict[str, str]] = [
-    {"value": logic.EMAIL_STATUS_NONE, "label": logic.EMAIL_STATUS_NONE},
-    {"value": logic.EMAIL_STATUS_SENT, "label": logic.EMAIL_STATUS_SENT},
-    {"value": logic.EMAIL_STATUS_FAILED, "label": logic.EMAIL_STATUS_FAILED},
+    {"value": audit_logic.EMAIL_STATUS_NONE, "label": audit_logic.EMAIL_STATUS_NONE},
+    {"value": audit_logic.EMAIL_STATUS_SENT, "label": audit_logic.EMAIL_STATUS_SENT},
+    {
+        "value": audit_logic.EMAIL_STATUS_FAILED,
+        "label": audit_logic.EMAIL_STATUS_FAILED,
+    },
 ]
 
 
@@ -26,7 +31,7 @@ def _rbac_email_status(value: str) -> str:
     options = [opt["value"] for opt in _RBAC_EMAIL_STATUS_OPTIONS]
     if normalized in options:
         return normalized
-    return logic.EMAIL_STATUS_NONE
+    return audit_logic.EMAIL_STATUS_NONE
 
 
 def _rbac_permission_flags(ud: model.UserDevice) -> str:
@@ -104,9 +109,9 @@ def _rbac_json_string(
 
 def _rbac_json_email_status(raw: Any, *, field: str) -> str:
     token = _rbac_json_string(raw, field=field, required=True, max_length=10).lower()
-    if token not in logic.EMAIL_STATUS_VALUES:
+    if token not in audit_logic.EMAIL_STATUS_VALUES:
         raise ValueError(
-            f"{field} must be one of: {', '.join(logic.EMAIL_STATUS_VALUES)}"
+            f"{field} must be one of: {', '.join(audit_logic.EMAIL_STATUS_VALUES)}"
         )
     return token
 
@@ -328,9 +333,11 @@ def _rbac_validate_batch_operation(
         is_dev_member, _ = logic.get_dev_tech_status(user)
         if applied and not is_dev_member:
             raise ValueError(f"user is not an active DEV member: {user.id}")
-        current = model.get(model.Technologist, user.id)
+        current = model.db.session.get(model.Technologist, user.id)
         current_email_status = _rbac_email_status(
-            current.email_status if current is not None else logic.EMAIL_STATUS_NONE
+            current.email_status
+            if current is not None
+            else audit_logic.EMAIL_STATUS_NONE
         )
         set_email_status = "email_status" in operation
         email_status = current_email_status
@@ -339,7 +346,7 @@ def _rbac_validate_batch_operation(
                 operation.get("email_status"), field="email_status"
             )
         if not applied or approved:
-            email_status = logic.EMAIL_STATUS_NONE
+            email_status = audit_logic.EMAIL_STATUS_NONE
         expected_applied = _rbac_optional_json_bool(operation, field="expected_applied")
         expected_approved = _rbac_optional_json_bool(
             operation, field="expected_approved"
@@ -456,7 +463,7 @@ def _rbac_validate_batch_operation(
             field="inst",
             max_length=7,
         )
-        if inst != "" and model.get(model.Inst, inst) is None:
+        if inst != "" and model.db.session.get(model.Inst, inst) is None:
             raise ValueError(f"institute not found: {inst}")
 
         active = _rbac_json_bool(operation.get("active", True), field="active")
@@ -586,7 +593,7 @@ def _rbac_validate_batch_operation(
             field="inst",
             max_length=7,
         )
-        if inst != "" and model.get(model.Inst, inst) is None:
+        if inst != "" and model.db.session.get(model.Inst, inst) is None:
             raise ValueError(f"institute not found: {inst}")
         active = _rbac_json_bool(operation.get("active", group.active), field="active")
 
@@ -797,7 +804,9 @@ def _rbac_validate_batch_operation(
         device = logic.get_device(device_id)
         if device is None:
             raise ValueError(f"device not found: {device_id}")
-        existing = model.get(model.DeviceGroup, (device.id, group.id)) is not None
+        existing = (
+            model.db.session.get(model.DeviceGroup, (device.id, group.id)) is not None
+        )
         expected_linked = _rbac_optional_json_bool(operation, field="expected_linked")
         if linked and not existing and (not group.active or not bool(group.department)):
             raise ValueError(f"group cannot be linked to devices: {group.id}")
@@ -931,9 +940,11 @@ def _rbac_validate_batch_operation(
         user = logic.get_user(user_id)
         if user is None:
             raise ValueError(f"user not found: {user_id}")
-        existing = model.get(model.GroupMember, (group.id, user.id))
+        existing = model.db.session.get(model.GroupMember, (group.id, user.id))
         current_email_status = _rbac_email_status(
-            existing.email_status if existing is not None else logic.EMAIL_STATUS_NONE
+            existing.email_status
+            if existing is not None
+            else audit_logic.EMAIL_STATUS_NONE
         )
         member = _rbac_json_bool(operation.get("member", False), field="member")
         approved = _rbac_json_bool(operation.get("approved", False), field="approved")
@@ -944,7 +955,7 @@ def _rbac_validate_batch_operation(
                 operation.get("email_status"), field="email_status"
             )
         if not member or approved:
-            email_status = logic.EMAIL_STATUS_NONE
+            email_status = audit_logic.EMAIL_STATUS_NONE
         expected_member = _rbac_optional_json_bool(
             operation,
             field="expected_member",

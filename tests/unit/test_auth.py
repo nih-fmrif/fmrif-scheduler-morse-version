@@ -1,7 +1,8 @@
 from flask import g
 from sqlalchemy import select
 
-from scheduler import logic, model
+import scheduler.logic.core as logic
+from scheduler import model
 from scheduler.app import admin_only, login_required
 from scheduler.auth import authorization
 from scheduler.auth.authorization import require_permission
@@ -10,7 +11,7 @@ from scheduler.auth.session import login_test_user, require_jwt
 
 
 def test_login_test_user_admin_profile(app_context):
-    if model.get(model.Group, "admin") is None:
+    if model.db.session.get(model.Group, "admin") is None:
         model.db.session.add(
             model.Group(id="admin", label="admin", description="Admin", active=True)
         )
@@ -22,10 +23,10 @@ def test_login_test_user_admin_profile(app_context):
     assert user.username == "test-admin"
     assert user.active is True
 
-    db_user = model.get(model.User, "test-admin")
+    db_user = model.db.session.get(model.User, "test-admin")
     assert db_user is not None
     assert db_user.active is True
-    assert model.get(model.GroupMember, ("admin", "test-admin")) is not None
+    assert model.db.session.get(model.GroupMember, ("admin", "test-admin")) is not None
 
 
 def test_login_test_user_member_profile(app_context):
@@ -34,7 +35,7 @@ def test_login_test_user_member_profile(app_context):
     assert user is not None
     assert user.username == "test-member"
     assert user.active is True
-    assert model.get(model.GroupMember, ("admin", "test-member")) is None
+    assert model.db.session.get(model.GroupMember, ("admin", "test-member")) is None
 
 
 def test_login_test_user_dev_profile_has_dev_membership(app_context):
@@ -44,11 +45,11 @@ def test_login_test_user_dev_profile_has_dev_membership(app_context):
     assert user.username == "test-dev"
     assert user.active is True
 
-    membership = model.get(model.GroupMember, ("DEV", "test-dev"))
+    membership = model.db.session.get(model.GroupMember, ("DEV", "test-dev"))
     assert membership is not None
     assert membership.approved is not None
-    assert model.get(model.Technologist, "test-dev") is None
-    assert model.get(model.UserDevice, ("test-dev", "TEST")) is None
+    assert model.db.session.get(model.Technologist, "test-dev") is None
+    assert model.db.session.get(model.UserDevice, ("test-dev", "TEST")) is None
 
 
 def test_login_test_user_tech_profile_has_tech_privileges(app_context):
@@ -58,12 +59,12 @@ def test_login_test_user_tech_profile_has_tech_privileges(app_context):
     assert user.username == "test-tech"
     assert user.active is True
 
-    membership = model.get(model.GroupMember, ("DEV", "test-tech"))
+    membership = model.db.session.get(model.GroupMember, ("DEV", "test-tech"))
     assert membership is not None
     assert membership.approved is not None
-    assert model.get(model.Technologist, "test-tech") is not None
+    assert model.db.session.get(model.Technologist, "test-tech") is not None
 
-    perms = model.get(model.UserDevice, ("test-tech", "TEST"))
+    perms = model.db.session.get(model.UserDevice, ("test-tech", "TEST"))
     assert perms is not None
     assert perms.tech is True
     assert perms.templates is False
@@ -189,7 +190,7 @@ def test_upsert_user_reuses_existing_record_for_same_email(app_context):
 
 
 def test_upsert_user_proactively_migrates_to_requested_id(app_context):
-    if model.get(model.Group, "DEV") is None:
+    if model.db.session.get(model.Group, "DEV") is None:
         model.db.session.add(
             model.Group(id="DEV", label="DEV", description="DEV", active=True)
         )
@@ -216,8 +217,8 @@ def test_upsert_user_proactively_migrates_to_requested_id(app_context):
     model.db.session.flush()
 
     assert migrated.id == target_id
-    assert model.get(model.GroupMember, ("DEV", target_id)) is not None
-    assert model.get(model.GroupMember, ("DEV", legacy_id)) is None
+    assert model.db.session.get(model.GroupMember, ("DEV", target_id)) is not None
+    assert model.db.session.get(model.GroupMember, ("DEV", legacy_id)) is None
 
     canonical = model.db.session.execute(
         select(model.User).where(model.User.addr == email)

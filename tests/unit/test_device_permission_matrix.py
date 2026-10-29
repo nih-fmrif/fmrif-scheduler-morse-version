@@ -6,14 +6,15 @@ from route_seed import (
     set_group_membership,
 )
 
-from scheduler import logic, model
+import scheduler.logic.core as logic
+from scheduler import model
 
 pytestmark = pytest.mark.route
 
 
 def _seed_matrix_device() -> model.Device:
     device_id, device_label = create_device()
-    device = model.get(model.Device, device_id)
+    device = model.db.session.get(model.Device, device_id)
     assert device is not None
     device.label = device_label
     model.db.session.add(device)
@@ -41,7 +42,7 @@ def _seed_matrix_device() -> model.Device:
         active=True,
         has_membership=True,
     )
-    if model.get(model.DeviceGroup, (device_id, "MATRIX")) is None:
+    if model.db.session.get(model.DeviceGroup, (device_id, "MATRIX")) is None:
         model.db.session.add(model.DeviceGroup(device=device_id, group="MATRIX"))
     model.db.session.flush()
     return device
@@ -49,7 +50,7 @@ def _seed_matrix_device() -> model.Device:
 
 def _seed_matrix_user(user_id: str) -> model.User:
     ensure_active_user(user_id, f"{user_id}@example.com", user_id)
-    user = model.get(model.User, user_id)
+    user = model.db.session.get(model.User, user_id)
     assert user is not None
     return user
 
@@ -78,7 +79,7 @@ def _upsert_user_device(
     medical: bool = False,
     training: bool = False,
 ) -> None:
-    row = model.get(model.UserDevice, (user_id, device_id))
+    row = model.db.session.get(model.UserDevice, (user_id, device_id))
     if row is None:
         row = model.UserDevice(user=user_id, device=device_id)
     row.templates = templates

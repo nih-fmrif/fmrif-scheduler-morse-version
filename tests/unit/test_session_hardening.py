@@ -54,7 +54,7 @@ def test_get_user_from_session_fails_closed_when_db_lookup_errors(monkeypatch):
         assert entity is session_helpers.model.User
         raise RuntimeError("database unavailable")
 
-    monkeypatch.setattr(session_helpers.model, "get", _raise)
+    monkeypatch.setattr(session_helpers.model.db.session, "get", _raise)
 
     with app.test_request_context("/"):
         session["user_name"] = "danger-user"

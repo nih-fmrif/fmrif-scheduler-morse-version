@@ -40,7 +40,7 @@ Default command:
 - `pixi run test-integration-ci`
 
 Useful narrowed examples:
-- `pixi run test-integration-ci tests/playwright/integration/device-ui-interactions.spec.ts --grep 'multi-slot'`
+- `pixi run test-integration-ci tests/playwright/integration/device-ui-editing.spec.ts --grep 'multi-slot'`
 - `pixi run test-integration-ci tests/playwright/integration/device-subroutes.spec.ts --grep 'template' --project=chromium`
 
 Notes:

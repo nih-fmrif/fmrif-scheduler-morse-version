@@ -27,8 +27,10 @@ from route_seed import (
     set_session_user,
 )
 
+import scheduler.logic.core as core_logic
+import scheduler.logic.rbac_audit_support as logic
 import scheduler.message as scheduler_message
-from scheduler import logic, model
+from scheduler import model
 from scheduler.routes import rbac_routes
 
 pytestmark = pytest.mark.route
@@ -148,7 +150,7 @@ def test_rbac_mutate_batch_admin_can_approve_pending_technologist_request(
     assert payload is not None
     assert payload["ok"] is True
     assert payload["applied"] == 1
-    row = model.get(model.Technologist, user_id)
+    row = model.db.session.get(model.Technologist, user_id)
     assert row is not None
     assert row.approved_on is not None
 
@@ -242,7 +244,7 @@ def test_build_potential_issues_batches_pi_user_resolution(
     ensure_active_user(pi_id, f"{pi_id}@example.com", pi_id)
     set_group_membership(group_id, pi_id, approved=True, pi=True)
 
-    original_get_user = logic.get_user
+    original_get_user = core_logic.get_user
     call_count = 0
 
     def tracked_get_user(user_id: str):
@@ -250,7 +252,7 @@ def test_build_potential_issues_batches_pi_user_resolution(
         call_count += 1
         return original_get_user(user_id)
 
-    monkeypatch.setattr(logic, "get_user", tracked_get_user)
+    monkeypatch.setattr(core_logic, "get_user", tracked_get_user)
 
     with route_app_context.test_request_context("/app/issues"):
         issues = _build_potential_issues()
@@ -344,7 +346,7 @@ def test_app_issues_scan_persists_detected_incidents(route_client):
     _run_notification_scan(route_client)
 
     issue_key = f"join-group:{group_id}:{requester_id}"
-    row = model.get(model.NotificationIncident, issue_key)
+    row = model.db.session.get(model.NotificationIncident, issue_key)
     assert row is not None
     assert row.state == "open"
     assert row.active is True

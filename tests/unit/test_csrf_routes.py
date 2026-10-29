@@ -10,7 +10,9 @@ from route_seed import (
 )
 
 import scheduler.app as scheduler_app
-from scheduler import logic, model
+import scheduler.logic.core as core_logic
+import scheduler.logic.rbac_audit_support as logic
+from scheduler import model
 from scheduler.auth.models import SessionUser
 
 pytestmark = pytest.mark.route
@@ -63,7 +65,7 @@ def _install_realistic_route_auth(monkeypatch, route_app):
             active=True,
         ),
     )
-    monkeypatch.setattr(logic, "pi_of_group", lambda group_id: "test-admin")
+    monkeypatch.setattr(core_logic, "pi_of_group", lambda group_id: "test-admin")
 
 
 def _capture_rbac_events(monkeypatch) -> list[tuple[str, str, str, str, str]]:
@@ -103,7 +105,7 @@ def test_join_request_decision_post_rejects_missing_csrf(
     )
     assert response.status_code == 400
 
-    req = model.get(model.GroupMember, (group_id, candidate_id))
+    req = model.db.session.get(model.GroupMember, (group_id, candidate_id))
     assert req is not None
     assert req.approved is None
 
@@ -128,7 +130,7 @@ def test_join_request_decision_post_with_csrf_applies_update(
     )
     assert post_response.status_code == 302
 
-    req = model.get(model.GroupMember, (group_id, candidate_id))
+    req = model.db.session.get(model.GroupMember, (group_id, candidate_id))
     assert req is not None
     assert req.approved is not None
     assert len(events) == 1
@@ -161,7 +163,7 @@ def test_join_request_deny_post_with_csrf_deletes_request(
     )
     assert post_response.status_code == 302
 
-    req = model.get(model.GroupMember, (group_id, candidate_id))
+    req = model.db.session.get(model.GroupMember, (group_id, candidate_id))
     assert req is None
     assert len(events) == 1
     action, actor, where, how, what = events[0]
@@ -207,7 +209,7 @@ def test_join_tech_request_approve_post_with_csrf_applies_update(
     )
     assert post_response.status_code == 302
 
-    req = model.get(model.Technologist, candidate_id)
+    req = model.db.session.get(model.Technologist, candidate_id)
     assert req is not None
     assert req.approved_on is not None
     assert len(events) == 1
@@ -240,7 +242,7 @@ def test_join_tech_request_deny_post_with_csrf_deletes_request(
     )
     assert post_response.status_code == 302
 
-    req = model.get(model.Technologist, candidate_id)
+    req = model.db.session.get(model.Technologist, candidate_id)
     assert req is None
     assert len(events) == 1
     action, actor, where, how, what = events[0]

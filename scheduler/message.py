@@ -10,9 +10,12 @@ mailer = Mail()
 
 def _default_sender() -> Optional[str]:
     try:
-        from scheduler import logic
+        from scheduler.logic._admin_config_settings import (
+            ADMIN_SETTING_KEY_DEFAULT_SENDER,
+            get_admin_setting,
+        )
 
-        sender = logic.get_admin_setting(logic.ADMIN_SETTING_KEY_DEFAULT_SENDER, "")
+        sender = get_admin_setting(ADMIN_SETTING_KEY_DEFAULT_SENDER, "")
     except Exception:
         sender = ""
     if _normalize_sender := str(sender).strip():
@@ -102,16 +105,21 @@ def send(
     actor = actor.strip() or "system"
 
     try:
-        from scheduler import logic
+        from scheduler.logic.rbac_audit_support import (
+            EMAIL_AUDIT_STATUS_FAILED,
+            EMAIL_AUDIT_STATUS_SENT,
+            EMAIL_AUDIT_STATUS_SKIPPED,
+            log_email_audit_event,
+        )
 
-        status = logic.EMAIL_AUDIT_STATUS_FAILED
+        status = EMAIL_AUDIT_STATUS_FAILED
         if ok:
             status = (
-                logic.EMAIL_AUDIT_STATUS_SKIPPED
+                EMAIL_AUDIT_STATUS_SKIPPED
                 if delivery_suppressed
-                else logic.EMAIL_AUDIT_STATUS_SENT
+                else EMAIL_AUDIT_STATUS_SENT
             )
-        logic.log_email_audit_event(
+        log_email_audit_event(
             action=action,
             actor=actor,
             where=where,
